@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The operator console opens with a fingerprint or face, and asks for one again before every change. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
     <application
         android:name=".LivepeerApplication"

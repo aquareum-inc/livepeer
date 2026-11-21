@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Person
@@ -75,7 +76,7 @@ import java.text.NumberFormat
 
 /** The account menu: who is signed in and their credits, the theme, and signing out. For a guest, the way in. */
 @Composable
-fun AccountTray(account: Account, theme: ThemePreference, signIn: () -> Unit, openSettings: () -> Unit) {
+fun AccountTray(account: Account, theme: ThemePreference, offersConsole: Boolean, openConsole: () -> Unit, signIn: () -> Unit, openSettings: () -> Unit) {
     val palette = LocalPalette.current
     val signedIn by account.signedIn.collectAsStateWithLifecycle()
     val me by account.me.collectAsStateWithLifecycle()
@@ -117,6 +118,19 @@ fun AccountTray(account: Account, theme: ThemePreference, signIn: () -> Unit, op
     BasicText("Theme", style = TypeSize.Caption.style(FontWeight.Medium).copy(color = palette.mutedForeground), modifier = Modifier.padding(top = 4.dp))
     Segmented(listOf(ThemePreference.Choice.System to "System", ThemePreference.Choice.Dark to "Dark", ThemePreference.Choice.Light to "Light"), choice, theme::set)
 
+    // Only for a signed-in person who runs the instance, where the instance offers its console to phones.
+    if (offersConsole) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).pressable(label = "Opens with your fingerprint or face", onClick = openConsole),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Rounded.Speed, contentDescription = null, tint = palette.foreground, modifier = Modifier.size(20.dp))
+            BasicText("Operator console", style = TypeSize.Body.style(FontWeight.Medium).copy(color = palette.foreground), modifier = Modifier.weight(1f))
+            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = palette.subtleForeground, modifier = Modifier.size(20.dp))
+        }
+    }
+
     if (signedIn) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp).pressable(label = "Settings", onClick = openSettings),
@@ -156,19 +170,42 @@ fun AccountTray(account: Account, theme: ThemePreference, signIn: () -> Unit, op
 fun SignInTray(account: Account, instance: InstanceDescription?, reason: String?, open: (android.net.Uri) -> Unit) {
     val palette = LocalPalette.current
     val progress by account.progress.collectAsStateWithLifecycle()
-    var email by rememberSaveable { mutableStateOf("") }
-    val methods = instance?.signIn?.methods.orEmpty()
     val busy = progress is SignInProgress.Busy
-    val start = { method: SignInMethodName -> open(account.start(method, if (method == SignInMethodName.Email) email.trim() else null)) }
-    val emailReady = email.trim().let { it.contains('@') && it.contains('.') }
 
     if (reason != null) BasicText(reason, style = TypeSize.Body.style().copy(color = palette.mutedForeground))
+
+    SignInOptions(instance?.signIn?.methods.orEmpty(), busy = (progress as? SignInProgress.Busy)?.method, enabled = !busy) { method, email -> open(account.start(method, email)) }
+
+    (progress as? SignInProgress.Failed)?.let { failed ->
+        BasicText(failed.message, style = TypeSize.Body.style().copy(color = palette.destructive), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+    }
+
+    BasicText(
+        when (instance?.signIn?.signUp) {
+            InstanceDescriptionSignInSignUp.Invite -> "This service is invitation only. Sign in with the address you were invited at."
+            InstanceDescriptionSignInSignUp.Closed -> "This service isn't taking new accounts."
+            else -> "New here? Signing in for the first time creates your account."
+        },
+        style = TypeSize.Caption.style().copy(color = palette.subtleForeground),
+        modifier = Modifier.padding(top = 4.dp),
+    )
+}
+
+/**
+ * The ways to sign in that an instance offers, for the app's sign-in and the console's. The email method asks
+ * for the address first, as the web does; [start] gets it with that method and nothing with the others.
+ */
+@Composable
+fun SignInOptions(methods: List<SignInMethodName>, busy: SignInMethodName?, enabled: Boolean, suggestedEmail: String = "", start: (SignInMethodName, String?) -> Unit) {
+    val palette = LocalPalette.current
+    var email by rememberSaveable { mutableStateOf(suggestedEmail) }
+    val emailReady = email.trim().let { it.contains('@') && it.contains('.') }
 
     // Methods that hand off to a wallet app don't come back reliably from a browser tab, so phones don't offer
     // them until they've been tested against the provider.
     val providers = listOf(SignInMethodName.Google to "Continue with Google", SignInMethodName.Apple to "Continue with Apple", SignInMethodName.Discord to "Continue with Discord").filter { it.first in methods }
     for ((method, label) in providers) {
-        SecondaryButton(label, enabled = !busy, busy = (progress as? SignInProgress.Busy)?.method == method) { start(method) }
+        SecondaryButton(label, enabled = enabled, busy = busy == method) { start(method, null) }
     }
 
     if (SignInMethodName.Email in methods) {
@@ -187,7 +224,7 @@ fun SignInTray(account: Account, instance: InstanceDescription?, reason: String?
             textStyle = TypeSize.Lead.style().copy(color = palette.foreground),
             cursorBrush = SolidColor(palette.foreground),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Go, autoCorrectEnabled = false),
-            keyboardActions = KeyboardActions(onGo = { if (emailReady) start(SignInMethodName.Email) }),
+            keyboardActions = KeyboardActions(onGo = { if (emailReady && enabled) start(SignInMethodName.Email, email.trim()) }),
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Email address" },
             decorationBox = { field ->
                 Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).background(palette.card, shape).border(1.dp, palette.input, shape).padding(horizontal = 14.dp), contentAlignment = Alignment.CenterStart) {
@@ -196,30 +233,16 @@ fun SignInTray(account: Account, instance: InstanceDescription?, reason: String?
                 }
             },
         )
-        PrimaryButton("Continue", enabled = emailReady && !busy, busy = (progress as? SignInProgress.Busy)?.method == SignInMethodName.Email) { start(SignInMethodName.Email) }
+        PrimaryButton("Continue", enabled = emailReady && enabled, busy = busy == SignInMethodName.Email) { start(SignInMethodName.Email, email.trim()) }
     }
 
     if (SignInMethodName.Passkey in methods) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).pressable(enabled = !busy) { start(SignInMethodName.Passkey) }, horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).pressable(enabled = enabled) { start(SignInMethodName.Passkey, null) }, horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.Key, contentDescription = null, tint = palette.mutedForeground, modifier = Modifier.size(18.dp))
             Spacer(Modifier.size(8.dp))
             BasicText("Use a passkey instead", style = TypeSize.Body.style().copy(color = palette.mutedForeground))
         }
     }
-
-    (progress as? SignInProgress.Failed)?.let { failed ->
-        BasicText(failed.message, style = TypeSize.Body.style().copy(color = palette.destructive), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-    }
-
-    BasicText(
-        when (instance?.signIn?.signUp) {
-            InstanceDescriptionSignInSignUp.Invite -> "This service is invitation only. Sign in with the address you were invited at."
-            InstanceDescriptionSignInSignUp.Closed -> "This service isn't taking new accounts."
-            else -> "New here? Signing in for the first time creates your account."
-        },
-        style = TypeSize.Caption.style().copy(color = palette.subtleForeground),
-        modifier = Modifier.padding(top = 4.dp),
-    )
 }
 
 /** A row of choices, one selected. */

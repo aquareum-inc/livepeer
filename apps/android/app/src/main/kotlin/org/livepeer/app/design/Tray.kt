@@ -24,12 +24,16 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -43,21 +47,23 @@ import kotlinx.coroutines.launch
 /**
  * A tray: one thing, opened by an action, over the screen it came from, which stays visible and dimmed.
  * A fixed header holds the title and one icon. The tray is as tall as what it holds and scrolls only when
- * that is taller than the screen, as at the largest font sizes.
+ * that is taller than the screen, as at the largest font sizes. A tray that asks for something to be taken away
+ * is washed with the destructive colour: its tint carries the stakes. While [locked] answers true, it can't be closed.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Tray(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope.(close: () -> Unit) -> Unit) {
+fun Tray(title: String, onDismiss: () -> Unit, destructive: Boolean = false, locked: () -> Boolean = { false }, content: @Composable ColumnScope.(close: () -> Unit) -> Unit) {
     val palette = LocalPalette.current
-    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val held by rememberUpdatedState(locked)
+    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { it != SheetValue.Hidden || !held() })
     val scope = rememberCoroutineScope()
-    val close: () -> Unit = { scope.launch { state.hide() }.invokeOnCompletion { onDismiss() } }
+    val close: () -> Unit = { if (!held()) scope.launch { state.hide() }.invokeOnCompletion { onDismiss() } }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!held()) onDismiss() },
         sheetState = state,
         shape = RoundedCornerShape(topStart = Radius.Sheet.dp, topEnd = Radius.Sheet.dp),
-        containerColor = palette.panel,
+        containerColor = if (destructive) palette.destructive.copy(alpha = 0.12f).compositeOver(palette.panel) else palette.panel,
         scrimColor = palette.overlay,
         dragHandle = null,
     ) {

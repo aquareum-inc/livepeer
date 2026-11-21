@@ -804,8 +804,8 @@ Not done, and why:
 
 ## 18. The operator console on phones (proposed 21 November 2026)
 
-Status: **accepted; the server and iOS stage 1 are built (18.8). The owner approved the design sample on
-21 November 2026. Android stage 1 is next.** The owner accepted every recommendation in
+Status: **accepted; the server and stage 1 on iOS and Android are built (18.8). The owner approved the design
+sample on 21 November 2026. Stage 2 is next.** The owner accepted every recommendation in
 18.7. This section reverses two earlier lines: the console "stays on the
 web" (section 1) and device sessions "always have the `user` role" (section 5). Decisions the owner still
 has to make are in 18.7. A builder can start from this section alone, after reading sections 4, 5 and 7.
@@ -1273,3 +1273,59 @@ Still open after step 3:
   gets them from other reads that aren't marked for phones.
 - **A decided report can't be reopened from a phone**, and a taken-down character can't be restored there.
 - Android stage 1 (step 4).
+
+**21 November 2026: step 4, Android stage 1.** The console in `apps/android`, from the same spec, with the iOS
+build as the reference for behaviour and words: console sign-in with the instance's methods, unlock, lock, sign
+out, the console-only launch, Status, Jobs and a job's page, Reports and a report's page, Users and a user's
+page, and the two kinds of change with their confirm proofs. Design decisions 82 to 89; screenshots are
+`docs/screenshots/mobile/android-console-*.jpg` (dark, light, the largest font size).
+
+- **A session apart from the user's.** `ConsoleTransport` is the `OperatorTransport`: the `aqo_` token and
+  `X-Operator-Proof`, no cache, no cookies, nothing on disk, and a refusal is thrown to the console and never
+  reaches the user's session. The token is in its own Keystore-encrypted entry (`TokenVault.operator`), in an
+  app that is excluded from backups. No new dependency: the prompt is the platform's `BiometricPrompt`.
+- **The key** (`DeviceKey`) is P-256 in the Android Keystore, in StrongBox where the phone has it and the
+  trusted execution environment otherwise, with `setUserAuthenticationRequired(true)`,
+  `setInvalidatedByBiometricEnrollment(true)` and, from Android 11, `setUserAuthenticationParameters(0,
+  AUTH_BIOMETRIC_STRONG)`: one class 3 match per signature, no device credential. On Android 10, where that
+  call doesn't exist, a validity of -1 asks for the same. Its public half is sent as base64 of the
+  SubjectPublicKeyInfo. A release build refuses a key the Keystore reports as held in software; a development
+  build accepts one, because the emulator has nothing else.
+- **What is signed** (`OperatorProofs`) is checked against `operator_proof_vectors.json`: both messages, the
+  canonical input and its hash, and the generated `…Input(...)` builders.
+- **Locking.** When `unlocked_until` passes (a timer, capped at five minutes), on a `locked` refusal, on Back to
+  the app, and after more than 60 seconds away, timed from the activity's `onStop` to `onStart` on a clock
+  that only goes forward. Any other 401, `operator_session` or `mobile_console_off` ends the session on the
+  phone and returns to sign-in with the reason; `proof_required` leaves it.
+- **Sign-in shares the browser with the user app.** Both go through the one Auth Tab launcher; what comes back
+  goes to the console when it started the sign-in, and to the account otherwise. The sign-in methods are one
+  composable (`SignInOptions`) for both.
+- **The instance's description is read without a session** on Android too, and `InstanceStore.availability`
+  counts either switch; a first launch draws nothing until the instance has said which it serves.
+- **Whole numbers in a query are sent without a fraction** (`limit=30`, not `30.0`) by the console's transport.
+- **The Reports count follows Status** (decision 83). iOS reads the queue only on unlock and pull to refresh, so
+  there the badge can lag the sentence; worth the same change.
+
+Run for real against a mock-only instance in an emulator (API 37, a fingerprint enrolled with `adb emu finger`):
+the row in the account menu for the operator and not for an ordinary user; the cover with no fingerprint set
+up; a refused sign-in ("This account doesn't run Livepeer."); sign-in, enrolment and unlock; every screen; take
+down, keep up, suspend and resume, each cancelled once and then confirmed; the lock after 66 seconds in the
+background and not after 20; a session ended by restarting the instance; the instance stopped (Status says it
+can't be reached and keeps the last figures); signing out; and the console-only launch from a second config.
+
+What an emulator could not prove:
+
+- **Hardware-backed keys.** The emulator's Keystore reports the key as held in software (seen with a temporary
+  log line, since removed). StrongBox, the trusted execution environment, and the release build's refusal of a
+  software key have **not run on a phone**.
+- **Invalidation on a new enrolment.** Adding a fingerprint should destroy the key
+  (`KeyPermanentlyInvalidatedException`, handled as "This phone's console key is gone. Sign in again."). That
+  path is covered by a unit test with a stand-in key, not by enrolling a second finger on real hardware.
+- **Class 3 only.** The emulator's fingerprint is class 3. A phone with only a weaker face unlock should be told
+  the console needs a fingerprint or face; not seen.
+- **Android 10 to 12**: the per-use key parameters before Android 11 and the secure-window fallback for the
+  app switcher were compiled, not run.
+- **The system prompt in a picture.** Android blanks it in screenshots; its words were read from the
+  accessibility tree ("Livepeer", "Unlock the console", "Take Lumen down", "Touch the fingerprint sensor").
+- **No UI test drives the console**, as on iOS: a test can't touch the emulator's sensor from inside. The unit
+  tests cover the proofs, the transport, the session, the models, the formats and the entry rule.

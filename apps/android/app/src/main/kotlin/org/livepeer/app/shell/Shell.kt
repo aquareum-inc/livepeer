@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -80,6 +81,8 @@ import org.livepeer.app.characters.CharactersScreen
 import org.livepeer.app.characters.NewCharacterScreen
 import org.livepeer.app.chat.ConversationScreen
 import org.livepeer.app.chat.ConversationViewModel
+import org.livepeer.app.console.ConsoleRoot
+import org.livepeer.app.console.ConsoleSession
 import org.livepeer.app.design.LocalPalette
 import org.livepeer.app.design.PrimaryButton
 import org.livepeer.app.design.SecondaryButton
@@ -118,8 +121,25 @@ private enum class Tab(val route: String, val label: String, val icon: ImageVect
 @Composable
 fun LivepeerRoot(container: AppContainer, openBrowser: (android.net.Uri) -> Unit) {
     val description by container.instance.description.collectAsStateWithLifecycle()
+    val settled by container.instance.settled.collectAsStateWithLifecycle()
+    val console = container.console.session
+    val consoleUp by console.presented.collectAsStateWithLifecycle()
+    val motion = rememberMotion()
     when (InstanceStore.availability(description)) {
-        InstanceStore.Availability.Available -> MainTabs(container, openBrowser)
+        InstanceStore.Availability.Available -> when {
+            // A first launch that hasn't heard from the instance: it may serve the app, the console or both.
+            !settled -> Box(Modifier.fillMaxSize().background(LocalPalette.current.background))
+            // No user app here: the console is the whole app, with no tabs, tray or guest state behind it.
+            InstanceStore.consoleOnly(description) -> {
+                LaunchedEffect(Unit) { console.present() }
+                ConsoleRoot(container, consoleOnly = true, openBrowser)
+            }
+            // The console is its own place: it covers the app, navigation bar and all, and the app waits under it.
+            else -> Box {
+                Box(if (consoleUp) Modifier.clearAndSetSemantics {} else Modifier) { MainTabs(container, openBrowser) }
+                AnimatedVisibility(consoleUp, enter = fadeIn(motion.enter()), exit = fadeOut(motion.exit())) { ConsoleRoot(container, consoleOnly = false, openBrowser) }
+            }
+        }
         InstanceStore.Availability.NotOffered -> Unavailable(container, Icons.Rounded.MobileOff, "Not on phones right now", "${description?.name ?: ""} doesn't offer its app on phones right now. You can still use it on the web.")
         InstanceStore.Availability.UpdateRequired -> Unavailable(container, Icons.Rounded.SystemUpdate, "Update to carry on", "This version of the app is too old for ${description?.name ?: ""}. Update it from Google Play, then open it again.")
     }
@@ -152,6 +172,9 @@ private fun MainTabs(container: AppContainer, openBrowser: (android.net.Uri) -> 
     var signInNext by rememberSaveable { mutableStateOf(false) }
     // Set when the account tray hands over to Settings, which opens once it has closed.
     var settingsNext by rememberSaveable { mutableStateOf(false) }
+    // Set when the account tray hands over to the console, which covers the app once it has closed.
+    var consoleNext by rememberSaveable { mutableStateOf(false) }
+    val me by account.me.collectAsStateWithLifecycle()
 
     val tabs = Tab.entries.filter { it != Tab.Characters || description?.content?.characters == true }
     val onTab = tabs.any { tab -> entry?.destination?.route == tab.route }
@@ -285,9 +308,15 @@ private fun MainTabs(container: AppContainer, openBrowser: (android.net.Uri) -> 
             } else if (settingsNext) {
                 settingsNext = false
                 navigation.navigate("settings")
+            } else if (consoleNext) {
+                consoleNext = false
+                container.console.session.present()
             }
         }) { close ->
-            AccountTray(account, container.theme, signIn = {
+            AccountTray(account, container.theme, offersConsole = signedIn && ConsoleSession.offered(me, description), openConsole = {
+                consoleNext = true
+                close()
+            }, signIn = {
                 signInNext = true
                 close()
             }) {

@@ -125,13 +125,13 @@ console. A phone sends its `aqo_` token and, for a change, an `X-Operator-Proof`
 
 | Operation | Does | Token | Mobile |
 |-----------|------|-------|--------|
-| `create_operator_device_session` | Exchanges the one-time code from an operator's native sign-in, with its PKCE verifier and the phone's public key, for an operator device session | none (the code is the credential) | iOS (plan §18.8); Android not yet |
-| `delete_operator_device_session` | Signs the phone out of the console | its operator device session | iOS; Android not yet |
-| `create_operator_challenge` | A single-use, 60-second nonce: to unlock, or for one named change and the hash of its input | its operator device session | iOS, to unlock and for each change; Android not yet |
-| `unlock_operator_device_session` | Opens reads for 5 minutes, for the phone key's signature over an unlock nonce | its operator device session | iOS; Android not yet |
-| `operator_status` | Health (`getEngineHealth`), today's figures (`getOverview`), failures in the last hour (`listJobs`) and open reports, with the list of what needs attention | the operator role; on a phone, unlocked | iOS: the Status screen; Android not yet |
-| `operator_overview`, `operator_health`, `operator_list_jobs`, `operator_list_users`, `operator_list_reports` | The console's reads a phone may make. Jobs take `status` and `before`; users take `query` | the operator role; on a phone, unlocked | iOS uses `operator_list_jobs` (Jobs and a job's page), `operator_list_users` (Users, a user's page) and `operator_list_reports` (Reports, a report's page); `operator_overview` and `operator_health` are served but unused, since `operator_status` carries both. Android not yet |
-| `operator_resolve_report`, `operator_set_user_status` | The two changes a phone may make | the operator role; on a phone, a proof each time | iOS; Android not yet |
+| `create_operator_device_session` | Exchanges the one-time code from an operator's native sign-in, with its PKCE verifier and the phone's public key, for an operator device session | none (the code is the credential) | iOS and Android (plan §18.8) |
+| `delete_operator_device_session` | Signs the phone out of the console | its operator device session | iOS and Android |
+| `create_operator_challenge` | A single-use, 60-second nonce: to unlock, or for one named change and the hash of its input | its operator device session | iOS and Android, to unlock and for each change |
+| `unlock_operator_device_session` | Opens reads for 5 minutes, for the phone key's signature over an unlock nonce | its operator device session | iOS and Android |
+| `operator_status` | Health (`getEngineHealth`), today's figures (`getOverview`), failures in the last hour (`listJobs`) and open reports, with the list of what needs attention | the operator role; on a phone, unlocked | iOS and Android: the Status screen |
+| `operator_overview`, `operator_health`, `operator_list_jobs`, `operator_list_users`, `operator_list_reports` | The console's reads a phone may make. Jobs take `status` and `before`; users take `query` | the operator role; on a phone, unlocked | iOS and Android use `operator_list_jobs` (Jobs and a job's page), `operator_list_users` (Users, a user's page) and `operator_list_reports` (Reports, a report's page); `operator_overview` and `operator_health` are served but unused, since `operator_status` carries both. |
+| `operator_resolve_report`, `operator_set_user_status` | The two changes a phone may make | the operator role; on a phone, a proof each time | iOS and Android |
 | `operator_list_devices`, `operator_revoke_device`, `operator_revoke_all_devices` | The phones enrolled for the console; revoke one or all | the operator role, web or API only | Not on mobile |
 | `operator_list_audit` | What operators' phones did and were refused | the operator role, web or API only | Not on mobile |
 

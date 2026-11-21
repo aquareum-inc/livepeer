@@ -121,7 +121,7 @@ class ApiTransport(
 }
 
 /** Runs a call without blocking, and cancels it when the caller is cancelled. */
-private suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
+internal suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
     continuation.invokeOnCancellation { cancel() }
     enqueue(object : Callback {
         override fun onResponse(call: Call, response: Response) = continuation.resume(response)
