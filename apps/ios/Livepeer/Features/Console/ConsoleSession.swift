@@ -127,6 +127,9 @@ final class ConsoleSession {
         }
     }
 
+    /// Starting over: what went wrong last time has been read.
+    func clearFailure() { failure = nil }
+
     /// Signs this phone out of the console: ends the session on the instance, then drops the token and the key.
     /// Signed out here even when the instance can't be reached.
     func signOut() async {

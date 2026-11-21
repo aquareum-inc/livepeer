@@ -14,7 +14,9 @@ struct LivepeerApp: App {
         #endif
         let relay = RefusalRelay()
         let api = API(transport: APITransport(baseURL: BuildConfig.instanceURL, token: { vault.token }, refused: { relay.send($0) }))
-        let instance = InstanceStore(api: api)
+        // What the instance says about itself is open to everyone, so it is asked for without a session: a
+        // session that has ended must not stop the app learning what the instance now serves.
+        let instance = InstanceStore(api: API(transport: APITransport(baseURL: BuildConfig.instanceURL, token: { nil })))
         self.api = api
         _instance = State(initialValue: instance)
         _account = State(initialValue: Account(api: api, vault: vault, relay: relay, instance: instance))

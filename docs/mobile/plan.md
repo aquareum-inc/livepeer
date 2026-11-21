@@ -1259,6 +1259,8 @@ the two kinds of change with their confirm proofs, and the console-only launch. 
 - **Signing out** of the console ends the session on the instance and deletes the key.
 - **The mock user list now reflects suspend and resume.** `setActorStatus` returned ok but `listActors` kept
   answering "active", which the live engine doesn't do; the mock holds the suspended set in memory.
+- **The instance's description is read without a session.** It was sent with the user's token, so a session
+  that had ended made the read fail and the app never learned what the instance now served.
 - **A row that changes state gets a new identity** in the lazy lists. A decided report kept drawing as
   waiting until its row id included its state.
 

@@ -83,7 +83,12 @@ private struct ConsoleGate: View {
             VStack(spacing: 4) {
                 if biometry != nil {
                     PrimaryButton(label: signedOut ? "Sign in" : "Unlock", busy: session.working && signingIn == nil) {
-                        if signedOut { signingIn = SignInItem() } else { Task { await session.unlock() } }
+                        if signedOut {
+                            session.clearFailure()
+                            signingIn = SignInItem()
+                        } else {
+                            Task { await session.unlock() }
+                        }
                     }
                 }
                 if !instance.consoleOnly {
@@ -112,13 +117,21 @@ private struct ConsoleGate: View {
 private struct ConsoleSignIn: View {
     @Environment(ConsoleSession.self) private var session
     @Environment(Account.self) private var account
+    @Environment(InstanceStore.self) private var instance
     @Environment(\.webAuthenticationSession) private var web
     @Environment(\.palette) private var palette
     @State private var busy: SignInMethodName?
 
+    /// Where there is a user app, the person may already be signed in to it, and is told this is separate.
+    private var note: String {
+        instance.consoleOnly
+            ? "Only accounts that run this service can open the console."
+            : "You'll sign in again, even if you're signed in to the app. Only accounts that run this service can open the console."
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("You'll sign in again, even if you're signed in to the app. Only accounts that run this service can open the console.")
+            Text(note)
                 .text(.body)
                 .foregroundStyle(palette.mutedForeground)
             SignInOptions(busy: busy, suggestedEmail: account.me?.email ?? "") { method, email in
