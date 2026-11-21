@@ -804,7 +804,8 @@ Not done, and why:
 
 ## 18. The operator console on phones (proposed 21 November 2026)
 
-Status: **accepted; the server is built (18.8), no app code yet.** The owner accepted every recommendation in
+Status: **accepted; the server and the iOS design sample are built (18.8). Review point B is next: nothing
+else is built until the owner approves the sample.** The owner accepted every recommendation in
 18.7. This section reverses two earlier lines: the console "stays on the
 web" (section 1) and device sessions "always have the `user` role" (section 5). Decisions the owner still
 has to make are in 18.7. A builder can start from this section alone, after reading sections 4, 5 and 7.
@@ -1185,4 +1186,57 @@ key, unlocked and confirmed changes as a phone would, are in `docs/mobile/fixtur
 `create_operator_*.json`, `unlock_operator_device_session.json`) for the native decoding tests.
 
 Not done here, for the sessions that follow: everything in the apps.
+
+**21 November 2026: step 2, the iOS design sample.** Status, Jobs and one job's detail, with enough of the
+frame to judge them, against a mock-only instance with `surfaces.mobileConsole` on. Screenshots are
+`docs/screenshots/mobile/ios-console-*.jpg` (dark, light, the largest text size); the design decisions are 68
+to 76 in `docs/design-proposals.md`.
+
+- **Built to stay:** `ConsoleTransport` (the `OperatorTransport`: the `aqo_` token and a proof header, no
+  cache, no cookies, nothing on disk, and no effect on the user's session); `OperatorProofs` (the signed
+  messages and the input hash, tested against `operator_proof_vectors.json`); `DeviceKey` (Secure Enclave,
+  P-256, `biometryCurrentSet`, no passcode fallback); `ConsoleSession` (sign-in with PKCE and
+  `purpose=operator`, enrolment, unlock, locking, and what a refusal does); the operator token in its own
+  Keychain entry, readable only while the phone is unlocked; Status, Jobs, the job detail, the lock screen,
+  the console's tab bar and label.
+- **Locking.** The console locks when the server's window ends (a timer from `unlocked_until`, capped at five
+  minutes), when a read comes back `locked`, when the person goes back to the app, and when the app returns
+  from more than a minute in the background. That last one listens to the system's background and foreground
+  notices: a view's scene phase doesn't report the background until the app returns, which made the first
+  version never lock.
+- **The list stays lazy.** The clock that keeps row times current wraps the lazy stack, not the rows: with the
+  rows inside it they were laid out all at once, so every page was asked for at once and rows gained spacing.
+- **A session that has ended** (401 that isn't `locked`, or `operator_session`) drops the token and the key
+  and returns to sign-in with the reason. This was exercised by restarting the instance under the app.
+- **The dev config** (`docs/mobile/dev.instance.config.json`) now turns `surfaces.mobileConsole` on. It is
+  the config CI and both apps develop against, and the console's UI tests will need it; a second config
+  would only drift.
+
+Provisional in the sample, for step 3:
+
+- **The simulator can't hold a key behind a face** ("not supported on iOS Simulator"). In a simulator build
+  only, the key is made in the simulator's enclave without the biometric condition and `DeviceKey.sign` asks
+  for the match itself, so the flow looks the same. A device build compiles the real path, which has **not
+  run on a phone yet**: test enrolment, unlock, and that adding a face destroys the key, on real hardware.
+- **Sign-in method.** The sample always asks for the development provider's `operator` method. A real
+  instance answers `method`; step 3 offers the instance's own methods.
+- **Entry (settled after the owner's review of the sample).** The Operator console row shows only to a
+  signed-in person whose `get_me` says `operator`, on an instance that offers the console to phones: not to
+  guests, not to other users, and not merely because the phone was once enrolled. The first version showed
+  it in every development build, because the mock provider signed every user-app sign-in in as a user. The
+  mock provider now signs the test operator in when the email method is given the operator's own address
+  (`sam@example.test`), so the row is reached in development the way it is in production.
+- **Not built:** the console-only launch, signing out of the console on this phone, the message for a phone
+  with no biometrics before sign-in starts (today it appears after pressing Sign in), Reports and Users (a
+  "report is waiting" line on Status opens nothing yet), changes and their confirm proofs (the message and
+  hash are written and tested; nothing calls them), UI tests of the console, and all of Android.
+- **Not seen in a screenshot:** Status's loading rows, which a local instance answers too quickly to catch.
+  The Jobs list's were caught by pausing the instance (`ios-console-jobs-loading-dark.jpg`).
+
+Found while building, for the server or later steps:
+
+- A job carries `actor_id` and no name, and no cost. The list and detail show the id; a name and a cost per
+  job need the engine or a join on the server (noted, not requested yet).
+- `operator_list_jobs` names what ran by `app` (`text-to-video`); the readable capability labels are a user
+  operation an `aqo_` token can't call. The app turns the slug into words itself.
 

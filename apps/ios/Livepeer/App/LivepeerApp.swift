@@ -5,6 +5,7 @@ struct LivepeerApp: App {
     private let api: API
     @State private var instance: InstanceStore
     @State private var account: Account
+    @State private var console: ConsoleSession
 
     init() {
         let vault = TokenVault()
@@ -17,6 +18,7 @@ struct LivepeerApp: App {
         self.api = api
         _instance = State(initialValue: instance)
         _account = State(initialValue: Account(api: api, vault: vault, relay: relay, instance: instance))
+        _console = State(initialValue: ConsoleSession(instance: instance))
     }
 
     var body: some Scene {
@@ -24,6 +26,7 @@ struct LivepeerApp: App {
             RootView(api: api)
                 .environment(instance)
                 .environment(account)
+                .environment(console)
                 .task { await instance.refresh() }
         }
     }
@@ -33,6 +36,8 @@ struct RootView: View {
     let api: API
     @Environment(InstanceStore.self) private var instance
     @Environment(Account.self) private var account
+    @Environment(ConsoleSession.self) private var console
+    @Environment(\.motion) private var motion
     @Environment(\.colorScheme) private var systemScheme
     @Environment(\.scenePhase) private var scenePhase
     /// "dark" or "light" pins the theme; anything else follows the system.
@@ -45,7 +50,12 @@ struct RootView: View {
         Group {
             switch instance.availability {
             case .available:
-                MainTabs(api: api)
+                // The console is its own place: it covers the app, tab bar and all, and the app waits under it.
+                ZStack {
+                    MainTabs(api: api).accessibilityHidden(console.presented)
+                    if console.presented { ConsoleRoot().transition(.opacity) }
+                }
+                .animation(motion(.enter), value: console.presented)
             case .notOffered:
                 Unavailable(symbol: "iphone.slash", title: "Not on phones right now", message: "\(instance.name) doesn't offer its app on phones right now. You can still use it on the web.")
             case .updateRequired:

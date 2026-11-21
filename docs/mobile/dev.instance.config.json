@@ -10,7 +10,8 @@
     "console": true,
     "api": true,
     "mcp": true,
-    "mobile": true
+    "mobile": true,
+    "mobileConsole": true
   },
   "mobile": {
     "ios": {

@@ -12,6 +12,7 @@ struct MainTabs: View {
     let api: API
     @Environment(InstanceStore.self) private var instance
     @Environment(Account.self) private var account
+    @Environment(ConsoleSession.self) private var console
     @Environment(\.palette) private var palette
     @State private var tab = Destination.home
     @State private var homePath: [Route] = []
@@ -24,6 +25,8 @@ struct MainTabs: View {
     /// Set when the account tray hands over to Settings, which opens once it has closed.
     @State private var settingsNext = false
     @State private var settingsOpen = false
+    /// Set when the account tray hands over to the operator console, which opens once it has closed.
+    @State private var consoleNext = false
     @Namespace private var travel
 
     enum Destination: Hashable { case home, studio, library, characters }
@@ -77,6 +80,9 @@ struct MainTabs: View {
             } else if settingsNext {
                 settingsNext = false
                 settingsOpen = true
+            } else if consoleNext {
+                consoleNext = false
+                console.present()
             }
         }) { _ in
             AccountTray {
@@ -84,6 +90,9 @@ struct MainTabs: View {
                 accountOpen = nil
             } openSettings: {
                 settingsNext = true
+                accountOpen = nil
+            } openConsole: {
+                consoleNext = true
                 accountOpen = nil
             }
         }

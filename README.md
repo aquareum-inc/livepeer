@@ -96,8 +96,10 @@ development, a volume in Docker).
 The operator console on phones is a second switch (`surfaces.mobileConsole`, also off in both presets). The
 server side is built: an operator's phone gets its own short-lived session, bound to a key in the phone's
 secure hardware, which reads only after a face or fingerprint and needs a new one for every change; phones
-are listed and revoked on the web console's System page. The app screens are not built yet; see
-`docs/mobile/plan.md` section 18.
+are listed and revoked on the web console's System page. On iOS a design sample is built (Status, Jobs and
+one job, behind sign-in and Face ID); the rest of the console and Android are not. See `docs/mobile/plan.md`
+section 18. The development config below turns the console on; sign in to the app as `sam@example.test`, the
+mock provider's operator, to be offered it (`adam@example.test` is an ordinary user).
 
 ```bash
 # an instance with the apps switched on, for the apps to talk to, on :3100

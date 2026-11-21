@@ -6,7 +6,10 @@ struct AccountTray: View {
     let signIn: () -> Void
     /// Closes this tray and opens Settings in its place.
     let openSettings: () -> Void
+    /// Closes this tray and opens the operator console over the app.
+    let openConsole: () -> Void
     @Environment(Account.self) private var account
+    @Environment(InstanceStore.self) private var instance
     @Environment(\.palette) private var palette
     @AppStorage("theme") private var theme = "system"
     @State private var confirmingSignOut = false
@@ -31,6 +34,20 @@ struct AccountTray: View {
                     Text("Light").tag("light")
                 }
                 .pickerStyle(.segmented)
+            }
+
+            if offersConsole {
+                Button(action: openConsole) {
+                    HStack {
+                        Label("Operator console", systemImage: "gauge.with.needle").text(.body, weight: .medium).foregroundStyle(palette.foreground)
+                        Spacer()
+                        Image(systemName: "chevron.right").imageScale(.small).foregroundStyle(palette.subtleForeground)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressStyle())
+                .accessibilityHint("Opens with Face ID or Touch ID")
             }
 
             if account.signedIn {
@@ -71,6 +88,10 @@ struct AccountTray: View {
             }
         }
         .task { await account.refresh() }
+    }
+
+    private var offersConsole: Bool {
+        account.signedIn && ConsoleSession.offered(to: account.me, by: instance.description)
     }
 
     private var identity: some View {

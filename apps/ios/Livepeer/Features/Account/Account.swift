@@ -156,15 +156,9 @@ final class Account {
         }
     }
 
-    private static func randomText(bytes count: Int) -> String {
+    static func randomText(bytes count: Int) -> String {
         var bytes = [UInt8](repeating: 0, count: count)
         _ = SecRandomCopyBytes(kSecRandomDefault, count, &bytes)
         return Data(bytes).base64URL
-    }
-}
-
-private extension Data {
-    var base64URL: String {
-        base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
     }
 }

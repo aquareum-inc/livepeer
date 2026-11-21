@@ -69,7 +69,7 @@ in `apps/web/lib/public-api/operations.ts`.
 | Developers | Run a video analysis in the playground | `analyseVideo` | Not on mobile |
 | Developers | Open and close a session in the playground | `startLiveSession`, `stopLiveSession` | Not on mobile |
 | Developers | Browse example apps | `listExampleApps` | Not on mobile |
-| Operator · Overview | See users, jobs, revenue, cost, margin, engine status | `getOverview`, `getEngineHealth`, `listJobs` | Server built (`operator_status`, `operator_overview`, `operator_health`); app screens not yet (plan §18) |
+| Operator · Overview | See users, jobs, revenue, cost, margin, engine status | `getOverview`, `getEngineHealth`, `listJobs` | iOS design sample: Status reads `operator_status` (plan §18.8). `operator_overview` and `operator_health` are served but not used by the app. Android not yet |
 | Operator · Users | List users with email, budget, spent, remaining, plan | `provider.identity.listUsers`, `listActors`, `provider.budgets.getAllocation`, `provider.plans.getUserPlan` | Server built (`operator_list_users` with `query`); app screens not yet |
 | Operator · User | Suspend or resume | `setActorStatus` | Server built (`operator_set_user_status`, a proof from the phone each time); app screens not yet |
 | Operator · User | Change role | `provider.identity.setUserRole` | Not on mobile |
@@ -83,7 +83,7 @@ in `apps/web/lib/public-api/operations.ts`.
 | Operator · Billing | Connect a processor, tax setting | `getBillingSettings`, `updateBillingSettings` | Not on mobile |
 | Operator · Billing | See payments, invoices, failed payments; refund | `listPayments`, `refundPayment` | Not on mobile |
 | Operator · Costs | Retail against wholesale per capability, pending | `getCostSummary` | Not on mobile |
-| Operator · Jobs | List, filter, inspect attempts and failures | `listJobs` | Server built (`operator_list_jobs` with `status` and `before`); app screens not yet |
+| Operator · Jobs | List, filter, inspect attempts and failures | `listJobs` | iOS design sample: list with All, Failed and Running, older pages with `before`, one job's detail from the same answer (`operator_list_jobs`). Sharing a job's summary and copying an id use the system and call nothing. Android not yet |
 | Operator · Jobs | Retry | `retryJob` | Not on mobile |
 | Operator · Capabilities | See discovery; enable, set markup, override surfaces | `listOfferings`, `getCapabilitySetting`, `updateCapabilitySetting` | Not on mobile |
 | Operator · Compute | See operators that served jobs; allow or block | `listComputeOperators`, `setComputeOperatorBlocked` | Not on mobile |
@@ -94,8 +94,8 @@ in `apps/web/lib/public-api/operations.ts`.
 | Operator · System | Revoke one operator phone, or all of them | `operator_revoke_device`, `operator_revoke_all_devices`; on the web `revokeOperatorPhoneAction`, `revokeAllOperatorPhonesAction` | Not on mobile |
 | Operator · System | Read what operators' phones did and were refused | `operator_list_audit` (`operatorAudit().list()`) | Not on mobile |
 | Operator · every page | See that a phone was enrolled in the last two days, and go to revoke it | `operator_list_devices` | Not on mobile |
-| Console on a phone | Sign in to the console (new provider sign-in, operators only), enrolling the phone's key | `/auth/start?purpose=operator`, then `create_operator_device_session` | Server built; app not yet |
-| Console on a phone | Unlock with a face or fingerprint | `create_operator_challenge`, `unlock_operator_device_session` | Server built; app not yet |
+| Console on a phone | Sign in to the console (new provider sign-in, operators only), enrolling the phone's key | `/auth/start?purpose=operator`, then `create_operator_device_session` | iOS design sample: from an account tray row shown only to a signed-in operator (`get_me.role`) where the instance offers the console (`get_instance.surfaces.mobile_console`). Provisional: the development provider's operator method only. Android not yet |
+| Console on a phone | Unlock with a face or fingerprint | `create_operator_challenge`, `unlock_operator_device_session` | iOS design sample. Android not yet |
 | Console on a phone | Confirm a change with a face or fingerprint | `create_operator_challenge` with the operation and its input hash, then the operation with `X-Operator-Proof` | Server built; app not yet |
 | Console on a phone | Sign out of the console on this phone | `delete_operator_device_session` | Server built; app not yet |
 | Operator · Settings | Name, domain, logo and symbol (upload, replace, remove; previewed in both themes; checked and cleaned on save by `lib/operator/logo.ts`), colours, sign-up, privacy, surfaces (app, API, MCP, phone apps, reviewed before any is switched off; the console is shown on and disabled), content policy | Writes the instance config (`@livepeer/config` `validateConfig`) | Not on mobile |
