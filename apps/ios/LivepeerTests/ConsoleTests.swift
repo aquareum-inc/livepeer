@@ -85,7 +85,7 @@ struct ConsoleTests {
         // A report waiting is work in a queue, not the service being down.
         #expect(!StatusModel.serviceIsDown(status.attention))
         #expect(StatusModel.serviceIsDown(status.attention + [OperatorAttention(kind: .engineNotReady, message: "Engine isn't ready", count: nil, opens: .status)]))
-        #expect(ConsoleTabs.offers(.jobs) && !ConsoleTabs.offers(.reports))
+        #expect(ConsoleTabs.offers(.jobs) && ConsoleTabs.offers(.reports) && !ConsoleTabs.offers(.status))
     }
 
     @Test func jobs() throws {
@@ -216,6 +216,111 @@ struct ConsoleTests {
         let failing = JobsModel { _, _, _ in throw URLError(.timedOut) }
         await failing.load()
         #expect(failing.phase == .failed("The jobs didn't load. Check your connection."))
+    }
+
+    // MARK: Reports and users
+
+    @Test func reportsQueueWaitingFirstAndChangeOnlyFromTheInstancesAnswer() async throws {
+        let open = try #require(try fixture("operator_list_reports", as: [CharacterReport].self).first)
+        var older = open
+        older.id = "rep_older"
+        older.createdAt = "2026-11-20T09:00:00.000Z"
+        var kept = open
+        kept.id = "rep_kept"
+        kept.state = .dismissed
+        nonisolated(unsafe) var stored = [open, older, kept]
+        nonisolated(unsafe) var refuse = false
+        let model = ReportsModel(
+            read: { stored },
+            resolve: { report, outcome in
+                if refuse { throw APIError(status: 401, message: "Confirm this change with your face or fingerprint.", code: "proof_required") }
+                var decided = report
+                decided.state = outcome == .hidden ? .hidden : .dismissed
+                stored = stored.map { $0.id == decided.id ? decided : $0 }
+                return decided
+            }
+        )
+        await model.load()
+        #expect(model.waiting.map(\.id) == ["rep_older", open.id])
+        #expect(model.decided.map(\.id) == ["rep_kept"])
+
+        refuse = true
+        #expect(try await model.decide(older, .hidden, instance: "Livepeer") == "Confirm this change with your face or fingerprint.")
+        #expect(model.report("rep_older")?.state == .open && model.changes == 0)
+
+        refuse = false
+        #expect(try await model.decide(older, .hidden, instance: "Livepeer") == nil)
+        #expect(model.report("rep_older")?.state == .hidden && model.changes == 1)
+        #expect(model.waiting.map(\.id) == [open.id])
+        #expect(ReportsModel.Outcome.hidden.prompt(for: open) == "Take Lumen down")
+        #expect(CharacterReportState.dismissed.word == "Kept up" && CharacterReportState.hidden.word == "Taken down")
+    }
+
+    @Test func closingThePromptLeavesAChangeUnmade() async throws {
+        let open = try #require(try fixture("operator_list_reports", as: [CharacterReport].self).first)
+        let model = ReportsModel(read: { [open] }, resolve: { _, _ in throw CancellationError() })
+        await model.load()
+        await #expect(throws: CancellationError.self) { _ = try await model.decide(open, .dismissed, instance: "Livepeer") }
+        #expect(model.report(open.id)?.state == .open && model.changes == 0)
+    }
+
+    @Test func usersAreSearchedOnTheInstanceAndSuspendedOnlyWhenItSaysSo() async throws {
+        let everyone = try fixture("operator_list_users", as: [KnownActor].self)
+        let adam = try #require(everyone.first { $0.actorId == "usr_demo_adam" })
+        #expect(adam.displayName == "Adam Soffer" && adam.standing == "Active" && adam.canSuspend && !adam.canResume)
+
+        nonisolated(unsafe) var asked: [String?] = []
+        nonisolated(unsafe) var paused: Set<String> = []
+        nonisolated(unsafe) var answer = true
+        let model = UsersModel(
+            read: { query in
+                asked.append(query)
+                return everyone.filter { query == nil || $0.label.lowercased().contains(query!.lowercased()) }.map { user in
+                    var user = user
+                    if paused.contains(user.actorId) { user.allocation?.status = .paused }
+                    return user
+                }
+            },
+            setStatus: { user, status in
+                guard answer else { return false }
+                if status == .paused { paused.insert(user.actorId) } else { paused.remove(user.actorId) }
+                return true
+            }
+        )
+        await model.load()
+        #expect(asked == [nil] && model.users.count == everyone.count)
+
+        model.query = " adam "
+        await model.load()
+        #expect(asked.last == "adam" && model.users.map(\.actorId) == ["usr_demo_adam"])
+
+        answer = false
+        #expect(try await model.set(adam, to: .paused, instance: "Livepeer") == "Livepeer couldn't change that account. Nothing was changed.")
+        #expect(model.user("usr_demo_adam")?.allocation?.status == .active && model.changes == 0)
+
+        answer = true
+        #expect(try await model.set(adam, to: .paused, instance: "Livepeer") == nil)
+        let suspended = try #require(model.user("usr_demo_adam"))
+        #expect(suspended.standing == "Suspended" && suspended.canResume && !suspended.canSuspend && model.changes == 1)
+        #expect(UsersModel.Status.paused.prompt(for: adam) == "Suspend Adam Soffer")
+    }
+
+    @Test func aRefusedChangeSaysWhyInWords() {
+        #expect(ConsoleSession.changeMessage(for: APIError(status: 429, message: "Too many requests. Try again in a minute.", code: "rate_limited"), instance: "Livepeer") == "Too many requests. Try again in a minute.")
+        #expect(ConsoleSession.changeMessage(for: URLError(.notConnectedToInternet), instance: "Livepeer") == "Can't reach Livepeer. Nothing was changed.")
+    }
+
+    @Test func anInstanceThatServesOnlyItsConsoleIsTheConsole() throws {
+        var instance = try fixture("get_instance", as: InstanceDescription.self)
+        #expect(!InstanceStore.consoleOnly(instance))
+        instance.surfaces.mobileConsole = true
+        #expect(!InstanceStore.consoleOnly(instance))
+        instance.surfaces.mobile = false
+        #expect(InstanceStore.consoleOnly(instance))
+        // The console alone is reason enough for the build to be usable.
+        #expect(InstanceStore.availability(of: instance, bundleID: "org.livepeer.app.dev", version: "0.1.0") == .available)
+        instance.surfaces.mobileConsole = false
+        #expect(InstanceStore.availability(of: instance, bundleID: "org.livepeer.app.dev", version: "0.1.0") == .notOffered)
     }
 
     // MARK: Transport

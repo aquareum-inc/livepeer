@@ -23,6 +23,7 @@ struct ConsoleLabel: View {
 /// where the avatar sits. Bars don't grow with text size, so neither does this.
 struct ConsoleToolbar: ToolbarContent {
     @Environment(ConsoleSession.self) private var session
+    @Environment(InstanceStore.self) private var instance
     @Environment(\.palette) private var palette
 
     var body: some ToolbarContent {
@@ -31,11 +32,14 @@ struct ConsoleToolbar: ToolbarContent {
         } else {
             ToolbarItem(placement: .topBarLeading) { label }
         }
-        ToolbarItem(placement: .topBarTrailing) {
-            Button("Back to the app") { session.dismiss() }
-                .text(.body, weight: .medium)
-                .foregroundStyle(palette.foreground)
-                .dynamicTypeSize(...DynamicTypeSize.xLarge)
+        // An instance with no user app has nowhere to go back to.
+        if !instance.consoleOnly {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Back to the app") { session.dismiss() }
+                    .text(.body, weight: .medium)
+                    .foregroundStyle(palette.foreground)
+                    .dynamicTypeSize(...DynamicTypeSize.xLarge)
+            }
         }
     }
 

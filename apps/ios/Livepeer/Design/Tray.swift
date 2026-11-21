@@ -6,18 +6,22 @@ import SwiftUI
 private struct TrayModifier<Item: Identifiable, Body: View>: ViewModifier {
     @Binding var item: Item?
     let title: (Item) -> String
+    let destructive: (Item) -> Bool
     let dismissed: () -> Void
     let content: (Item) -> Body
 
     func body(content base: Content) -> some View {
         base.sheet(item: $item, onDismiss: dismissed) { item in
-            TrayFrame(title: title(item)) { content(item) }
+            TrayFrame(title: title(item), destructive: destructive(item)) { content(item) }
         }
     }
 }
 
 private struct TrayFrame<Body: View>: View {
     let title: String
+    /// A tray that asks for something that takes away carries the destructive tint, so its stakes show before
+    /// a word of it is read.
+    var destructive = false
     @ViewBuilder let content: Body
     @State private var headerHeight: CGFloat = 64
     @State private var contentHeight: CGFloat = 256
@@ -61,7 +65,12 @@ private struct TrayFrame<Body: View>: View {
         }
         .presentationDetents([.height(headerHeight + contentHeight)])
         .presentationCornerRadius(Radius.sheet)
-        .presentationBackground(palette.panel)
+        .presentationBackground {
+            ZStack {
+                palette.panel
+                if destructive { palette.destructive.opacity(0.1) }
+            }
+        }
         // A sheet doesn't inherit the app's tint, so set it again: the cursor and placeholders follow the theme.
         .tint(palette.foreground)
         .presentationDragIndicator(.hidden)
@@ -70,8 +79,8 @@ private struct TrayFrame<Body: View>: View {
 
 extension View {
     /// Presents `item` in a tray. `dismissed` runs however it closes.
-    func tray<Item: Identifiable, Body: View>(item: Binding<Item?>, title: @escaping (Item) -> String, dismissed: @escaping () -> Void = {}, @ViewBuilder content: @escaping (Item) -> Body) -> some View {
-        modifier(TrayModifier(item: item, title: title, dismissed: dismissed, content: content))
+    func tray<Item: Identifiable, Body: View>(item: Binding<Item?>, title: @escaping (Item) -> String, destructive: @escaping (Item) -> Bool = { _ in false }, dismissed: @escaping () -> Void = {}, @ViewBuilder content: @escaping (Item) -> Body) -> some View {
+        modifier(TrayModifier(item: item, title: title, destructive: destructive, dismissed: dismissed, content: content))
     }
 }
 
@@ -93,6 +102,31 @@ struct PrimaryButton: View {
             .foregroundStyle(palette.primaryForeground)
             .frame(maxWidth: .infinity, minHeight: 50)
             .background(palette.primary.opacity(enabled ? 1 : 0.4), in: RoundedRectangle(cornerRadius: Radius.field, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.field, style: .continuous))
+        }
+        .buttonStyle(PressStyle())
+        .disabled(busy)
+    }
+}
+
+/// The action in a tray that takes something away: full width, filled with the destructive colour.
+struct DestructiveButton: View {
+    let label: String
+    var busy = false
+    let action: () -> Void
+    @Environment(\.palette) private var palette
+    @Environment(\.isEnabled) private var enabled
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Text(label).opacity(busy ? 0 : 1)
+                if busy { ProgressView().tint(.white) }
+            }
+            .text(.lead, weight: .semibold)
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .background(palette.destructiveFill.opacity(enabled ? 1 : 0.4), in: RoundedRectangle(cornerRadius: Radius.field, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: Radius.field, style: .continuous))
         }
         .buttonStyle(PressStyle())

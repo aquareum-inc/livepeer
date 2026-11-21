@@ -6,7 +6,9 @@ struct StatusView: View {
     /// Opens the place where something that needs attention is dealt with.
     let open: (OperatorAttentionOpens) -> Void
     @Environment(InstanceStore.self) private var instance
+    @Environment(ConsoleSession.self) private var session
     @Environment(\.palette) private var palette
+    @State private var confirmingSignOut = false
 
     var body: some View {
         ScrollView {
@@ -20,6 +22,7 @@ struct StatusView: View {
                     // The same rows at their final height, so nothing moves when the answer arrives.
                     sections(.placeholder).redacted(reason: .placeholder).breathing().accessibilityHidden(true)
                 }
+                signOut
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
@@ -81,6 +84,21 @@ struct StatusView: View {
             .frame(maxWidth: 200)
             .padding(.leading, 24)
             .padding(.top, 10)
+    }
+
+    /// The way out of the console for good on this phone, kept quiet at the foot of the first screen.
+    private var signOut: some View {
+        Button("Sign out of the console on this phone") { confirmingSignOut = true }
+            .text(.body, weight: .medium)
+            .foregroundStyle(palette.mutedForeground)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .buttonStyle(PressStyle())
+            .alert("Sign out of the console?", isPresented: $confirmingSignOut) {
+                Button("Cancel", role: .cancel) {}
+                Button("Sign out", role: .destructive) { Task { await session.signOut() } }
+            } message: {
+                Text("This phone forgets the console and its key. To come back you sign in again.")
+            }
     }
 
     // MARK: Needs you, Today, Service

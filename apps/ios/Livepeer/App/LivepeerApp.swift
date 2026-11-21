@@ -14,7 +14,9 @@ struct LivepeerApp: App {
         #endif
         let relay = RefusalRelay()
         let api = API(transport: APITransport(baseURL: BuildConfig.instanceURL, token: { vault.token }, refused: { relay.send($0) }))
-        let instance = InstanceStore(api: api)
+        // What the instance says about itself is open to everyone, so it is asked for without a session: a
+        // session that has ended must not stop the app learning what the instance now serves.
+        let instance = InstanceStore(api: API(transport: APITransport(baseURL: BuildConfig.instanceURL, token: { nil })))
         self.api = api
         _instance = State(initialValue: instance)
         _account = State(initialValue: Account(api: api, vault: vault, relay: relay, instance: instance))
@@ -49,6 +51,12 @@ struct RootView: View {
         let palette = instance.palette(for: scheme)
         Group {
             switch instance.availability {
+            case .available where !instance.settled:
+                // A first launch that hasn't heard from the instance: it may serve the app, the console or both.
+                palette.background.ignoresSafeArea()
+            case .available where instance.consoleOnly:
+                // No user app here: the console is the whole app, with no tabs, tray or guest state behind it.
+                ConsoleRoot().task { console.present() }
             case .available:
                 // The console is its own place: it covers the app, tab bar and all, and the app waits under it.
                 ZStack {

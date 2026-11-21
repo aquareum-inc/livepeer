@@ -70,8 +70,8 @@ in `apps/web/lib/public-api/operations.ts`.
 | Developers | Open and close a session in the playground | `startLiveSession`, `stopLiveSession` | Not on mobile |
 | Developers | Browse example apps | `listExampleApps` | Not on mobile |
 | Operator · Overview | See users, jobs, revenue, cost, margin, engine status | `getOverview`, `getEngineHealth`, `listJobs` | iOS design sample: Status reads `operator_status` (plan §18.8). `operator_overview` and `operator_health` are served but not used by the app. Android not yet |
-| Operator · Users | List users with email, budget, spent, remaining, plan | `provider.identity.listUsers`, `listActors`, `provider.budgets.getAllocation`, `provider.plans.getUserPlan` | Server built (`operator_list_users` with `query`); app screens not yet |
-| Operator · User | Suspend or resume | `setActorStatus` | Server built (`operator_set_user_status`, a proof from the phone each time); app screens not yet |
+| Operator · Users | List users with email, budget, spent, remaining, plan | `provider.identity.listUsers`, `listActors`, `provider.budgets.getAllocation`, `provider.plans.getUserPlan` | iOS: Users, searched on the instance by name or id (`operator_list_users` with `query`): name, standing, last seen, ids. Email, budget and plan aren't in that answer and aren't shown. Android not yet |
+| Operator · User | Suspend or resume | `setActorStatus` | iOS: from a user's page, in a tray, confirmed with a face or fingerprint (`operator_set_user_status` with a proof). Android not yet |
 | Operator · User | Change role | `provider.identity.setUserRole` | Not on mobile |
 | Operator · User | Assign or remove a plan | `provider.plans.assignPlan` | Not on mobile |
 | Operator · User | Add credit (manual adjustment) | `provider.budgets.topUpAllocation` | Not on mobile |
@@ -88,16 +88,16 @@ in `apps/web/lib/public-api/operations.ts`.
 | Operator · Capabilities | See discovery; enable, set markup, override surfaces | `listOfferings`, `getCapabilitySetting`, `updateCapabilitySetting` | Not on mobile |
 | Operator · Compute | See operators that served jobs; allow or block | `listComputeOperators`, `setComputeOperatorBlocked` | Not on mobile |
 | Operator · Grants | List, create, add funding | `provider.budgets.listGrants`, `createGrant`, `fundGrant` | Not on mobile |
-| Operator · Reports (phone) | See the queue; keep a character up or take it down | `operator_list_reports`, `operator_resolve_report` (a proof from the phone each time) | Server built; app screens not yet |
+| Operator · Reports (phone) | See the queue; keep a character up or take it down | `operator_list_reports`, `operator_resolve_report` (a proof from the phone each time) | iOS: Reports, with a count on its tab; a report's page; Keep it up or Take it down in a tray, confirmed with a face or fingerprint. Android not yet |
 | Operator · Settings | Switch the console on phones on or off | `saveInstanceSettingsAction` (`surfaces.mobileConsole` in the instance config) | Not on mobile |
 | Operator · System | See the phones enrolled for the console | `operator_list_devices` (`operatorDevices().list()`) | Not on mobile |
 | Operator · System | Revoke one operator phone, or all of them | `operator_revoke_device`, `operator_revoke_all_devices`; on the web `revokeOperatorPhoneAction`, `revokeAllOperatorPhonesAction` | Not on mobile |
 | Operator · System | Read what operators' phones did and were refused | `operator_list_audit` (`operatorAudit().list()`) | Not on mobile |
 | Operator · every page | See that a phone was enrolled in the last two days, and go to revoke it | `operator_list_devices` | Not on mobile |
-| Console on a phone | Sign in to the console (new provider sign-in, operators only), enrolling the phone's key | `/auth/start?purpose=operator`, then `create_operator_device_session` | iOS design sample: from an account tray row shown only to a signed-in operator (`get_me.role`) where the instance offers the console (`get_instance.surfaces.mobile_console`). Provisional: the development provider's operator method only. Android not yet |
-| Console on a phone | Unlock with a face or fingerprint | `create_operator_challenge`, `unlock_operator_device_session` | iOS design sample. Android not yet |
-| Console on a phone | Confirm a change with a face or fingerprint | `create_operator_challenge` with the operation and its input hash, then the operation with `X-Operator-Proof` | Server built; app not yet |
-| Console on a phone | Sign out of the console on this phone | `delete_operator_device_session` | Server built; app not yet |
+| Console on a phone | Sign in to the console (new provider sign-in, operators only), enrolling the phone's key | `/auth/start?purpose=operator`, then `create_operator_device_session` | iOS: from an account tray row shown only to a signed-in operator (`get_me.role`) where the instance offers the console (`get_instance.surfaces.mobile_console`), or at launch on an instance that serves only its console; with any method the instance offers. Android not yet |
+| Console on a phone | Unlock with a face or fingerprint | `create_operator_challenge`, `unlock_operator_device_session` | iOS. Android not yet |
+| Console on a phone | Confirm a change with a face or fingerprint | `create_operator_challenge` with the operation and its input hash, then the operation with `X-Operator-Proof` | iOS: every change (resolve a report, suspend, resume). Android not yet |
+| Console on a phone | Sign out of the console on this phone | `delete_operator_device_session` | iOS: at the foot of Status, after asking. Android not yet |
 | Operator · Settings | Name, domain, logo and symbol (upload, replace, remove; previewed in both themes; checked and cleaned on save by `lib/operator/logo.ts`), colours, sign-up, privacy, surfaces (app, API, MCP, phone apps, reviewed before any is switched off; the console is shown on and disabled), content policy | Writes the instance config (`@livepeer/config` `validateConfig`) | Not on mobile |
 | Operator · Reports | List reports of shared characters, open first | `operator_list_reports` (`moderation().reports()`) | Not on mobile |
 | Operator · Reports | Keep a character up, or take it down for everyone | `operator_resolve_report` (`moderation().resolve()`) | Not on mobile |

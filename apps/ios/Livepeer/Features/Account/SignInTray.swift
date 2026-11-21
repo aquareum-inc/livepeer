@@ -1,17 +1,17 @@
 import AuthenticationServices
 import SwiftUI
 
-/// Sign in or sign up with the methods the instance offers. Each opens the system's auth session; the email
-/// method asks for the address first, as the web does.
-struct SignInTray: View {
-    let reason: String?
-    @Environment(Account.self) private var account
+/// The ways to sign in that the instance offers. Each opens the system's auth session; the email method asks
+/// for the address first, as the web does. The user app's sign-in and the console's own both use it.
+struct SignInOptions: View {
+    /// The method being tried, while its auth session is open.
+    let busy: SignInMethodName?
+    /// An address to start the email field with.
+    var suggestedEmail = ""
+    let start: (SignInMethodName, _ email: String?) -> Void
     @Environment(InstanceStore.self) private var instance
-    @Environment(\.webAuthenticationSession) private var session
     @Environment(\.palette) private var palette
     @State private var email = ""
-    @State private var busy: SignInMethodName?
-    @State private var failure: String?
     @FocusState private var typing: Bool
 
     /// Methods that hand off to a wallet app don't come back reliably inside an auth session, so phones
@@ -26,12 +26,8 @@ struct SignInTray: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let reason {
-                Text(reason).text(.body).foregroundStyle(palette.mutedForeground)
-            }
-
             ForEach(Self.providers.filter { methods.contains($0.method) }, id: \.method) { provider in
-                SecondaryButton(label: provider.label, symbol: provider.symbol) { start(provider.method) }
+                SecondaryButton(label: provider.label, symbol: provider.symbol) { begin(provider.method) }
                     .disabled(busy != nil)
             }
 
@@ -52,7 +48,7 @@ struct SignInTray: View {
                     .autocorrectionDisabled()
                     .submitLabel(.continue)
                     .focused($typing)
-                    .onSubmit { if canUseEmail { start(.email) } }
+                    .onSubmit { if canUseEmail { begin(.email) } }
                     .text(.lead)
                     .foregroundStyle(palette.foreground)
                     .padding(.horizontal, 14)
@@ -60,12 +56,12 @@ struct SignInTray: View {
                     .background(palette.card, in: RoundedRectangle(cornerRadius: Radius.field, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: Radius.field, style: .continuous).strokeBorder(palette.input, lineWidth: 1))
                     .accessibilityLabel("Email address")
-                PrimaryButton(label: "Continue", busy: busy == .email) { start(.email) }
+                PrimaryButton(label: "Continue", busy: busy == .email) { begin(.email) }
                     .disabled(!canUseEmail || busy != nil)
             }
 
             if methods.contains(.passkey) {
-                Button { start(.passkey) } label: {
+                Button { begin(.passkey) } label: {
                     Label("Use a passkey instead", systemImage: "person.badge.key")
                         .text(.body)
                         .foregroundStyle(palette.mutedForeground)
@@ -74,6 +70,38 @@ struct SignInTray: View {
                 .buttonStyle(PressStyle())
                 .disabled(busy != nil)
             }
+        }
+        .onAppear { if email.isEmpty { email = suggestedEmail } }
+    }
+
+    private var canUseEmail: Bool {
+        let trimmed = email.trimmingCharacters(in: .whitespaces)
+        return trimmed.contains("@") && trimmed.contains(".")
+    }
+
+    private func begin(_ method: SignInMethodName) {
+        typing = false
+        start(method, method == .email ? email.trimmingCharacters(in: .whitespaces) : nil)
+    }
+}
+
+/// Sign in or sign up to the user app.
+struct SignInTray: View {
+    let reason: String?
+    @Environment(Account.self) private var account
+    @Environment(InstanceStore.self) private var instance
+    @Environment(\.webAuthenticationSession) private var session
+    @Environment(\.palette) private var palette
+    @State private var busy: SignInMethodName?
+    @State private var failure: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let reason {
+                Text(reason).text(.body).foregroundStyle(palette.mutedForeground)
+            }
+
+            SignInOptions(busy: busy) { method, email in start(method, email: email) }
 
             if let failure {
                 Text(failure).text(.body).foregroundStyle(palette.destructive).accessibilityAddTraits(.updatesFrequently)
@@ -86,19 +114,13 @@ struct SignInTray: View {
         }
     }
 
-    private var canUseEmail: Bool {
-        let trimmed = email.trimmingCharacters(in: .whitespaces)
-        return trimmed.contains("@") && trimmed.contains(".")
-    }
-
-    private func start(_ method: SignInMethodName) {
-        typing = false
+    private func start(_ method: SignInMethodName, email: String?) {
         failure = nil
         busy = method
         Task {
             defer { busy = nil }
             do {
-                try await account.signIn(with: method, email: method == .email ? email.trimmingCharacters(in: .whitespaces) : nil, using: session)
+                try await account.signIn(with: method, email: email, using: session)
             } catch is CancellationError {
                 return
             } catch let error as LocalizedError where error is Account.SignInError {
