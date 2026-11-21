@@ -111,7 +111,7 @@ struct JobRow: View {
                     }
                 }
                 (Text(job.stateWord).foregroundStyle(stateColour)
-                    + Text(" · " + job.facts.joined(separator: " · ")).foregroundStyle(palette.mutedForeground))
+                    + Text(ConsoleFormat.gap + job.facts.joined(separator: ConsoleFormat.gap)).foregroundStyle(palette.mutedForeground))
                     .text(.caption, mono: true)
                     .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
             }

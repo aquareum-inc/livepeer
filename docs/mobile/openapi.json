@@ -2626,6 +2626,57 @@
         }
       }
     },
+    "/operator/costs": {
+      "get": {
+        "operationId": "operator_costs",
+        "summary": "Operator: wholesale network cost by class and capability over a number of days.",
+        "x-operator": true,
+        "x-mobile": "read",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CostSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/operator/reports": {
       "get": {
         "operationId": "operator_list_reports",
@@ -2715,6 +2766,178 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CharacterReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operator/grants": {
+      "get": {
+        "operationId": "operator_list_grants",
+        "summary": "Operator: grants and their funding.",
+        "x-operator": true,
+        "x-mobile": "read",
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Grant"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operator/plans": {
+      "get": {
+        "operationId": "operator_list_plans",
+        "summary": "Operator: the provider's plans and allowances.",
+        "x-operator": true,
+        "x-mobile": "read",
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Plan"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operator/compute": {
+      "get": {
+        "operationId": "operator_list_compute",
+        "summary": "Operator: the compute operators that ran this instance's recent jobs, with their runners, failures and median response time.",
+        "x-operator": true,
+        "x-mobile": "read",
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ComputeOperator"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operator/capabilities": {
+      "get": {
+        "operationId": "operator_list_capabilities",
+        "summary": "Operator: every capability discovered on the network, whether this instance offers it, its markup, and how many runners are ready.",
+        "x-operator": true,
+        "x-mobile": "read",
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OfferedCapability"
+                  }
                 }
               }
             }
@@ -3053,6 +3276,53 @@
         ],
         "description": "Why someone reported a character."
       },
+      "ComputeOperator": {
+        "type": "object",
+        "properties": {
+          "orchestrator_url": {
+            "type": "string"
+          },
+          "runners": {
+            "type": "number"
+          },
+          "apps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "jobs": {
+            "type": "number"
+          },
+          "failures": {
+            "type": "number"
+          },
+          "median_response_ms": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "allowed",
+              "blocked"
+            ]
+          }
+        },
+        "required": [
+          "orchestrator_url",
+          "runners",
+          "apps",
+          "jobs",
+          "failures",
+          "median_response_ms",
+          "status"
+        ],
+        "additionalProperties": false,
+        "description": "An operator's view of one compute operator, derived from the jobs it served."
+      },
       "Conversation": {
         "type": "object",
         "properties": {
@@ -3338,6 +3608,101 @@
           "id",
           "title",
           "updated_at"
+        ],
+        "additionalProperties": false
+      },
+      "CostSummary": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          },
+          "by_class": {
+            "type": "object",
+            "properties": {
+              "delivered": {
+                "$ref": "#/components/schemas/Fees"
+              },
+              "failed_after_payment": {
+                "$ref": "#/components/schemas/Fees"
+              },
+              "uncertain": {
+                "$ref": "#/components/schemas/Fees"
+              },
+              "pending": {
+                "$ref": "#/components/schemas/Fees"
+              }
+            },
+            "required": [
+              "delivered",
+              "failed_after_payment",
+              "uncertain",
+              "pending"
+            ],
+            "additionalProperties": false
+          },
+          "jobs_with_cost": {
+            "type": "number"
+          },
+          "jobs_pending": {
+            "type": "number"
+          },
+          "by_app": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "delivered": {
+                  "$ref": "#/components/schemas/Fees"
+                },
+                "failed_after_payment": {
+                  "$ref": "#/components/schemas/Fees"
+                },
+                "uncertain": {
+                  "$ref": "#/components/schemas/Fees"
+                },
+                "pending": {
+                  "$ref": "#/components/schemas/Fees"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "by_class",
+          "jobs_with_cost",
+          "jobs_pending",
+          "by_app"
+        ],
+        "additionalProperties": false,
+        "description": "`GET /v1/costs/summary`."
+      },
+      "Fees": {
+        "type": "object",
+        "properties": {
+          "fee_eth": {
+            "type": "string"
+          },
+          "fee_usd": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "row_count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "fee_eth",
+          "fee_usd",
+          "row_count"
         ],
         "additionalProperties": false
       },
@@ -3872,6 +4237,56 @@
           "audio"
         ]
       },
+      "Grant": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "funded": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "allocated": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "spent": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "created_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "funded",
+          "allocated",
+          "spent",
+          "created_at"
+        ],
+        "additionalProperties": false
+      },
+      "Money": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "string",
+            "description": "Decimal string, as the engine and providers report amounts."
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount",
+          "currency"
+        ],
+        "additionalProperties": false,
+        "description": "The payment and identity provider behind the engine, in the engine's terms: grants fund allocations, an allocation is a user's budget, usage is what was spent, a plan is the provider's plan. Nothing here is a second ledger: every amount is read from the provider."
+      },
       "InstanceDescription": {
         "type": "object",
         "properties": {
@@ -4402,6 +4817,51 @@
         "additionalProperties": false,
         "description": "Something in the user's library: an upload or a generation, with what the product understood about it."
       },
+      "OfferedCapability": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "What it is, as the interface names it: \"Text to video\"."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether this instance offers it to its users."
+          },
+          "markup": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Multiplier on wholesale cost; null uses the instance default."
+          },
+          "runner_count": {
+            "type": "number",
+            "description": "Compute operators' runners that advertise it, and how many are ready now."
+          },
+          "ready_count": {
+            "type": "number"
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "True when discovery hasn't seen it lately."
+          }
+        },
+        "required": [
+          "app",
+          "name",
+          "enabled",
+          "markup",
+          "runner_count",
+          "ready_count",
+          "stale"
+        ],
+        "additionalProperties": false,
+        "description": "A capability on the network as the operator sees it: what it's called, whether this instance offers it, and who can run it now."
+      },
       "Offering": {
         "type": "object",
         "properties": {
@@ -4827,6 +5287,87 @@
         ],
         "additionalProperties": false
       },
+      "Plan": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "price": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "interval": {
+            "type": "string",
+            "enum": [
+              "month",
+              "year"
+            ]
+          },
+          "allowance": {
+            "$ref": "#/components/schemas/PlanAllowance"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "markup": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Multiplier on wholesale cost for subscribers; null uses the instance default."
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "price",
+          "interval",
+          "allowance",
+          "features",
+          "markup",
+          "active"
+        ],
+        "additionalProperties": false
+      },
+      "PlanAllowance": {
+        "type": "object",
+        "properties": {
+          "credits": {
+            "type": "number",
+            "description": "Credits included each period."
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "month",
+              "year"
+            ]
+          },
+          "rollover_months": {
+            "type": "number",
+            "description": "Months unused credits carry forward; 0 means they expire."
+          }
+        },
+        "required": [
+          "credits",
+          "period",
+          "rollover_months"
+        ],
+        "additionalProperties": false
+      },
       "PlanAndCredits": {
         "type": "object",
         "properties": {
@@ -4910,105 +5451,6 @@
         ],
         "additionalProperties": false,
         "description": "The signed-in user's plan, what they could change to, and what the provider supports."
-      },
-      "Plan": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "price": {
-            "$ref": "#/components/schemas/Money"
-          },
-          "interval": {
-            "type": "string",
-            "enum": [
-              "month",
-              "year"
-            ]
-          },
-          "allowance": {
-            "$ref": "#/components/schemas/PlanAllowance"
-          },
-          "features": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "markup": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "description": "Multiplier on wholesale cost for subscribers; null uses the instance default."
-          },
-          "active": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "description",
-          "price",
-          "interval",
-          "allowance",
-          "features",
-          "markup",
-          "active"
-        ],
-        "additionalProperties": false
-      },
-      "Money": {
-        "type": "object",
-        "properties": {
-          "amount": {
-            "type": "string",
-            "description": "Decimal string, as the engine and providers report amounts."
-          },
-          "currency": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "amount",
-          "currency"
-        ],
-        "additionalProperties": false,
-        "description": "The payment and identity provider behind the engine, in the engine's terms: grants fund allocations, an allocation is a user's budget, usage is what was spent, a plan is the provider's plan. Nothing here is a second ledger: every amount is read from the provider."
-      },
-      "PlanAllowance": {
-        "type": "object",
-        "properties": {
-          "credits": {
-            "type": "number",
-            "description": "Credits included each period."
-          },
-          "period": {
-            "type": "string",
-            "enum": [
-              "month",
-              "year"
-            ]
-          },
-          "rollover_months": {
-            "type": "number",
-            "description": "Months unused credits carry forward; 0 means they expire."
-          }
-        },
-        "required": [
-          "credits",
-          "period",
-          "rollover_months"
-        ],
-        "additionalProperties": false
       },
       "CreditPack": {
         "type": "object",

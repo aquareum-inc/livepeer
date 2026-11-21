@@ -160,6 +160,22 @@ export interface CapabilitySetting {
   surfaces: string[] | null;
 }
 
+/** A capability on the network as the operator sees it: what it's called, whether this instance offers it, and who can run it now. */
+export interface OfferedCapability {
+  app: string;
+  /** What it is, as the interface names it: "Text to video". */
+  name: string;
+  /** Whether this instance offers it to its users. */
+  enabled: boolean;
+  /** Multiplier on wholesale cost; null uses the instance default. */
+  markup: number | null;
+  /** Compute operators' runners that advertise it, and how many are ready now. */
+  runner_count: number;
+  ready_count: number;
+  /** True when discovery hasn't seen it lately. */
+  stale: boolean;
+}
+
 export interface OverviewStats {
   active_users: number;
   jobs_today: number;

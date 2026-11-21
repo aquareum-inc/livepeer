@@ -91,7 +91,7 @@ struct UserRow: View {
                     }
                 }
                 (Text(user.standing).foregroundStyle(standingColour)
-                    + Text(" · \(user.actorId)").foregroundStyle(palette.mutedForeground))
+                    + Text("\(ConsoleFormat.gap)\(user.actorId)").foregroundStyle(palette.mutedForeground))
                     .text(.caption, mono: true)
                     .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
                     .truncationMode(.middle)

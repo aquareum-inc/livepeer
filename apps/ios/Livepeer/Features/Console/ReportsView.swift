@@ -98,7 +98,7 @@ struct ReportRow: View {
                     }
                 }
                 (Text(open ? report.reason.label : report.state.word).foregroundStyle(open ? palette.foreground : palette.mutedForeground)
-                    + Text(" · by\u{00A0}\(report.author)").foregroundStyle(palette.mutedForeground))
+                    + Text("\(ConsoleFormat.gap)by\u{00A0}\(report.author)").foregroundStyle(palette.mutedForeground))
                     .text(.caption, mono: true)
                 if open, let note = report.note, !note.isEmpty {
                     Text("“\(note)”")

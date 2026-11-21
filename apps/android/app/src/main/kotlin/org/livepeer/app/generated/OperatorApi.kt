@@ -76,6 +76,10 @@ class OperatorApi(private val transport: OperatorTransport) {
     suspend fun operatorListJobs(limit: Double? = null, status: String? = null, before: String? = null): List<EngineJob> =
         transport.send(ListSerializer(EngineJob.serializer()), "GET", "/operator/jobs", query = mapOf("limit" to limit?.let { JsonPrimitive(it) }, "status" to status?.let { JsonPrimitive(it) }, "before" to before?.let { JsonPrimitive(it) }), body = null, proof = null)
 
+    /** Operator: wholesale network cost by class and capability over a number of days. Needs the console unlocked on this phone. */
+    suspend fun operatorCosts(days: Double? = null): CostSummary =
+        transport.send(CostSummary.serializer(), "GET", "/operator/costs", query = mapOf("days" to days?.let { JsonPrimitive(it) }), body = null, proof = null)
+
     /** Operator: reports of shared characters, open ones first. Needs the console unlocked on this phone. */
     suspend fun operatorListReports(): List<CharacterReport> =
         transport.send(ListSerializer(CharacterReport.serializer()), "GET", "/operator/reports", query = emptyMap(), body = null, proof = null)
@@ -83,6 +87,22 @@ class OperatorApi(private val transport: OperatorTransport) {
     /** Operator: decide a report. Dismiss leaves the character up; hide takes it off the instance for everyone. Needs its own proof: a nonce for exactly this input, signed after a face or fingerprint. */
     suspend fun operatorResolveReport(id: String, outcome: String, proof: OperatorProof): CharacterReport =
         transport.send(CharacterReport.serializer(), "POST", "/operator/reports/${ApiTransport.escape(id)}", query = emptyMap(), body = mapOf("outcome" to JsonPrimitive(outcome)), proof = proof)
+
+    /** Operator: grants and their funding. Needs the console unlocked on this phone. */
+    suspend fun operatorListGrants(): List<Grant> =
+        transport.send(ListSerializer(Grant.serializer()), "GET", "/operator/grants", query = emptyMap(), body = null, proof = null)
+
+    /** Operator: the provider's plans and allowances. Needs the console unlocked on this phone. */
+    suspend fun operatorListPlans(): List<Plan> =
+        transport.send(ListSerializer(Plan.serializer()), "GET", "/operator/plans", query = emptyMap(), body = null, proof = null)
+
+    /** Operator: the compute operators that ran this instance's recent jobs, with their runners, failures and median response time. Needs the console unlocked on this phone. */
+    suspend fun operatorListCompute(): List<ComputeOperator> =
+        transport.send(ListSerializer(ComputeOperator.serializer()), "GET", "/operator/compute", query = emptyMap(), body = null, proof = null)
+
+    /** Operator: every capability discovered on the network, whether this instance offers it, its markup, and how many runners are ready. Needs the console unlocked on this phone. */
+    suspend fun operatorListCapabilities(): List<OfferedCapability> =
+        transport.send(ListSerializer(OfferedCapability.serializer()), "GET", "/operator/capabilities", query = emptyMap(), body = null, proof = null)
 
     companion object {
         /** The input of operatorSetUserStatus as the instance hashes it, for createOperatorChallenge. */
