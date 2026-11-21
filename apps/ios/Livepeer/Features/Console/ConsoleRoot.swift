@@ -209,6 +209,10 @@ struct ConsoleTabs: View {
             async let users: Void = models.users.load()
             _ = await (status, jobs, reports, users)
         }
+        // A decision changes what Status says is waiting, so it is read again once the instance has made one.
+        .onChange(of: models?.reports.changes) {
+            Task { await models?.status.load() }
+        }
     }
 
     /// Goes to where something that needs attention is dealt with.

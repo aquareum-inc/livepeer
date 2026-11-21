@@ -804,8 +804,8 @@ Not done, and why:
 
 ## 18. The operator console on phones (proposed 21 November 2026)
 
-Status: **accepted; the server and the iOS design sample are built (18.8). Review point B is next: nothing
-else is built until the owner approves the sample.** The owner accepted every recommendation in
+Status: **accepted; the server and iOS stage 1 are built (18.8). The owner approved the design sample on
+21 November 2026. Android stage 1 is next.** The owner accepted every recommendation in
 18.7. This section reverses two earlier lines: the console "stays on the
 web" (section 1) and device sessions "always have the `user` role" (section 5). Decisions the owner still
 has to make are in 18.7. A builder can start from this section alone, after reading sections 4, 5 and 7.
@@ -1240,3 +1240,34 @@ Found while building, for the server or later steps:
 - `operator_list_jobs` names what ran by `app` (`text-to-video`); the readable capability labels are a user
   operation an `aqo_` token can't call. The app turns the slug into words itself.
 
+**21 November 2026: step 3, the rest of iOS stage 1.** The owner approved the sample (review point B) and
+PR 25 was merged. Built on it: console sign-in with the instance's own methods, signing out, Reports, Users,
+the two kinds of change with their confirm proofs, and the console-only launch. Design decisions 77 to 81.
+
+- **Sign-in.** The cover's Sign in opens a tray with the instance's methods (`SignInOptions`, now shared with
+  the user app's sign-in). The hard-coded `operator` method is gone. With the mock provider, the email method
+  and `sam@example.test` is the operator; any other method is the ordinary user, who is sent back with
+  `not_operator` and told "This account doesn't run Livepeer."
+- **Changes.** `ConsoleSession.confirm` asks for a nonce for the operation and the hash of its input, has the
+  key sign it after a new match, and sends the change with the proof. Screens change only from the instance's
+  answer. `proof_required` leaves the session in place; closing the prompt changes nothing. Run for real
+  against the mock instance: take down, keep up, suspend, resume.
+- **Reports and Users** read `operator_list_reports` and `operator_list_users` (with `query`). No new operation
+  was needed: each detail page shows what its list answer already carries.
+- **Console-only.** `surfaces.mobileConsole` on with `surfaces.mobile` off makes the build the console and
+  nothing else. `InstanceStore.availability` now counts either switch as a reason for the build to be usable.
+- **Signing out** of the console ends the session on the instance and deletes the key.
+- **The mock user list now reflects suspend and resume.** `setActorStatus` returned ok but `listActors` kept
+  answering "active", which the live engine doesn't do; the mock holds the suspended set in memory.
+- **A row that changes state gets a new identity** in the lazy lists. A decided report kept drawing as
+  waiting until its row id included its state.
+
+Still open after step 3:
+
+- **The device key has still not run on a real phone**, only in the simulator's stand-in (above).
+- **No UI test drives the console.** It needs a way to answer the system sign-in alert and Face ID from a
+  test; the flows above were run by hand. The unit tests cover the models, proofs, transport and the entry rule.
+- **A user's page has no email, balance or plan**: `operator_list_users` doesn't carry them. The web console
+  gets them from other reads that aren't marked for phones.
+- **A decided report can't be reopened from a phone**, and a taken-down character can't be restored there.
+- Android stage 1 (step 4).
