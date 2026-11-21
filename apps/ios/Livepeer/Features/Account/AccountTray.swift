@@ -9,7 +9,6 @@ struct AccountTray: View {
     /// Closes this tray and opens the operator console over the app.
     let openConsole: () -> Void
     @Environment(Account.self) private var account
-    @Environment(ConsoleSession.self) private var console
     @Environment(InstanceStore.self) private var instance
     @Environment(\.palette) private var palette
     @AppStorage("theme") private var theme = "system"
@@ -91,17 +90,8 @@ struct AccountTray: View {
         .task { await account.refresh() }
     }
 
-    /// The console is offered when the instance serves it to phones and the person runs the instance, or this
-    /// phone is already enrolled. Offering is not access: the instance decides that at sign-in and on every request.
     private var offersConsole: Bool {
-        guard instance.description?.surfaces.mobileConsole == true else { return false }
-        #if DEBUG
-        // The development provider signs every user-app sign-in in as a user, so a development build offers the
-        // console to anyone; its own sign-in still refuses a person who doesn't run the instance.
-        return true
-        #else
-        return account.me?.role == .operator || console.enrolled
-        #endif
+        account.signedIn && ConsoleSession.offered(to: account.me, by: instance.description)
     }
 
     private var identity: some View {

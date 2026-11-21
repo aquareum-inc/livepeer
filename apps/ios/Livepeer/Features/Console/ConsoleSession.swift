@@ -46,6 +46,13 @@ final class ConsoleSession {
         watchForLeaving()
     }
 
+    /// Whether to show someone the way in: they are signed in as a person who runs the instance, and the instance
+    /// serves its console to phones. Offering is not access: the instance decides that at the console's own
+    /// sign-in and on every request.
+    nonisolated static func offered(to me: Me?, by instance: InstanceDescription?) -> Bool {
+        me?.role == .operator && instance?.surfaces.mobileConsole == true
+    }
+
     /// This phone has a console session, locked or open.
     var enrolled: Bool { stage != .signedOut }
 

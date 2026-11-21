@@ -11,6 +11,23 @@ struct ConsoleTests {
         try JSONDecoder().decode(type, from: Data(contentsOf: Self.fixtures.appending(path: "\(name).json")))
     }
 
+    // MARK: Entry
+
+    @Test func theConsoleIsOfferedOnlyToASignedInOperatorWhereTheInstanceServesIt() throws {
+        var instance = try fixture("get_instance", as: InstanceDescription.self)
+        var me = try fixture("get_me", as: Me.self)
+        instance.surfaces.mobileConsole = true
+        #expect(me.role == .user)
+        #expect(!ConsoleSession.offered(to: me, by: instance))
+        #expect(!ConsoleSession.offered(to: nil, by: instance))
+
+        me.role = .operator
+        #expect(ConsoleSession.offered(to: me, by: instance))
+        #expect(!ConsoleSession.offered(to: me, by: nil))
+        instance.surfaces.mobileConsole = false
+        #expect(!ConsoleSession.offered(to: me, by: instance))
+    }
+
     // MARK: Proofs
 
     private struct Vectors: Decodable {

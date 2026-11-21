@@ -9,13 +9,16 @@ const PEOPLE: Record<Role, Identity> = {
 
 /**
  * Development and mock-only sign-in. There is no outside provider to visit: whichever method is
- * picked, the flow comes straight back signed in as a test user (or the test operator).
+ * picked, the flow comes straight back signed in as a test user. The test operator signs in with the
+ * operator method, or by giving the operator's own address to the email method, which is how the apps'
+ * ordinary sign-in reaches an account that runs the instance.
  */
 export const mockProvider: AuthProvider = {
   id: "mock",
-  async authorizationUrl({ redirectUri, state, method }) {
+  async authorizationUrl({ redirectUri, state, method, email }) {
     const url = new URL(redirectUri);
-    url.searchParams.set("code", method === "operator" ? "operator" : "user");
+    const asOperator = method === "operator" || email?.trim().toLowerCase() === PEOPLE.operator.email;
+    url.searchParams.set("code", asOperator ? "operator" : "user");
     url.searchParams.set("state", state);
     return url.toString();
   },

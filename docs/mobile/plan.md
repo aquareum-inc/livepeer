@@ -1220,10 +1220,12 @@ Provisional in the sample, for step 3:
   run on a phone yet**: test enrolment, unlock, and that adding a face destroys the key, on real hardware.
 - **Sign-in method.** The sample always asks for the development provider's `operator` method. A real
   instance answers `method`; step 3 offers the instance's own methods.
-- **Entry.** Every development build shows the Operator console row in the account tray when the instance
-  offers the console, because the mock provider signs every user-app sign-in in as a user, so `get_me` never
-  says `operator` there. A release build shows it for `role == operator` or an enrolled phone. Step 3 needs
-  a way for the mock provider to sign a user in as an operator, or the row can't be tested as it ships.
+- **Entry (settled after the owner's review of the sample).** The Operator console row shows only to a
+  signed-in person whose `get_me` says `operator`, on an instance that offers the console to phones: not to
+  guests, not to other users, and not merely because the phone was once enrolled. The first version showed
+  it in every development build, because the mock provider signed every user-app sign-in in as a user. The
+  mock provider now signs the test operator in when the email method is given the operator's own address
+  (`sam@example.test`), so the row is reached in development the way it is in production.
 - **Not built:** the console-only launch, signing out of the console on this phone, the message for a phone
   with no biometrics before sign-in starts (today it appears after pressing Sign in), Reports and Users (a
   "report is waiting" line on Status opens nothing yet), changes and their confirm proofs (the message and
