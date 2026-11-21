@@ -92,6 +92,49 @@ final class ConsoleSession {
         leftAt = nil
     }
 
+    /// One change, confirmed: the instance gives a nonce for exactly this operation and input, the phone's key
+    /// signs it after a new face or fingerprint match, and the change is sent with that proof. Nothing here
+    /// assumes the change happened: the caller updates the screen from the instance's answer. Throws
+    /// `CancellationError` when the person closes the prompt.
+    func confirm<Output: Sendable>(_ operation: String, input: [String: JSONValue], reason: String, _ change: (OperatorAPI<ConsoleTransport>, OperatorProof) async throws -> Output) async throws -> Output {
+        do {
+            let challenge = try await api.createOperatorChallenge(purpose: operation, inputHash: try OperatorProofs.inputHash(input))
+            let message = OperatorProofs.confirmMessage(nonce: challenge.nonce, operation: operation, inputHash: try OperatorProofs.inputHash(input))
+            let signature: String
+            do {
+                signature = try await key.sign(message, reason: reason)
+            } catch DeviceKey.Failure.cancelled {
+                throw CancellationError()
+            } catch DeviceKey.Failure.gone {
+                forget()
+                failure = "This phone's console key is gone. Sign in again."
+                throw DeviceKey.Failure.gone
+            }
+            return try await change(api, OperatorProof(nonce: challenge.nonce, signature: signature))
+        } catch let error as APIError {
+            refused(error)
+            throw error
+        }
+    }
+
+    /// Why a change didn't happen, in words to show under it.
+    static func changeMessage(for error: Error, instance: String) -> String {
+        switch error {
+        case let error as APIError: error.message
+        case is URLError: "Can't reach \(instance). Nothing was changed."
+        case DeviceKey.Failure.unavailable: needsBiometrics
+        default: "That wasn't confirmed, so nothing was changed. Try again."
+        }
+    }
+
+    /// Signs this phone out of the console: ends the session on the instance, then drops the token and the key.
+    /// Signed out here even when the instance can't be reached.
+    func signOut() async {
+        _ = try? await api.deleteOperatorDeviceSession()
+        forget()
+        failure = nil
+    }
+
     /// One of the console's reads. A refusal that locks or ends the session changes the console at once.
     func read<Output: Sendable>(_ request: (OperatorAPI<ConsoleTransport>) async throws -> Output) async throws -> Output {
         do {
@@ -102,13 +145,15 @@ final class ConsoleSession {
         }
     }
 
-    /// Signs in as an operator in the system's auth session, enrols this phone's key, then opens the console.
-    func signIn(using web: WebAuthenticationSession) async {
+    /// Signs in with one of the instance's own methods in the system's auth session, enrols this phone's key,
+    /// then opens the console. The instance asks the provider for a new sign-in and refuses anyone it doesn't
+    /// mark as an operator.
+    func signIn(with method: SignInMethodName, email: String? = nil, using web: WebAuthenticationSession) async {
         guard !working else { return }
         working = true
         failure = nil
         do {
-            try await enrol(using: web)
+            try await enrol(with: method, email: email, using: web)
         } catch is CancellationError {
             working = false
             return
@@ -150,7 +195,7 @@ final class ConsoleSession {
         }
     }
 
-    private func enrol(using web: WebAuthenticationSession) async throws {
+    private func enrol(with method: SignInMethodName, email: String?, using web: WebAuthenticationSession) async throws {
         guard DeviceKey.biometry != nil else { throw DeviceKey.Failure.unavailable }
         let publicKey = try key.create()
         let verifier = Account.randomText(bytes: 32)
@@ -159,12 +204,12 @@ final class ConsoleSession {
 
         var start = URLComponents(url: BuildConfig.instanceURL.appending(path: "auth/start"), resolvingAgainstBaseURL: false)!
         start.queryItems = [
-            URLQueryItem(name: "method", value: Self.signInMethod),
+            URLQueryItem(name: "method", value: method.rawValue),
             URLQueryItem(name: "purpose", value: "operator"),
             URLQueryItem(name: "client", value: "ios"),
             URLQueryItem(name: "challenge", value: Data(SHA256.hash(data: Data(verifier.utf8))).base64URL),
             URLQueryItem(name: "state", value: state),
-        ]
+        ] + (email.map { [URLQueryItem(name: "email", value: $0)] } ?? [])
         let callback: URL
         do {
             callback = try await web.authenticate(using: start.url!, callback: .customScheme(scheme), additionalHeaderFields: [:])
@@ -180,10 +225,6 @@ final class ConsoleSession {
         vault.set(issued.token)
         stage = .locked
     }
-
-    /// The design sample signs in with the development provider's operator identity. Choosing among the
-    /// instance's own methods comes with the rest of console sign-in.
-    private static let signInMethod = "operator"
 
     /// The instance sent the person back without a code, and said why.
     struct SignInRefusal: Error { let reason: String }
@@ -220,6 +261,9 @@ final class ConsoleSession {
     private func refused(_ error: APIError) {
         if error.code == "locked" {
             lock()
+        } else if error.code == "proof_required" {
+            // The change was refused and the session stands; the caller says so.
+            return
         } else if error.status == 401 || error.code == "mobile_console_off" || error.code == "operator_session" {
             forget()
             if error.code == "mobile_console_off" {

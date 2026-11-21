@@ -81,7 +81,7 @@ struct JobsView: View {
 }
 
 /// A row darkens under the finger; it doesn't shrink, as a list row is part of the page.
-private struct RowPressStyle: ButtonStyle {
+struct RowPressStyle: ButtonStyle {
     @Environment(\.palette) private var palette
 
     func makeBody(configuration: Configuration) -> some View {

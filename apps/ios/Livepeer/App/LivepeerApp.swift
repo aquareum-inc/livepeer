@@ -49,6 +49,12 @@ struct RootView: View {
         let palette = instance.palette(for: scheme)
         Group {
             switch instance.availability {
+            case .available where !instance.settled:
+                // A first launch that hasn't heard from the instance: it may serve the app, the console or both.
+                palette.background.ignoresSafeArea()
+            case .available where instance.consoleOnly:
+                // No user app here: the console is the whole app, with no tabs, tray or guest state behind it.
+                ConsoleRoot().task { console.present() }
             case .available:
                 // The console is its own place: it covers the app, tab bar and all, and the app waits under it.
                 ZStack {
