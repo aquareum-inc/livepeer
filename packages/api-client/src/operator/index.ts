@@ -8,6 +8,7 @@ import type { Offering } from "../types";
 import { read, write, type OperatorEngine } from "./live";
 import {
   mockActors,
+  setMockActorStatus,
   mockBilling,
   mockCostSummary,
   mockHealth,
@@ -165,6 +166,7 @@ export function createOperatorClient(options: OperatorClientOptions): OperatorCl
       }
       await latency(200, 400);
       if (provider.features.users) await provider.identity.setUserStatus(actorId, status);
+      setMockActorStatus(actorId, status);
       return mock(true);
     },
     listAccessKeys: () => fromEngine(read.keys, mockKeys),

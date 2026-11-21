@@ -57,7 +57,9 @@ struct ReportsView: View {
     }
 
     private func rows(_ reports: [CharacterReport], now: Date) -> some View {
-        ForEach(reports, id: \.id) { report in
+        // A decided report is a different row from the waiting one it was, not the same row moved: the lazy
+        // stack otherwise keeps drawing what it drew before.
+        ForEach(reports, id: \.rowIdentity) { report in
             NavigationLink(value: ReportRoute(id: report.id)) { ReportRow(report: report, now: now) }
                 .buttonStyle(RowPressStyle())
             rule
@@ -124,6 +126,8 @@ struct ReportRow: View {
 }
 
 extension CharacterReport {
+    var rowIdentity: String { "\(id) \(state.rawValue)" }
+
     /// Stands in for a row while the queue is on its way.
     static let placeholder = CharacterReport(id: "", characterSlug: "", characterName: "A character", author: "its-author", reason: .other, note: "What the person who reported it wrote.", createdAt: "2026-01-01T12:00:00Z", state: .open)
 }

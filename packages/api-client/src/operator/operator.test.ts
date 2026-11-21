@@ -87,6 +87,11 @@ describe("operator client, mock data", () => {
     const client = mockClient();
     await client.setActorStatus("default", "usr_demo_adam", "paused");
     expect((await client.provider.budgets.getAllocation("usr_demo_adam"))?.status).toBe("paused");
+    // The list of accounts says so too, as the engine's does, and stops saying so once they are resumed.
+    const status = async () => (await client.listActors()).data.find((actor) => actor.actor_id === "usr_demo_adam")?.allocation?.status;
+    expect(await status()).toBe("paused");
+    await client.setActorStatus("default", "usr_demo_adam", "active");
+    expect(await status()).toBe("active");
   });
 
   it("stores a capability's enabled state, markup and surface override", async () => {

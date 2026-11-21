@@ -52,7 +52,8 @@ struct UsersView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 56)
         case .loaded:
-            ForEach(model.users, id: \.actorId) { user in
+            // A suspended account is a different row from the active one it was, so the list redraws it.
+            ForEach(model.users, id: \.rowIdentity) { user in
                 NavigationLink(value: UserRoute(id: user.actorId)) { UserRow(user: user, now: now) }
                     .buttonStyle(RowPressStyle())
                 rule
@@ -122,6 +123,8 @@ struct UserRow: View {
 }
 
 extension KnownActor {
+    var rowIdentity: String { "\(actorId) \(allocation?.status.rawValue ?? "")" }
+
     /// Stands in for a row while the list is on its way.
     static let placeholder = KnownActor(applicationId: "", actorId: "usr_0000000000", label: "A person's name", name: nil, allocation: nil, firstSeenAt: nil, lastSeenAt: "2026-01-01T12:00:00Z", provisioned: true)
 }

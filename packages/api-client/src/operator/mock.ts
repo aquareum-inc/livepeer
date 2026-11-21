@@ -61,6 +61,17 @@ export function mockJobs(limit = 60): EngineJob[] {
   });
 }
 
+/**
+ * Which mocked accounts are suspended. Held in memory, as the engine holds an allocation's status: suspending or
+ * resuming one is seen by the next read, as it is on the live engine.
+ */
+const suspended = new Set<string>(["usr_demo_tomas"]);
+
+export function setMockActorStatus(actorId: string, status: "active" | "paused"): void {
+  if (status === "paused") suspended.add(actorId);
+  else suspended.delete(actorId);
+}
+
 export function mockActors(): KnownActor[] {
   const now = anchor();
   return USERS.map((actor, index) => ({
@@ -72,7 +83,7 @@ export function mockActors(): KnownActor[] {
       grant_id: index % 2 === 0 ? "grt_launch" : "grt_studio_partners",
       allocation_id: `alc_${actor.slice(9)}`,
       currency: "USD",
-      status: actor === "usr_demo_tomas" ? "paused" : "active",
+      status: suspended.has(actor) ? "paused" : "active",
       created_at: new Date(now - (60 - index * 9) * 24 * HOUR).toISOString(),
       updated_at: new Date(now - index * 5 * HOUR).toISOString(),
       label: NAMES[actor] ?? actor,
