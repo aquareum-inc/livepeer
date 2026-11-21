@@ -3,7 +3,9 @@ package org.livepeer.app
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -13,6 +15,7 @@ import androidx.browser.auth.AuthTabIntent
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -33,7 +36,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         signIn = AuthTabIntent.registerActivityResultLauncher(this) { result ->
-            lifecycleScope.launch { container.account.finish(if (result.resultCode == AuthTabIntent.RESULT_OK) result.resultUri else null) }
+            lifecycleScope.launch { finishSignIn(if (result.resultCode == AuthTabIntent.RESULT_OK) result.resultUri else null) }
         }
         intent?.let(::returnFromBrowser)
 
@@ -52,6 +55,8 @@ class MainActivity : ComponentActivity() {
                 enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
                 onDispose {}
             }
+            val consoleUp by container.console.session.presented.collectAsStateWithLifecycle()
+            LaunchedEffect(consoleUp) { hideFromRecents(consoleUp) }
             // The description and the account are read again each time the app comes to the front.
             LifecycleResumeEffect(Unit) {
                 lifecycleScope.launch {
@@ -77,6 +82,40 @@ class MainActivity : ComponentActivity() {
         val uri: Uri = intent.data ?: return
         if (uri.scheme != BuildConfig.APPLICATION_ID || uri.host != "auth") return
         setIntent(Intent(this, MainActivity::class.java))
-        lifecycleScope.launch { container.account.finish(uri) }
+        lifecycleScope.launch { finishSignIn(uri) }
+    }
+
+    /** The browser came back from a sign-in: the console's when it started one, the user's otherwise. */
+    private suspend fun finishSignIn(callback: Uri?) {
+        val console = container.console.session
+        if (console.awaitingBrowser) {
+            console.finish(callback?.let { uri -> uri.queryParameterNames.associateWith { uri.getQueryParameter(it).orEmpty() } })
+        } else {
+            container.account.finish(callback)
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        container.console.session.left()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        container.console.session.returned()
+    }
+
+    /**
+     * Keeps the console out of the app switcher's picture of the app. From Android 13 the system can be told
+     * to leave that picture blank; before it, the only way is a window that can't be captured at all.
+     */
+    private fun hideFromRecents(hidden: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            setRecentsScreenshotEnabled(!hidden)
+        } else if (hidden) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
     }
 }

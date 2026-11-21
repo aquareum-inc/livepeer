@@ -4,6 +4,11 @@ import android.app.Application
 import android.content.Context
 import org.livepeer.app.account.Account
 import org.livepeer.app.api.ApiTransport
+import org.livepeer.app.api.ConsoleTransport
+import org.livepeer.app.api.DeviceKey
+import org.livepeer.app.console.Console
+import org.livepeer.app.console.ConsoleSession
+import org.livepeer.app.generated.OperatorApi
 import org.livepeer.app.api.Refusal
 import org.livepeer.app.api.TokenVault
 import org.livepeer.app.design.VectorMark
@@ -41,13 +46,33 @@ class AppContainer(context: Context) {
     private lateinit var refusals: (Refusal) -> Unit
 
     val api = Api(ApiTransport(BuildConfig.INSTANCE_URL, token = { vault.token }, client = http, refused = { refusals(it) }))
-    val instance = InstanceStore(api, http, context)
+
+    // The instance's description is read without a session: a session that has ended must not keep the app from
+    // learning what the instance now serves.
+    val instance = InstanceStore(Api(ApiTransport(BuildConfig.INSTANCE_URL, token = { null }, client = http)), http, context)
     val account = Account(api, vault, instance, MainScope(), deviceName(context)).also { account -> refusals = account::refused }
     val theme = ThemePreference(context)
     val composer = org.livepeer.app.composer.ComposerSupport(api)
     val studio = org.livepeer.app.studio.StudioModel(api)
     val characters = org.livepeer.app.characters.CharactersModel(api)
     val settings = org.livepeer.app.settings.SettingsModel(api)
+
+    /** The operator's console: a session, a token entry and a key of its own, apart from everything above. */
+    val console = TokenVault.operator(context).let { operatorVault ->
+        Console(
+            ConsoleSession(
+                api = OperatorApi(ConsoleTransport(BuildConfig.INSTANCE_URL, token = { operatorVault.token }, client = http)),
+                vault = operatorVault,
+                key = DeviceKey(context),
+                scope = MainScope(),
+                baseUrl = BuildConfig.INSTANCE_URL,
+                deviceName = deviceName(context),
+                instanceName = { instance.description.value?.name ?: context.getString(R.string.app_name) },
+                refreshInstance = instance::refresh,
+                elapsed = android.os.SystemClock::elapsedRealtime,
+            ),
+        )
+    }
 
     /** Conversations as last seen, so opening one shows it at once and then refreshes. */
     val conversations = mutableMapOf<String, Conversation>()
@@ -61,9 +86,16 @@ class InstanceStore(private val api: Api, private val http: OkHttpClient, contex
     private val cache = context.getSharedPreferences("instance", Context.MODE_PRIVATE)
     private val _description = MutableStateFlow(cache.getString(DESCRIPTION, null)?.let { runCatching { ApiTransport.json.decodeFromString(InstanceDescription.serializer(), it) }.getOrNull() })
     private val _symbol = MutableStateFlow(cache.getString(SYMBOL, null)?.let(VectorMark::parse))
+    private val _settled = MutableStateFlow(_description.value != null)
 
     val description: StateFlow<InstanceDescription?> = _description
     val symbol: StateFlow<VectorMark?> = _symbol
+
+    /**
+     * Whether the instance has said what it serves, now or on an earlier launch, or couldn't be asked. Until
+     * then a first launch draws nothing: the build may be the app, the console, or both.
+     */
+    val settled: StateFlow<Boolean> = _settled
 
     /** Whether this build can be used with the instance right now. */
     enum class Availability {
@@ -76,8 +108,13 @@ class InstanceStore(private val api: Api, private val http: OkHttpClient, contex
 
     /** Reads the description again. A failure keeps the last copy: the app stays usable offline. */
     suspend fun refresh() {
-        val fresh = runCatching { api.getInstance() }.getOrNull() ?: return
+        val fresh = runCatching { api.getInstance() }.getOrNull()
+        if (fresh == null) {
+            _settled.value = true
+            return
+        }
         _description.value = fresh
+        _settled.value = true
         cache.edit().putString(DESCRIPTION, ApiTransport.json.encodeToString(InstanceDescription.serializer(), fresh)).apply()
 
         val svg = fresh.logo.symbol?.takeIf { it.substringBefore('?').endsWith(".svg", ignoreCase = true) }?.let { address ->
@@ -96,10 +133,15 @@ class InstanceStore(private val api: Api, private val http: OkHttpClient, contex
         fun availability(description: InstanceDescription?, applicationId: String = BuildConfig.APPLICATION_ID, version: String = BuildConfig.VERSION_NAME): Availability {
             if (description == null) return Availability.Available
             val app = description.mobile.android
-            if (!description.surfaces.mobile || app == null || !app.applicationId.equals(applicationId, ignoreCase = true)) return Availability.NotOffered
+            // The app and the console each have their own switch; either one is a reason for this build to exist.
+            val served = description.surfaces.mobile || description.surfaces.mobileConsole
+            if (!served || app == null || !app.applicationId.equals(applicationId, ignoreCase = true)) return Availability.NotOffered
             val minimum = app.minimumVersion ?: return Availability.Available
             return if (compareVersions(version, minimum) < 0) Availability.UpdateRequired else Availability.Available
         }
+
+        /** The instance serves its console to phones and not its app: this build is the console and nothing else. */
+        fun consoleOnly(description: InstanceDescription?): Boolean = description != null && description.surfaces.mobileConsole && !description.surfaces.mobile
 
         /** "0.9.3" < "0.10.0": compared number by number. */
         fun compareVersions(a: String, b: String): Int {

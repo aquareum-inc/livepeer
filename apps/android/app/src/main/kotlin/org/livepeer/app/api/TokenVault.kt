@@ -10,20 +10,28 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/**
- * Holds the device session token, encrypted with a key that never leaves the Android Keystore, so the
- * stored copy is useless off this device. The app is excluded from backups, and a copy is kept in memory for
- * the transport to read.
- */
-class TokenVault(context: Context) {
-    private val store = context.getSharedPreferences("session", Context.MODE_PRIVATE)
-
-    @Volatile
-    var token: String? = read()
-        private set
+/** Where a session's token is kept on this device. */
+interface TokenStore {
+    val token: String?
 
     /** Stores a new token, or removes it with null. */
-    fun set(value: String?) {
+    fun set(value: String?)
+}
+
+/**
+ * Holds a session token, encrypted with a key that never leaves the Android Keystore, so the stored copy is
+ * useless off this device. The app is excluded from backups, and a copy is kept in memory for the transport to
+ * read. The user's device session and the operator's console session each have a vault of their own: a
+ * separate file and a separate key.
+ */
+class TokenVault(context: Context, name: String = USER, private val alias: String = "device-session") : TokenStore {
+    private val store = context.getSharedPreferences(name, Context.MODE_PRIVATE)
+
+    @Volatile
+    override var token: String? = read()
+        private set
+
+    override fun set(value: String?) {
         token = value
         if (value == null) {
             store.edit().remove(KEY).apply()
@@ -42,8 +50,8 @@ class TokenVault(context: Context) {
 
     private fun key(): SecretKey {
         val keystore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
-        (keystore.getEntry(ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
-        val spec = KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+        (keystore.getEntry(alias, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
+        val spec = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
@@ -51,11 +59,16 @@ class TokenVault(context: Context) {
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE).apply { init(spec) }.generateKey()
     }
 
-    private companion object {
-        const val KEYSTORE = "AndroidKeyStore"
-        const val ALIAS = "device-session"
-        const val KEY = "token"
-        const val TRANSFORMATION = "AES/GCM/NoPadding"
-        const val IV_BYTES = 12
+    companion object {
+        /** The user's device session. */
+        const val USER = "session"
+
+        /** The operator's console session on this phone: its own entry, apart from the user's. */
+        fun operator(context: Context) = TokenVault(context, name = "operator-session", alias = "operator-device-session")
+
+        private const val KEYSTORE = "AndroidKeyStore"
+        private const val KEY = "token"
+        private const val TRANSFORMATION = "AES/GCM/NoPadding"
+        private const val IV_BYTES = 12
     }
 }
