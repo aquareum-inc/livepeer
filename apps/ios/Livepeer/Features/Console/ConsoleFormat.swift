@@ -60,7 +60,7 @@ nonisolated enum ConsoleFormat {
     }
 
     /// The end of an id, enough to tell two apart in a list.
-    static func tail(_ id: String) -> String { "…" + id.suffix(4) }
+    static func tail(_ id: String) -> String { "…\u{2060}" + id.suffix(4) }
 
     /// A compute operator by its host, without the scheme, port and path.
     static func host(_ address: String?) -> String? {

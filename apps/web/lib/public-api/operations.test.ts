@@ -103,7 +103,7 @@ describe("public API operations", () => {
       expect(operation.method === "GET", operation.name).toBe(operation.mobile === "read");
     }
     const marked = (mark: "read" | "confirm") => OPERATIONS.filter((operation) => operation.mobile === mark).map((operation) => operation.name).sort();
-    expect(marked("read")).toEqual(["operator_health", "operator_list_jobs", "operator_list_reports", "operator_list_users", "operator_overview", "operator_status"]);
+    expect(marked("read")).toEqual(["operator_costs", "operator_health", "operator_list_capabilities", "operator_list_compute", "operator_list_grants", "operator_list_jobs", "operator_list_plans", "operator_list_reports", "operator_list_users", "operator_overview", "operator_status"]);
     expect(marked("confirm")).toEqual(["operator_resolve_report", "operator_set_user_status"]);
   });
 

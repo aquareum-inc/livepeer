@@ -1,4 +1,4 @@
-import type { AgentModelEntry, ApiClient, CapabilityLabel, Character, Preferences, PrivacyDescription, ReportReason, DeviceSession, GenerationRequest, StudioMedium, DeviceToken, InstanceDescription, OperatorAttention, OperatorClient, OperatorStatus } from "@livepeer/api-client";
+import type { AgentModelEntry, ApiClient, CapabilityLabel, Character, Preferences, PrivacyDescription, ReportReason, DeviceSession, GenerationRequest, StudioMedium, DeviceToken, InstanceDescription, OfferedCapability, OperatorAttention, OperatorClient, OperatorStatus } from "@livepeer/api-client";
 
 import type { Moderation } from "../moderation/moderation";
 import type { AuditLog } from "../operator-devices/audit";
@@ -544,7 +544,7 @@ export const OPERATIONS: Operation[] = [
       return (await operator(context).listJobs(JOBS_WINDOW)).data.filter((job) => (!state || job.state === state) && (before === null || Date.parse(job.created_at) < before)).slice(0, limit);
     },
   },
-  { name: "operator_costs", description: "Operator: wholesale network cost by class and capability over a number of days.", method: "GET", path: "/operator/costs", input: object({ days: { type: "number", default: 30 } }), operator: true, run: async (context, input) => (await operator(context).getCostSummary(Number(input.days) || 30)).data },
+  { name: "operator_costs", description: "Operator: wholesale network cost by class and capability over a number of days.", method: "GET", path: "/operator/costs", output: "CostSummary", input: object({ days: { type: "number", default: 30 } }), operator: true, mobile: "read", run: async (context, input) => (await operator(context).getCostSummary(Number(input.days) || 30)).data },
   { name: "operator_list_reports", description: "Operator: reports of shared characters, open ones first.", method: "GET", path: "/operator/reports", input: object({}), output: ["CharacterReport"], operator: true, mobile: "read", run: async (context) => { operator(context); return context.moderation.reports(); } },
   {
     name: "operator_resolve_report",
@@ -561,11 +561,33 @@ export const OPERATIONS: Operation[] = [
       return found(context.moderation.resolve(str(input, "id"), input.outcome === "hidden" ? "hidden" : "dismissed"), "Report");
     },
   },
-  { name: "operator_list_grants", description: "Operator: grants and their funding.", method: "GET", path: "/operator/grants", input: object({}), operator: true, run: async (context) => operator(context).provider.budgets.listGrants() },
+  { name: "operator_list_grants", description: "Operator: grants and their funding.", method: "GET", path: "/operator/grants", output: ["Grant"], input: object({}), operator: true, mobile: "read", run: async (context) => operator(context).provider.budgets.listGrants() },
   { name: "operator_create_grant", description: "Operator: create a grant with initial funding.", method: "POST", path: "/operator/grants", input: object({ label: text("Grant name"), amount_usd: { type: "number", exclusiveMinimum: 0 } }, ["label", "amount_usd"]), operator: true, run: async (context, input) => operator(context).provider.budgets.createGrant({ label: str(input, "label"), amount: { amount: Number(input.amount_usd).toFixed(2), currency: "USD" } }) },
-  { name: "operator_list_plans", description: "Operator: the provider's plans and allowances.", method: "GET", path: "/operator/plans", input: object({}), operator: true, run: async (context) => operator(context).provider.plans.listPlans() },
+  { name: "operator_list_plans", description: "Operator: the provider's plans and allowances.", method: "GET", path: "/operator/plans", output: ["Plan"], input: object({}), operator: true, mobile: "read", run: async (context) => operator(context).provider.plans.listPlans() },
   { name: "operator_list_keys", description: "Operator: engine access keys.", method: "GET", path: "/operator/keys", input: object({}), operator: true, run: async (context) => (await operator(context).listAccessKeys()).data },
   { name: "operator_set_capability", description: "Operator: enable or disable a capability, set its markup or the surfaces it appears in.", method: "PATCH", path: "/operator/capabilities", input: object({ app: text("Capability name"), enabled: { type: "boolean" }, markup: { type: ["number", "null"] }, surfaces: { type: ["array", "null"], items: { type: "string" } } }, ["app"]), operator: true, run: async (context, input) => (await operator(context).updateCapabilitySetting(str(input, "app"), { ...(typeof input.enabled === "boolean" ? { enabled: input.enabled } : {}), ...(input.markup === null || typeof input.markup === "number" ? { markup: input.markup } : {}), ...(input.surfaces === null || Array.isArray(input.surfaces) ? { surfaces: input.surfaces === null ? null : input.surfaces.map(String) } : {}) })).data },
+  { name: "operator_list_compute", description: "Operator: the compute operators that ran this instance's recent jobs, with their runners, failures and median response time.", method: "GET", path: "/operator/compute", output: ["ComputeOperator"], input: object({}), operator: true, mobile: "read", run: async (context) => (await operator(context).listComputeOperators()).data },
+  {
+    name: "operator_list_capabilities",
+    description: "Operator: every capability discovered on the network, whether this instance offers it, its markup, and how many runners are ready.",
+    method: "GET",
+    path: "/operator/capabilities",
+    output: ["OfferedCapability"],
+    input: object({}),
+    operator: true,
+    mobile: "read",
+    run: async (context): Promise<OfferedCapability[]> => {
+      const client = operator(context);
+      const [offerings, labels] = await Promise.all([client.listOfferings(), context.labels()]);
+      const names = new Map(labels.map((label) => [label.app, label.name]));
+      return Promise.all(
+        offerings.data.map(async (offering) => {
+          const setting = (await client.getCapabilitySetting(offering.app)).data;
+          return { app: offering.app, name: names.get(offering.app) ?? offering.app, enabled: setting.enabled, markup: setting.markup, runner_count: offering.runner_count, ready_count: offering.ready_count, stale: offering.stale };
+        }),
+      );
+    },
+  },
   { name: "operator_list_devices", description: "Operator: the phones enrolled for the console, with who enrolled each and when it was last used and unlocked.", method: "GET", path: "/operator/devices", output: ["OperatorDeviceSession"], input: object({}), operator: true, run: async (context) => { operator(context); return context.operatorDevices.list(); } },
   {
     name: "operator_revoke_device",

@@ -804,8 +804,8 @@ Not done, and why:
 
 ## 18. The operator console on phones (proposed 21 November 2026)
 
-Status: **accepted; the server and stage 1 on iOS and Android are built (18.8). The owner approved the design
-sample on 21 November 2026. Stage 2 is next.** The owner accepted every recommendation in
+Status: **accepted; the server and stage 1 on iOS and Android are built, and stage 2 on the server and iOS
+(18.8). The owner approved the design sample on 21 November 2026. Stage 2 on Android is next.** The owner accepted every recommendation in
 18.7. This section reverses two earlier lines: the console "stays on the
 web" (section 1) and device sessions "always have the `user` role" (section 5). Decisions the owner still
 has to make are in 18.7. A builder can start from this section alone, after reading sections 4, 5 and 7.
@@ -1319,8 +1319,9 @@ What an emulator could not prove:
   log line, since removed). StrongBox, the trusted execution environment, and the release build's refusal of a
   software key have **not run on a phone**.
 - **Invalidation on a new enrolment.** Adding a fingerprint should destroy the key
-  (`KeyPermanentlyInvalidatedException`, handled as "This phone's console key is gone. Sign in again."). That
-  path is covered by a unit test with a stand-in key, not by enrolling a second finger on real hardware.
+  (`KeyPermanentlyInvalidatedException`, handled as "This phone's console key is gone. Sign in again."). The
+  invalidation itself has not been exercised anywhere. The unit tests cover what the console does once a
+  stand-in key says it is gone; nothing enrolled a second finger, in the emulator or on real hardware.
 - **Class 3 only.** The emulator's fingerprint is class 3. A phone with only a weaker face unlock should be told
   the console needs a fingerprint or face; not seen.
 - **Android 10 to 12**: the per-use key parameters before Android 11 and the secure-window fallback for the
@@ -1329,3 +1330,36 @@ What an emulator could not prove:
   accessibility tree ("Livepeer", "Unlock the console", "Take Lumen down", "Touch the fingerprint sensor").
 - **No UI test drives the console**, as on iOS: a test can't touch the emulator's sensor from inside. The unit
   tests cover the proofs, the transport, the session, the models, the formats and the entry rule.
+
+**21 November 2026: step 5, stage 2 on the server and iOS.** The numbers, read only. Design decisions 90 to 94;
+screenshots are `docs/screenshots/mobile/ios-console-{more,revenue,costs,grants,plans,compute,offered,system}-*.jpg`.
+
+- **Marked for phones, as reads:** `operator_costs`, `operator_list_grants` and `operator_list_plans` (each now
+  says what it answers with), and two new operations, `operator_list_compute` (`GET /operator/compute`) and
+  `operator_list_capabilities` (`GET /operator/capabilities`: every discovered capability with its name,
+  whether the instance offers it, its markup and how many runners are ready). `operator_overview` and
+  `operator_health`, marked since step 1, are now used. The allow-list test names all twelve reads; the test
+  that nothing a phone is sent carries a token, key or secret covers the new ones.
+- **The setup checks stay on the web.** An `operator_checks` read was written and dropped: the doctor's checks
+  name settings such as the session secret, and the guard that no phone answer contains the word "secret" or
+  "token" refused it. The guard was kept as it is and the checks left where their fixes are made.
+- **iOS:** a fifth tab, More, with seven read-only pages over one small model (`ConsoleRead`): read on opening,
+  on each unlock and on pull to refresh, keeping what is shown when a later read fails. A lock or a sign-out
+  says nothing on the page; the console's cover replaces it.
+- **Two catch-ups from Android:** the Reports queue is read again when Status reports a different number
+  waiting (decision 83), and a separator holds to the fact before it, with an id's tail held to its ellipsis
+  (decision 87).
+- **Fixtures** for the five new reads were captured over HTTP from a mock-only instance by a script that
+  enrolled a key and unlocked as a phone would.
+
+Run for real in the simulator against a mock-only instance: every page in dark, the main ones in light and at
+the largest text size, and the line at the foot of More opening the web console in Safari.
+
+Still open after step 5:
+
+- **Android stage 2** (the same pages from this spec).
+- **Retail against wholesale per capability** is on the web's Costs page and not on the phone: the phone shows
+  what the network was paid. It needs the markup rules in the answer, or a new read.
+- **A compute operator's and a capability's own page.** The lists carry everything today; a page each would
+  want jobs by operator and by capability, which no marked read gives.
+- **The device key on real phones**, on both platforms, as above.

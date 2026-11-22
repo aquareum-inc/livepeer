@@ -85,6 +85,12 @@ struct OperatorAPI<Transport: OperatorTransport>: Sendable {
         try await transport.send("GET", "/operator/jobs", query: ["limit": limit.map { .number($0) }, "status": status.map { .string($0) }, "before": before.map { .string($0) }], body: nil, proof: nil)
     }
 
+    /// Operator: wholesale network cost by class and capability over a number of days.
+    /// Needs the console unlocked on this phone.
+    func operatorCosts(days: Double? = nil) async throws -> CostSummary {
+        try await transport.send("GET", "/operator/costs", query: ["days": days.map { .number($0) }], body: nil, proof: nil)
+    }
+
     /// Operator: reports of shared characters, open ones first.
     /// Needs the console unlocked on this phone.
     func operatorListReports() async throws -> [CharacterReport] {
@@ -95,6 +101,30 @@ struct OperatorAPI<Transport: OperatorTransport>: Sendable {
     /// Needs its own proof: a nonce for exactly this input, signed after a face or fingerprint.
     func operatorResolveReport(id: String, outcome: String, proof: OperatorProof) async throws -> CharacterReport {
         try await transport.send("POST", "/operator/reports/\(APITransport.escape(id))", query: [:], body: ["outcome": .string(outcome)], proof: proof)
+    }
+
+    /// Operator: grants and their funding.
+    /// Needs the console unlocked on this phone.
+    func operatorListGrants() async throws -> [Grant] {
+        try await transport.send("GET", "/operator/grants", query: [:], body: nil, proof: nil)
+    }
+
+    /// Operator: the provider's plans and allowances.
+    /// Needs the console unlocked on this phone.
+    func operatorListPlans() async throws -> [Plan] {
+        try await transport.send("GET", "/operator/plans", query: [:], body: nil, proof: nil)
+    }
+
+    /// Operator: the compute operators that ran this instance's recent jobs, with their runners, failures and median response time.
+    /// Needs the console unlocked on this phone.
+    func operatorListCompute() async throws -> [ComputeOperator] {
+        try await transport.send("GET", "/operator/compute", query: [:], body: nil, proof: nil)
+    }
+
+    /// Operator: every capability discovered on the network, whether this instance offers it, its markup, and how many runners are ready.
+    /// Needs the console unlocked on this phone.
+    func operatorListCapabilities() async throws -> [OfferedCapability] {
+        try await transport.send("GET", "/operator/capabilities", query: [:], body: nil, proof: nil)
     }
 
     /// The input of `operatorSetUserStatus` as the instance hashes it, for `createOperatorChallenge`.

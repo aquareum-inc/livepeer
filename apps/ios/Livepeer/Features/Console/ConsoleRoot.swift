@@ -148,19 +148,20 @@ private struct ConsoleSignIn: View {
     }
 }
 
-/// The console's own tab bar: is anything wrong, what ran, what was reported, who uses it.
+/// The console's own tab bar: is anything wrong, what ran, what was reported, who uses it, and the numbers.
 struct ConsoleTabs: View {
     @Environment(ConsoleSession.self) private var session
     @State private var tab = Destination.status
     @State private var models: Models?
 
-    enum Destination: Hashable { case status, jobs, reports, users }
+    enum Destination: Hashable { case status, jobs, reports, users, more }
 
     private struct Models {
         let status: StatusModel
         let jobs: JobsModel
         let reports: ReportsModel
         let users: UsersModel
+        let more: MoreModels
     }
 
     var body: some View {
@@ -184,6 +185,11 @@ struct ConsoleTabs: View {
             Tab("Users", systemImage: "person.2", value: Destination.users) {
                 NavigationStack {
                     if let models { UsersView(model: models.users) }
+                }
+            }
+            Tab("More", systemImage: "ellipsis", value: Destination.more) {
+                NavigationStack {
+                    if let models { MoreView(models: models.more) }
                 }
             }
         }
@@ -210,7 +216,8 @@ struct ConsoleTabs: View {
                             try await api.operatorSetUserStatus(id: user.actorId, status: status.rawValue, applicationId: user.applicationId, proof: proof).ok
                         }
                     }
-                )
+                ),
+                more: MoreModels(session: session)
             )
         }
         // Read again each time the console is unlocked: what was on screen may be minutes old.
@@ -221,6 +228,12 @@ struct ConsoleTabs: View {
             async let reports: Void = models.reports.load()
             async let users: Void = models.users.load()
             _ = await (status, jobs, reports, users)
+        }
+        // When Status hears of a different number of waiting reports than the queue holds, the queue is read
+        // again, so the count on the Reports tab never disagrees with the sentence on Status.
+        .onChange(of: models?.status.status.map(Self.waitingReports)) { _, reported in
+            guard let models, let reported, reported != models.reports.waiting.count else { return }
+            Task { await models.reports.load() }
         }
         // A decision changes what Status says is waiting, so it is read again once the instance has made one.
         .onChange(of: models?.reports.changes) {
@@ -239,6 +252,11 @@ struct ConsoleTabs: View {
         case .status, .unknown:
             break
         }
+    }
+
+    /// How many reports Status says are waiting.
+    nonisolated static func waitingReports(_ status: OperatorStatus) -> Int {
+        Int(status.attention.first { $0.kind == .reportsWaiting }?.count ?? 0)
     }
 
     /// Whether a "Needs you" row leads somewhere other than the screen it is on.

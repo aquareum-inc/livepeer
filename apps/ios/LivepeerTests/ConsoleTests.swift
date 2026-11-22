@@ -92,11 +92,11 @@ struct ConsoleTests {
         let all = try fixture("operator_list_jobs", as: [EngineJob].self)
         let running = try #require(all.first)
         #expect(running.state == .running && running.took == nil && running.stateWord == "Running")
-        #expect(running.facts == ["1\u{00A0}attempt", "…d4e5"])
+        #expect(running.facts == ["1\u{00A0}attempt", "…\u{2060}d4e5"])
 
         let failed = try #require(try fixture("operator_list_jobs_failed", as: [EngineJob].self).first)
         #expect(failed.state == .failed && failed.tone == .bad)
-        #expect(failed.facts == ["unreachable", "1\u{00A0}attempt", "…ebcb"])
+        #expect(failed.facts == ["unreachable", "1\u{00A0}attempt", "…\u{2060}ebcb"])
         #expect(JobDetailView.stateLine(for: failed) == "Failed after 900 ms")
         #expect(JobDetailView.outcome(of: try #require(failed.attempts.first)) == "unreachable · 502")
         #expect(failed.summary.contains("The runner closed the connection before answering."))
@@ -123,7 +123,7 @@ struct ConsoleTests {
         #expect(ConsoleFormat.money(1234.5) == "$1,234.50")
         #expect(ConsoleFormat.count(1204) == "1,204")
         #expect(ConsoleFormat.name(ofApp: "text-to-video") == "Text to video")
-        #expect(ConsoleFormat.tail("01931006-7c2e-7a10-9f3b-00a1b2c3ebcb") == "…ebcb")
+        #expect(ConsoleFormat.tail("01931006-7c2e-7a10-9f3b-00a1b2c3ebcb") == "…\u{2060}ebcb")
         #expect(ConsoleFormat.host("https://orch-ams-2.example.test:8935/apps/x") == "orch-ams-2.example.test")
         #expect(ConsoleFormat.host(nil) == nil)
         #expect(ConsoleFormat.date("2026-11-21T19:03:15.308Z") != nil && ConsoleFormat.date("2026-11-21T19:03:15Z") != nil && ConsoleFormat.date("soon") == nil)
@@ -351,6 +351,109 @@ struct ConsoleTests {
         await #expect(throws: APIError(status: 401, message: "Unlock the console to carry on.", code: "locked")) {
             _ = try await api.operatorStatus()
         }
+    }
+
+    // MARK: The numbers (stage 2)
+
+    @Test func theStageTwoReadsDecode() throws {
+        let costs = try fixture("operator_costs", as: CostSummary.self)
+        #expect(costs.byClass.delivered.usd > 0)
+        #expect(costs.byApp["text-to-video"]?.delivered != nil)
+        #expect(try fixture("operator_list_grants", as: [Grant].self).first?.id == "grt_launch")
+        #expect(try fixture("operator_list_plans", as: [Plan].self).allSatisfy { !$0.name.isEmpty })
+        #expect(try fixture("operator_list_compute", as: [ComputeOperator].self).allSatisfy { $0.status != .unknown })
+        #expect(try fixture("operator_list_capabilities", as: [OfferedCapability].self).first?.name == "Text to video")
+        #expect(try fixture("operator_overview", as: OverviewStats.self).series.count == 14)
+        #expect(try fixture("operator_health", as: EngineHealth.self).version.isEmpty == false)
+    }
+
+    @Test func networkCostIsListedByCapabilityDearestFirst() throws {
+        let costs = try fixture("operator_costs", as: CostSummary.self)
+        let lines = costs.lines
+        #expect(lines.first?.app == "text-to-video")
+        let totals: [Double] = lines.map { $0.delivered + $0.lost }
+        #expect(totals == totals.sorted(by: >))
+        #expect(lines.allSatisfy { $0.delivered + $0.lost > 0 })
+        // Failed after payment and unknown outcomes are both money that bought nothing.
+        #expect(abs((lines.first?.lost ?? 0) - 0.4) < 0.000001)
+        #expect(abs(costs.paid - (15.398559 + 0.922029)) < 0.000001)
+        #expect(ConsoleFormat.fee(0.000319) == "$0.0003")
+        #expect(ConsoleFormat.fee(7.2) == "$7.20")
+        #expect(ConsoleFormat.fee(0) == "$0.00")
+    }
+
+    @Test func revenueAddsUpOverTheDaysShown() throws {
+        let stats = try fixture("operator_overview", as: OverviewStats.self)
+        #expect(abs(stats.periodMargin - (stats.periodRevenue - stats.periodCost)) < 0.000001)
+        #expect(stats.peak >= stats.series.last!.revenueUsd)
+        #expect(RevenueView.margin(1.5, of: 6) == "$1.50\u{00A0}· 25%")
+        #expect(RevenueView.margin(0, of: 0) == "$0.00")
+        let day = ConsoleFormat.day("2026-11-08")
+        #expect(day.contains("8") && day.contains("Nov") && !day.contains("7"))
+        #expect(ConsoleFormat.day("soon") == "soon")
+    }
+
+    @Test func grantsPlansComputeAndCapabilitiesInWords() throws {
+        let grant = try #require(try fixture("operator_list_grants", as: [Grant].self).first)
+        #expect(ConsoleFormat.money(grant.funded) == "$500.00")
+        #expect(grant.unallocated == 290)
+
+        var plan = try #require(try fixture("operator_list_plans", as: [Plan].self).first)
+        #expect(plan.priceLine == "$18.00 a month")
+        #expect(plan.allowanceLine == "2,000 credits a month")
+        #expect(ConsoleFormat.markup(plan.markup) == "default markup")
+        plan.markup = 1.25
+        #expect(ConsoleFormat.markup(plan.markup) == "1.25×")
+
+        var compute = try #require(try fixture("operator_list_compute", as: [ComputeOperator].self).first)
+        #expect(compute.host == "orch-ams-2.example.test")
+        #expect(compute.facts == ["67 jobs", "5 failed", "1.7 s median"])
+        #expect(!compute.blocked)
+        compute.medianResponseMs = nil
+        compute.jobs = 1
+        #expect(compute.facts == ["1 job", "5 failed"])
+
+        var capability = try #require(try fixture("operator_list_capabilities", as: [OfferedCapability].self).first)
+        #expect(capability.state.word == "Offered")
+        #expect(capability.facts == ["5 of 6 ready", "default markup"])
+        capability.readyCount = 0
+        #expect(capability.state.word == "No one ready")
+        capability.enabled = false
+        #expect(capability.state.word == "Not offered")
+        capability.stale = true
+        #expect(capability.facts.last == "not seen lately")
+        #expect(ConsoleFormat.line(["Failed", "1 attempt"]) == "Failed\u{00A0}· 1\u{00A0}attempt")
+    }
+
+    @Test func aReadKeepsWhatItHasAndSaysWhyTheFirstOneFailed() async {
+        var answer: Result<Int, Error> = .failure(URLError(.notConnectedToInternet))
+        let read = ConsoleRead<Int>(failure: "It didn't load.") { try answer.get() }
+        #expect(read.phase == .loading)
+        await read.load()
+        #expect(read.phase == .failed("It didn't load."))
+
+        answer = .failure(APIError(status: 500, message: "The engine didn't answer.", code: nil))
+        await read.load()
+        #expect(read.phase == .failed("The engine didn't answer."))
+
+        answer = .success(7)
+        await read.load()
+        #expect(read.value == 7 && read.phase == .loaded)
+
+        // A later failure keeps what is shown; a lock says nothing here at all.
+        answer = .failure(URLError(.timedOut))
+        await read.load()
+        #expect(read.value == 7 && read.phase == .loaded)
+        answer = .failure(APIError(status: 401, message: "Locked.", code: "locked"))
+        await read.load()
+        #expect(read.phase == .loaded)
+    }
+
+    @Test func statusSaysHowManyReportsAreWaiting() throws {
+        var status = try fixture("operator_status", as: OperatorStatus.self)
+        #expect(ConsoleTabs.waitingReports(status) == 1)
+        status.attention = []
+        #expect(ConsoleTabs.waitingReports(status) == 0)
     }
 }
 

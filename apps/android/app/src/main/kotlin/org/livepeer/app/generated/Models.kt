@@ -167,6 +167,33 @@ enum class ReportReason(val value: String) {
     }
 }
 
+@Serializable(with = ComputeOperatorStatus.Serializer::class)
+enum class ComputeOperatorStatus(val value: String) {
+    Allowed("allowed"),
+    Blocked("blocked"),
+
+    /** A value this build doesn't know, from a newer instance. */
+    Unknown("");
+
+    object Serializer : KSerializer<ComputeOperatorStatus> {
+        override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("ComputeOperatorStatus", PrimitiveKind.STRING)
+        override fun deserialize(decoder: Decoder): ComputeOperatorStatus = decoder.decodeString().let { value -> entries.firstOrNull { it.value == value } ?: Unknown }
+        override fun serialize(encoder: Encoder, value: ComputeOperatorStatus) = encoder.encodeString(value.value)
+    }
+}
+
+/** An operator's view of one compute operator, derived from the jobs it served. */
+@Serializable
+data class ComputeOperator(
+    @SerialName("orchestrator_url") val orchestratorUrl: String,
+    @SerialName("runners") val runners: Double,
+    @SerialName("apps") val apps: List<String>,
+    @SerialName("jobs") val jobs: Double,
+    @SerialName("failures") val failures: Double,
+    @SerialName("median_response_ms") val medianResponseMs: Double? = null,
+    @SerialName("status") val status: ComputeOperatorStatus,
+)
+
 @Serializable
 data class Conversation(
     @SerialName("id") val id: String,
@@ -315,6 +342,40 @@ data class ConversationSummary(
     @SerialName("id") val id: String,
     @SerialName("title") val title: String,
     @SerialName("updated_at") val updatedAt: String,
+)
+
+@Serializable
+data class CostSummaryByClass(
+    @SerialName("delivered") val delivered: Fees,
+    @SerialName("failed_after_payment") val failedAfterPayment: Fees,
+    @SerialName("uncertain") val uncertain: Fees,
+    @SerialName("pending") val pending: Fees,
+)
+
+@Serializable
+data class CostSummaryByApp(
+    @SerialName("delivered") val delivered: Fees? = null,
+    @SerialName("failed_after_payment") val failedAfterPayment: Fees? = null,
+    @SerialName("uncertain") val uncertain: Fees? = null,
+    @SerialName("pending") val pending: Fees? = null,
+)
+
+/** `GET /v1/costs/summary`. */
+@Serializable
+data class CostSummary(
+    @SerialName("start") val start: String,
+    @SerialName("end") val end: String,
+    @SerialName("by_class") val byClass: CostSummaryByClass,
+    @SerialName("jobs_with_cost") val jobsWithCost: Double,
+    @SerialName("jobs_pending") val jobsPending: Double,
+    @SerialName("by_app") val byApp: Map<String, CostSummaryByApp>,
+)
+
+@Serializable
+data class Fees(
+    @SerialName("fee_eth") val feeEth: String,
+    @SerialName("fee_usd") val feeUsd: String? = null,
+    @SerialName("row_count") val rowCount: Double,
 )
 
 /** A user's balance in credits: their allocation's available amount after the instance's markup rule. */
@@ -569,6 +630,24 @@ enum class MediaKind(val value: String) {
         override fun serialize(encoder: Encoder, value: MediaKind) = encoder.encodeString(value.value)
     }
 }
+
+@Serializable
+data class Grant(
+    @SerialName("id") val id: String,
+    @SerialName("label") val label: String,
+    @SerialName("funded") val funded: Money,
+    @SerialName("allocated") val allocated: Money,
+    @SerialName("spent") val spent: Money,
+    @SerialName("created_at") val createdAt: String,
+)
+
+/** The payment and identity provider behind the engine, in the engine's terms: grants fund allocations, an allocation is a user's budget, usage is what was spent, a plan is the provider's plan. Nothing here is a second ledger: every amount is read from the provider. */
+@Serializable
+data class Money(
+    /** Decimal string, as the engine and providers report amounts. */
+    @SerialName("amount") val amount: String,
+    @SerialName("currency") val currency: String,
+)
 
 @Serializable
 data class InstanceDescriptionLogo(
@@ -838,6 +917,23 @@ data class MediaItem(
     @SerialName("artwork") val artwork: MockArtwork,
 )
 
+/** A capability on the network as the operator sees it: what it's called, whether this instance offers it, and who can run it now. */
+@Serializable
+data class OfferedCapability(
+    @SerialName("app") val app: String,
+    /** What it is, as the interface names it: "Text to video". */
+    @SerialName("name") val name: String,
+    /** Whether this instance offers it to its users. */
+    @SerialName("enabled") val enabled: Boolean,
+    /** Multiplier on wholesale cost; null uses the instance default. */
+    @SerialName("markup") val markup: Double? = null,
+    /** Compute operators' runners that advertise it, and how many are ready now. */
+    @SerialName("runner_count") val runnerCount: Double,
+    @SerialName("ready_count") val readyCount: Double,
+    /** True when discovery hasn't seen it lately. */
+    @SerialName("stale") val stale: Boolean,
+)
+
 /** One row of `GET /v1/offerings`. Identity is (app, currency, unit). */
 @Serializable
 data class Offering(
@@ -1033,31 +1129,6 @@ data class OverviewStats(
     @SerialName("series") val series: List<OverviewStatsSeries>,
 )
 
-@Serializable
-data class PlanAndCreditsTopUp(
-    @SerialName("min") val min: Money,
-    @SerialName("max") val max: Money,
-    @SerialName("credits_per_usd") val creditsPerUsd: Double,
-)
-
-@Serializable
-data class PlanAndCreditsProvider(
-    @SerialName("id") val id: String,
-    @SerialName("name") val name: String,
-    @SerialName("features") val features: ProviderFeatures,
-)
-
-/** The signed-in user's plan, what they could change to, and what the provider supports. */
-@Serializable
-data class PlanAndCredits(
-    @SerialName("plan") val plan: Plan? = null,
-    @SerialName("plans") val plans: List<Plan>,
-    @SerialName("packs") val packs: List<CreditPack>,
-    /** Top-ups of the user's own amount, or null when the provider can't take them or the operator turned them off. */
-    @SerialName("top_up") val topUp: PlanAndCreditsTopUp? = null,
-    @SerialName("provider") val provider: PlanAndCreditsProvider,
-)
-
 @Serializable(with = PlanInterval.Serializer::class)
 enum class PlanInterval(val value: String) {
     Month("month"),
@@ -1087,14 +1158,6 @@ data class Plan(
     @SerialName("active") val active: Boolean,
 )
 
-/** The payment and identity provider behind the engine, in the engine's terms: grants fund allocations, an allocation is a user's budget, usage is what was spent, a plan is the provider's plan. Nothing here is a second ledger: every amount is read from the provider. */
-@Serializable
-data class Money(
-    /** Decimal string, as the engine and providers report amounts. */
-    @SerialName("amount") val amount: String,
-    @SerialName("currency") val currency: String,
-)
-
 @Serializable(with = PlanAllowancePeriod.Serializer::class)
 enum class PlanAllowancePeriod(val value: String) {
     Month("month"),
@@ -1117,6 +1180,31 @@ data class PlanAllowance(
     @SerialName("period") val period: PlanAllowancePeriod,
     /** Months unused credits carry forward; 0 means they expire. */
     @SerialName("rollover_months") val rolloverMonths: Double,
+)
+
+@Serializable
+data class PlanAndCreditsTopUp(
+    @SerialName("min") val min: Money,
+    @SerialName("max") val max: Money,
+    @SerialName("credits_per_usd") val creditsPerUsd: Double,
+)
+
+@Serializable
+data class PlanAndCreditsProvider(
+    @SerialName("id") val id: String,
+    @SerialName("name") val name: String,
+    @SerialName("features") val features: ProviderFeatures,
+)
+
+/** The signed-in user's plan, what they could change to, and what the provider supports. */
+@Serializable
+data class PlanAndCredits(
+    @SerialName("plan") val plan: Plan? = null,
+    @SerialName("plans") val plans: List<Plan>,
+    @SerialName("packs") val packs: List<CreditPack>,
+    /** Top-ups of the user's own amount, or null when the provider can't take them or the operator turned them off. */
+    @SerialName("top_up") val topUp: PlanAndCreditsTopUp? = null,
+    @SerialName("provider") val provider: PlanAndCreditsProvider,
 )
 
 /** A one-off top-up the provider sells at a fixed price. Buying one adds to the user's allocation. */

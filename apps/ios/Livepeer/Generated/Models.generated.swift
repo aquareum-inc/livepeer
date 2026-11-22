@@ -164,6 +164,38 @@ enum ReportReason: String, Codable, Sendable, Hashable, CaseIterable {
     }
 }
 
+enum ComputeOperatorStatus: String, Codable, Sendable, Hashable, CaseIterable {
+    case allowed = "allowed"
+    case blocked = "blocked"
+    /// A value this build doesn't know, from a newer instance.
+    case unknown = "\u{0}unknown"
+
+    init(from decoder: Decoder) throws {
+        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+    }
+}
+
+/// An operator's view of one compute operator, derived from the jobs it served.
+struct ComputeOperator: Codable, Sendable, Hashable {
+    var orchestratorUrl: String
+    var runners: Double
+    var apps: [String]
+    var jobs: Double
+    var failures: Double
+    var medianResponseMs: Double?
+    var status: ComputeOperatorStatus
+
+    enum CodingKeys: String, CodingKey {
+        case orchestratorUrl = "orchestrator_url"
+        case runners
+        case apps
+        case jobs
+        case failures
+        case medianResponseMs = "median_response_ms"
+        case status
+    }
+}
+
 struct Conversation: Codable, Sendable, Hashable {
     var id: String
     var title: String
@@ -328,6 +360,65 @@ struct ConversationSummary: Codable, Sendable, Hashable {
         case id
         case title
         case updatedAt = "updated_at"
+    }
+}
+
+struct CostSummaryByClass: Codable, Sendable, Hashable {
+    var delivered: Fees
+    var failedAfterPayment: Fees
+    var uncertain: Fees
+    var pending: Fees
+
+    enum CodingKeys: String, CodingKey {
+        case delivered
+        case failedAfterPayment = "failed_after_payment"
+        case uncertain
+        case pending
+    }
+}
+
+struct CostSummaryByApp: Codable, Sendable, Hashable {
+    var delivered: Fees?
+    var failedAfterPayment: Fees?
+    var uncertain: Fees?
+    var pending: Fees?
+
+    enum CodingKeys: String, CodingKey {
+        case delivered
+        case failedAfterPayment = "failed_after_payment"
+        case uncertain
+        case pending
+    }
+}
+
+/// `GET /v1/costs/summary`.
+struct CostSummary: Codable, Sendable, Hashable {
+    var start: String
+    var end: String
+    var byClass: CostSummaryByClass
+    var jobsWithCost: Double
+    var jobsPending: Double
+    var byApp: [String: CostSummaryByApp]
+
+    enum CodingKeys: String, CodingKey {
+        case start
+        case end
+        case byClass = "by_class"
+        case jobsWithCost = "jobs_with_cost"
+        case jobsPending = "jobs_pending"
+        case byApp = "by_app"
+    }
+}
+
+struct Fees: Codable, Sendable, Hashable {
+    var feeEth: String
+    var feeUsd: String?
+    var rowCount: Double
+
+    enum CodingKeys: String, CodingKey {
+        case feeEth = "fee_eth"
+        case feeUsd = "fee_usd"
+        case rowCount = "row_count"
     }
 }
 
@@ -628,6 +719,31 @@ enum MediaKind: String, Codable, Sendable, Hashable, CaseIterable {
     init(from decoder: Decoder) throws {
         self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
     }
+}
+
+struct Grant: Codable, Sendable, Hashable {
+    var id: String
+    var label: String
+    var funded: Money
+    var allocated: Money
+    var spent: Money
+    var createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case label
+        case funded
+        case allocated
+        case spent
+        case createdAt = "created_at"
+    }
+}
+
+/// The payment and identity provider behind the engine, in the engine's terms: grants fund allocations, an allocation is a user's budget, usage is what was spent, a plan is the provider's plan. Nothing here is a second ledger: every amount is read from the provider.
+struct Money: Codable, Sendable, Hashable {
+    /// Decimal string, as the engine and providers report amounts.
+    var amount: String
+    var currency: String
 }
 
 struct InstanceDescriptionLogo: Codable, Sendable, Hashable {
@@ -951,6 +1067,32 @@ struct MediaItem: Codable, Sendable, Hashable {
     }
 }
 
+/// A capability on the network as the operator sees it: what it's called, whether this instance offers it, and who can run it now.
+struct OfferedCapability: Codable, Sendable, Hashable {
+    var app: String
+    /// What it is, as the interface names it: "Text to video".
+    var name: String
+    /// Whether this instance offers it to its users.
+    var enabled: Bool
+    /// Multiplier on wholesale cost; null uses the instance default.
+    var markup: Double?
+    /// Compute operators' runners that advertise it, and how many are ready now.
+    var runnerCount: Double
+    var readyCount: Double
+    /// True when discovery hasn't seen it lately.
+    var stale: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case app
+        case name
+        case enabled
+        case markup
+        case runnerCount = "runner_count"
+        case readyCount = "ready_count"
+        case stale
+    }
+}
+
 /// One row of `GET /v1/offerings`. Identity is (app, currency, unit).
 struct Offering: Codable, Sendable, Hashable {
     var app: String
@@ -1206,6 +1348,55 @@ struct OverviewStats: Codable, Sendable, Hashable {
     }
 }
 
+enum PlanInterval: String, Codable, Sendable, Hashable, CaseIterable {
+    case month = "month"
+    case year = "year"
+    /// A value this build doesn't know, from a newer instance.
+    case unknown = "\u{0}unknown"
+
+    init(from decoder: Decoder) throws {
+        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+    }
+}
+
+struct Plan: Codable, Sendable, Hashable {
+    var id: String
+    var name: String
+    var description: String
+    var price: Money
+    var interval: PlanInterval
+    var allowance: PlanAllowance
+    var features: [String]
+    /// Multiplier on wholesale cost for subscribers; null uses the instance default.
+    var markup: Double?
+    var active: Bool
+}
+
+enum PlanAllowancePeriod: String, Codable, Sendable, Hashable, CaseIterable {
+    case month = "month"
+    case year = "year"
+    /// A value this build doesn't know, from a newer instance.
+    case unknown = "\u{0}unknown"
+
+    init(from decoder: Decoder) throws {
+        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+    }
+}
+
+struct PlanAllowance: Codable, Sendable, Hashable {
+    /// Credits included each period.
+    var credits: Double
+    var period: PlanAllowancePeriod
+    /// Months unused credits carry forward; 0 means they expire.
+    var rolloverMonths: Double
+
+    enum CodingKeys: String, CodingKey {
+        case credits
+        case period
+        case rolloverMonths = "rollover_months"
+    }
+}
+
 struct PlanAndCreditsTopUp: Codable, Sendable, Hashable {
     var min: Money
     var max: Money
@@ -1239,62 +1430,6 @@ struct PlanAndCredits: Codable, Sendable, Hashable {
         case packs
         case topUp = "top_up"
         case provider
-    }
-}
-
-enum PlanInterval: String, Codable, Sendable, Hashable, CaseIterable {
-    case month = "month"
-    case year = "year"
-    /// A value this build doesn't know, from a newer instance.
-    case unknown = "\u{0}unknown"
-
-    init(from decoder: Decoder) throws {
-        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
-    }
-}
-
-struct Plan: Codable, Sendable, Hashable {
-    var id: String
-    var name: String
-    var description: String
-    var price: Money
-    var interval: PlanInterval
-    var allowance: PlanAllowance
-    var features: [String]
-    /// Multiplier on wholesale cost for subscribers; null uses the instance default.
-    var markup: Double?
-    var active: Bool
-}
-
-/// The payment and identity provider behind the engine, in the engine's terms: grants fund allocations, an allocation is a user's budget, usage is what was spent, a plan is the provider's plan. Nothing here is a second ledger: every amount is read from the provider.
-struct Money: Codable, Sendable, Hashable {
-    /// Decimal string, as the engine and providers report amounts.
-    var amount: String
-    var currency: String
-}
-
-enum PlanAllowancePeriod: String, Codable, Sendable, Hashable, CaseIterable {
-    case month = "month"
-    case year = "year"
-    /// A value this build doesn't know, from a newer instance.
-    case unknown = "\u{0}unknown"
-
-    init(from decoder: Decoder) throws {
-        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
-    }
-}
-
-struct PlanAllowance: Codable, Sendable, Hashable {
-    /// Credits included each period.
-    var credits: Double
-    var period: PlanAllowancePeriod
-    /// Months unused credits carry forward; 0 means they expire.
-    var rolloverMonths: Double
-
-    enum CodingKeys: String, CodingKey {
-        case credits
-        case period
-        case rolloverMonths = "rollover_months"
     }
 }
 
