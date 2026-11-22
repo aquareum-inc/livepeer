@@ -61,6 +61,7 @@ enum class MorePage(val route: String, val title: String) {
     Compute("compute", "Compute operators"),
     Offered("offered", "What's offered"),
     System("system", "System"),
+    Alerts("alerts", "Alerts"),
 }
 
 /**
@@ -68,7 +69,7 @@ enum class MorePage(val route: String, val title: String) {
  * pricing, billing and settings stay on the web, and the foot of the page says so.
  */
 @Composable
-fun MoreScreen(onBack: (() -> Unit)?, open: (MorePage) -> Unit) {
+fun MoreScreen(onBack: (() -> Unit)?, alerts: String, open: (MorePage) -> Unit) {
     val palette = LocalPalette.current
     val context = LocalContext.current
     ConsolePage("More", onBack) {
@@ -88,6 +89,8 @@ fun MoreScreen(onBack: (() -> Unit)?, open: (MorePage) -> Unit) {
                 PageLink(MorePage.Offered, open)
             }
             ConsoleSection("Instance") { PageLink(MorePage.System, open) }
+            // What this phone is told. Where it stands is said beside the name, in mono, as a fact.
+            ConsoleSection("This phone") { PageLink(MorePage.Alerts, open, fact = alerts) }
             Box(
                 Modifier.fillMaxWidth().heightIn(min = 48.dp).pressable(label = "Opens the web console in the browser") {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.INSTANCE_URL.trimEnd('/') + "/operator")))
@@ -101,10 +104,15 @@ fun MoreScreen(onBack: (() -> Unit)?, open: (MorePage) -> Unit) {
 }
 
 @Composable
-private fun PageLink(page: MorePage, open: (MorePage) -> Unit) {
+private fun PageLink(page: MorePage, open: (MorePage) -> Unit, fact: String = "") {
     val palette = LocalPalette.current
-    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).pressable { open(page) }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 52.dp).pressable { open(page) }.padding(horizontal = 16.dp, vertical = 12.dp).semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         BasicText(page.title, style = TypeSize.Lead.style(FontWeight.Medium).copy(color = palette.foreground), modifier = Modifier.weight(1f))
+        if (fact.isNotEmpty()) BasicText(fact, style = TypeSize.Caption.style(mono = true).copy(color = palette.mutedForeground))
         Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = palette.subtleForeground, modifier = Modifier.size(20.dp))
     }
 }

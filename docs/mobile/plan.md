@@ -354,6 +354,7 @@ Third-party dependencies, each justified:
 | AndroidX (Compose, Navigation, Lifecycle, Browser, DataStore) | Android | Google's own. |
 | Coil | Android | Compose has no image loader of its own; Coil is the one Google's documentation uses. |
 | Thinking orbs (vendored in `apps/ios/Livepeer/Vendor/ThinkingOrbs`; ported to Kotlin in `apps/android/.../design/orb`; MIT) | iOS, Android | The agent's working indicator, the same drawing as the web's `thinking-orbs` package. Vendored from a pinned commit rather than SwiftPM: the package tracks a branch of a 284 MB repository. |
+| Firebase Cloud Messaging (`com.google.firebase:firebase-messaging`) | Android | Google's own, and the only way an alert reaches an Android phone. Used for operator alerts and nothing else: no Analytics, no automatic start, and no push token until an operator turns alerts on. The app starts it itself from the project the instance names (`get_instance`), so the build carries nothing of any Firebase project and no Gradle plugin. |
 | Material icons (extended) | Android | The platform's own icon set as Compose vectors. Unused icons are stripped from release builds. |
 | None | iOS | Everything is in the SDK. |
 
@@ -1485,6 +1486,179 @@ Not done, and not proved:
   for the development config. The other new fixtures were captured over HTTP.
 - **A notification on a real phone**, including whether Android shows one when the app isn't running with
   Firebase started from run-time values (decision 19).
+
+**22 November 2026: stage 3 on Android.** At the owner's direction Android went before iOS this once: an
+Apple Developer membership was still being set up. Built from 18.9's Screens; design decisions 97 to 99;
+screenshots are `docs/screenshots/mobile/android-console-alerts-*.jpg` and `android-console-more-alerts-*.jpg`.
+
+- **More ▸ This phone ▸ Alerts**, with where they stand in mono beside it. The page (`AlertsScreen`) has one
+  switch a kind in the instance's words, the line about a phone being added, and one ink button that puts the
+  change in a tray and asks for the fingerprint. The switches are a draft until then.
+- **The model** (`AlertsModel`) reads `operator_get_alerts`, and changes with `operator_set_alerts` and
+  `operator_test_alert` through the same confirm path as every other change. Turning on asks, in order: the
+  system's permission to show notifications (the first time, never before), a push token, the match, the
+  instance. It remembers the kinds last chosen and the push token it registered in a sealed entry beside the
+  console's own token, and both go when the console signs out.
+- **Firebase is started by the app** from the instance's description (`FirebasePush`): when the app starts,
+  from the cached copy, and again before a push token is asked for. No `google-services.json`, no plugin.
+  Analytics and automatic start are switched off in the manifest.
+- **Alerts arriving.** In the background the system shows them. In front, `AlertsService` shows them itself,
+  unless the console is open and unlocked, when it reads Status again and shows nothing. Three channels in a
+  Console group: Service, Reports, Console sign-ins.
+- **A tapped alert** brings up the console's cover and, after the match, goes to Status, Jobs on Failed, or
+  Reports. `opens` is read as one of three words; anything else is Status.
+- **Status** says "Alerts have stopped on this phone." at its foot when they were on and aren't reaching it,
+  and signing out says alerts stop too.
+- **Signing out, or the session ending any other way, gives the push token up** on the phone as well
+  (`deleteToken`), so nothing more can arrive even if the instance couldn't be told.
+
+Decided while building:
+
+- **A page that can't offer alerts says why**: the instance hasn't set them up for Android (or hasn't named
+  its Firebase project), or the phone has no Google Play services. No switches are drawn.
+- **The test alert asks for the match straight from its row**, with no tray: there is nothing to explain and
+  nothing to undo. How it went is said under it.
+- **The notification's small icon is a plain bell** until a build carries its own instance's mark: the
+  system needs a drawable in the build, and the instance's mark arrives at run time.
+- **Whether the push token changed is found by asking for it** when the page or the console loads, and only
+  while alerts are on; nothing is recorded in the background.
+- **An alert tapped on a phone the console was never offered to does nothing.**
+
+Run for real in an emulator (API 37, Google Play image) against a mock-only instance whose config named a
+made-up Firebase project: the row on More; the page off, in dark, light and at the largest font size; a switch
+moved; the tray naming the kinds chosen; the system's permission question, refused once ("Notifications are
+off for Livepeer in Settings, so alerts can't show.") and then allowed; and, with no real project to give a
+push token, "This phone couldn't be given an address for alerts." Firebase started from the instance's values
+with no plugin and no resource file. The 16 unit tests of the model cover every state the page can be in.
+
+Not seen on Android in this run, because no push token can be had without a real Firebase project (most of
+it was seen later the same day, below):
+
+- **Alerts on**: the facts, saving a change of kinds, the test alert, turning off.
+- **Stopped and blocked**: the page and the line on Status.
+- **An alert arriving**, in the background, in front and with the app not running, and tapping it.
+- **Whether a notification shows when the app isn't running** with Firebase started this way (decision 19).
+- The channels in the system's settings, and anything on a real phone.
+
+Chrome's first-run screen in a fresh emulator asks to agree to its terms. The sign-ins were finished without
+it: the address the app handed the browser was read from the system log, followed from this machine, and the
+app's own callback address handed back with `adb shell am start`.
+
+**22 November 2026: stage 3 on iOS, in the simulator.** The same page and behaviour as Android, from 18.9's
+Screens; design decision 100; screenshots are `docs/screenshots/mobile/ios-console-alerts-*.jpg`,
+`ios-console-more-alerts-dark.jpg` and `ios-console-alert-*.jpg`.
+
+- **No dependency.** `SystemPush` asks the system for permission and for this phone's push token, and is the
+  notification centre's delegate; `AppDelegate` exists only to hand it the push token. A push token is asked
+  for only while alerts are on or being turned on.
+- **The entitlement** (`Config/Livepeer.entitlements`): `aps-environment`, set by a build setting
+  (`development` in Debug, `production` in Release), and time-sensitive delivery for the engine alone
+  (decision 17). The same build setting goes into `Info.plist`, so the app tells the instance which of Apple's
+  services its push token is from. A build for a real phone now needs a paid Apple Developer team.
+- **The model** (`AlertsModel`) and the page (`AlertsView`) match Android's: a draft of switches, one ink
+  button, a tray, then permission, push token, Face ID and the instance, in that order. What the phone
+  remembers is its own Keychain entry beside the console's token, readable only while the phone is unlocked.
+- **An alert in front** shows no banner while the console is open and unlocked: Status reads itself again.
+  Otherwise the system shows it. **A tapped alert** brings up the cover and goes to one of three places.
+- **Switches are the app's grey, not ink.** An ink switch has a white thumb on a near-white track in dark;
+  the Settings screens already use the muted tint for the same reason. Not the system's green either way.
+
+Run for real in the simulator (iPhone 18 Pro, iOS 27) against a mock-only instance, end to end:
+
+- The row on More; the page off; one switch moved; the tray naming the kinds chosen; the system's permission
+  question; a real push token from the simulator; Face ID; and the page on, with "Stops Dec 22" and "Last
+  alert". The instance held the kinds, `development` and a sealed push token for "iPhone 18 Pro".
+- A test alert: Face ID, then "Sent. It should arrive in a moment." and "Last alert just now".
+- A report filed by an ordinary user over HTTP produced "1 report is waiting" for this phone in the outbox,
+  with no character's name and none of the reporter's words. That payload, delivered with `xcrun simctl push`:
+  with the console open, no banner, and the Reports tab's count went to 1; with the app in the background, a
+  banner and a line on the lock screen reading "Livepeer · 1 report is waiting".
+- 65 unit tests pass, 16 of them for alerts.
+
+Not seen on iOS:
+
+- **Opening the console from a tapped alert.** The simulator tool's taps and swipes didn't land reliably on
+  the system's own notification list, so the last step (cover, Face ID, the Reports queue) was not seen. The
+  unit tests cover what a payload leads to and that arriving brings up the cover; the path through the
+  system has not run.
+- **Light theme and the largest text size.** Only dark was captured: the Mac's disk filled during this work
+  and the simulator was shut down before more could be taken.
+- Saving a change of kinds, turning off, the stopped and blocked states, the line on Status, and "not set up".
+- **Anything through Apple's real push service**, time-sensitive delivery, and anything on a real phone.
+  `xcrun simctl push` sends no collapse id, so two alerts of a kind showed as two lines; through Apple the
+  newer replaces the older.
+
+Notes for whoever tests next: the simulator gives a push token without a paid team; a mock instance's iOS
+outbox entry is a file `xcrun simctl push <udid> <bundle id> <file>` accepts as it is.
+
+**22 November 2026, later: more of iOS seen.** The Mac's disk was freed (two simulators and the iOS 27.1 runtime
+removed) and the simulator run was picked up again, with the build from before. Now seen, with screenshots:
+
+- **Light and the largest text size** (`ios-console-alerts-on-light.jpg`, `ios-console-alerts-on-largest-text.jpg`):
+  labels wrap beside their switches and nothing is clipped.
+- **Stopped.** With the push token marked dead on the instance, the page said "Alerts have stopped on this
+  phone." with the kinds as they were and Turn them back on; Status carried the line at its foot, and the
+  line led to the page (`ios-console-alerts-stopped-dark.jpg`, `ios-console-status-alerts-stopped-dark.jpg`).
+  Turning them back on, with Face ID, gave the instance a sealed push token again.
+- **Saving a change of kinds**: a switch moved, Save changes appeared, its tray named all three kinds, and
+  after Face ID the instance held them (`ios-console-alerts-edited-dark.jpg`, `ios-console-alerts-save-dark.jpg`).
+- **The turn-off tray**, in ink (`ios-console-alerts-turn-off-dark.jpg`). It was not confirmed.
+
+Still not seen on iOS: opening the console from a tapped alert. Four more attempts through the driving tool
+failed the same way: a tap on a banner or on the notification list doesn't open the app, and a late one lands
+on whatever is under the banner. Earlier this was mistaken for the app quitting; it had not. It needs a hand
+on the simulator, or a real phone. Also not seen: the blocked state, and "not set up".
+
+**22 November 2026, later still: Android with a real Firebase project.** The owner made a Firebase project
+for development builds and registered `org.livepeer.app.dev` in it. Its four values (project id, app id, API
+key, sender id) went into the test instance's `mobile.android.firebase`; the `google-services.json` they came
+from is not used by the build and is ignored by git. Run again in the same emulator against a mock-only
+instance, with screenshots:
+
+- **A real push token, with Firebase started at run time.** The app started Firebase from the instance's
+  description, with no plugin and no resource file, and Google gave it a push token. That is the half of
+  decision 19 an emulator can settle. Whether a notification shows when the app isn't running is still open.
+- **Turning on, end to end**: the tray, the permission already given, the push token, the fingerprint prompt
+  titled "Turn on alerts", and the page on with "Stops 19 Dec" and "Last alert". The instance held the three
+  kinds and a sealed push token for the emulator (`android-console-alerts-on-dark.jpg`, `-on-light.jpg`,
+  `-on-largest-text.jpg`: labels wrap beside their switches and nothing is clipped).
+- **A test alert**: the fingerprint, then "Sent. It should arrive in a moment." and "Last alert just now"
+  (`android-console-alerts-tested-dark.jpg`). The mock instance's outbox held a message in the shape Firebase's
+  HTTP v1 API takes. Nothing arrived, because a mock-only instance records and doesn't send.
+- **Saving a change of kinds**: a switch moved, Save changes appeared, its tray named the two kinds left, and
+  after the fingerprint ("Save alert choices") the instance held them (`android-console-alerts-edited-dark.jpg`,
+  `android-console-alerts-save-dark.jpg`).
+- **Stopped.** With the push token marked dead on the instance, the page said "Alerts have stopped on this
+  phone." with the kinds as they were and Turn them back on; More said Stopped beside Alerts; Status carried
+  the line at its foot, and the line led to the page (`android-console-alerts-stopped-dark.jpg`,
+  `android-console-status-alerts-stopped-dark.jpg`). Turning them back on, with the fingerprint, gave the
+  instance a sealed push token again.
+- **The turn-off tray**, in ink (`android-console-alerts-turn-off-dark.jpg`). It was not confirmed.
+- 82 unit tests pass.
+
+Two faults found by running it, and mended:
+
+- **A different Firebase project was ignored until the app was reinstalled.** Firebase, once started, kept
+  the project it was started with, so an instance that changed its project (here, from made-up values to real
+  ones) got push tokens from the old one. `FirebasePush.start()` now compares the running project with the
+  instance's and starts again when they differ.
+- **The app could not start after the phone restarted, until the phone was unlocked.** The app's container
+  opens its sealed storage when it is made, and that storage can't be read before the first unlock after a
+  restart. The container is now made on first use, Firebase is started only once the phone is unlocked, and
+  `AlertsService` drops a message that arrives before then. So an alert sent between a restart and the first
+  unlock is not shown on Android, and nothing sends it again. Status shows what it was about once the
+  console is open.
+
+Still not seen on Android: **an alert arriving**, in the background, in front and with the app not running, and
+tapping one; the channels in the system's settings; the blocked state; anything on a real phone. An alert
+arriving needs an instance that isn't mock-only with `FCM_SERVICE_ACCOUNT` set, which is also the first time
+the Firebase sender will have spoken to Google.
+
+Found in passing, in stage 1's code, and left alone:
+
+- On a phone with no Face ID set up, the console's cover says "The console needs Face ID or Touch ID…" twice,
+  once in grey and once in red.
+- If the composer's keyboard is up when the console is opened, it stays up over the console's cover.
 
 ### 18.9 Stage 3: push alerts (specified and accepted 21 November 2026; server half built)
 

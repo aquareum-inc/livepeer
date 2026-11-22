@@ -42,6 +42,9 @@ object ConsoleFormat {
         return "${at.format(DAY.withLocale(locale))} ${at.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.MEDIUM).withLocale(locale))}"
     }
 
+    /** A day without its time, "21 Dec": for something that ends on a date. */
+    fun day(then: Long, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String = Instant.ofEpochMilli(then).atZone(zone).format(DAY.withLocale(locale))
+
     private val DAY = DateTimeFormatter.ofPattern("d MMM")
 
     fun money(usd: Double): String = NumberFormat.getCurrencyInstance(Locale.US).format(usd)

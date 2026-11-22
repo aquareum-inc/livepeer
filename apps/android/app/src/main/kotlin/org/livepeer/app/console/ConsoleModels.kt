@@ -42,9 +42,9 @@ sealed interface ChangeOutcome {
 }
 
 /** A lock or a sign-out replaces the whole console; a screen has nothing to say about it. */
-private val Exception.endsTheConsole: Boolean get() = this is ApiError && status == 401
+internal val Exception.endsTheConsole: Boolean get() = this is ApiError && status == 401
 
-private suspend fun change(instance: String, run: suspend () -> ChangeOutcome): ChangeOutcome = try {
+internal suspend fun change(instance: String, run: suspend () -> ChangeOutcome): ChangeOutcome = try {
     run()
 } catch (error: CancellationException) {
     throw error

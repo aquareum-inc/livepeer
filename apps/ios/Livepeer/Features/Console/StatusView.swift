@@ -3,6 +3,9 @@ import SwiftUI
 /// The console's first screen. It answers one question: is anything wrong?
 struct StatusView: View {
     let model: StatusModel
+    /// Alerts on this phone: said here only when they were on and have stopped.
+    let alerts: AlertsModel
+    let openAlerts: () -> Void
     /// Opens the place where something that needs attention is dealt with.
     let open: (OperatorAttentionOpens) -> Void
     @Environment(InstanceStore.self) private var instance
@@ -22,7 +25,18 @@ struct StatusView: View {
                     // The same rows at their final height, so nothing moves when the answer arrives.
                     sections(.placeholder).redacted(reason: .placeholder).breathing().accessibilityHidden(true)
                 }
-                signOut
+                VStack(spacing: 0) {
+                    // What this phone knows for itself, so not a line in Needs you, whose lines are the instance's.
+                    if alerts.standing == .stopped || alerts.standing == .blocked {
+                        Button("Alerts have stopped on this phone.", action: openAlerts)
+                            .text(.body, weight: .medium)
+                            .foregroundStyle(palette.foreground)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .buttonStyle(PressStyle())
+                            .accessibilityHint("Opens Alerts")
+                    }
+                    signOut
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
@@ -97,7 +111,7 @@ struct StatusView: View {
                 Button("Cancel", role: .cancel) {}
                 Button("Sign out", role: .destructive) { Task { await session.signOut() } }
             } message: {
-                Text("This phone forgets the console and its key. To come back you sign in again.")
+                Text(alerts.standing == .on || alerts.standing == .blocked ? "This phone forgets the console and its key. Alerts stop on this phone too. To come back you sign in again." : "This phone forgets the console and its key. To come back you sign in again.")
             }
     }
 

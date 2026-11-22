@@ -24,6 +24,12 @@ final class ConsoleSession {
     private(set) var failure: String?
     /// Counts each unlock, so screens read again when the console reopens.
     private(set) var unlocks = 0
+    /// Where a tapped alert points, until the console has gone there.
+    private(set) var arrival: AlertPlace?
+    /// Counts alerts that arrived while the console was open, so Status reads itself again and no banner is needed.
+    private(set) var heard = 0
+    /// Called when the session has ended on this phone, however it ended: what was kept beside it goes too.
+    var onForgotten: () -> Void = {}
 
     private let api: OperatorAPI<ConsoleTransport>
     private let vault: TokenVault
@@ -55,6 +61,21 @@ final class ConsoleSession {
 
     /// This phone has a console session, locked or open.
     var enrolled: Bool { stage != .signedOut }
+
+    /// Whether the console is open in front of the person: an alert then needs no banner.
+    var watching: Bool { presented && stage == .open }
+
+    /// An alert arrived while the console was open.
+    func hear() { heard += 1 }
+
+    /// An alert was tapped. The console comes up on its cover and asks for the match; the place the alert points
+    /// at is gone to once it is open. Nothing else comes of a tap.
+    func arrive(at place: AlertPlace) {
+        arrival = place
+        if !watching { present() }
+    }
+
+    func arrived() { arrival = nil }
 
     /// Covers the app with the console, asking for a match at once when this phone is already enrolled.
     func present() {
@@ -285,5 +306,6 @@ final class ConsoleSession {
         vault.set(nil)
         key.delete()
         stage = .signedOut
+        onForgotten()
     }
 }

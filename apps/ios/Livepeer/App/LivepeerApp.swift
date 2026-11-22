@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct LivepeerApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     private let api: API
     @State private var instance: InstanceStore
     @State private var account: Account
@@ -19,8 +20,19 @@ struct LivepeerApp: App {
         let instance = InstanceStore(api: API(transport: APITransport(baseURL: BuildConfig.instanceURL, token: { nil })))
         self.api = api
         _instance = State(initialValue: instance)
-        _account = State(initialValue: Account(api: api, vault: vault, relay: relay, instance: instance))
-        _console = State(initialValue: ConsoleSession(instance: instance))
+        let account = Account(api: api, vault: vault, relay: relay, instance: instance)
+        let console = ConsoleSession(instance: instance)
+        // Alerts: the system is told who to hand a tapped alert to, and what the phone kept about its alerts
+        // goes when the console's session does, with the push token given up.
+        let push = SystemPush.shared
+        push.console = console
+        push.offered = { instance.consoleOnly || ConsoleSession.offered(to: account.me, by: instance.description) }
+        console.onForgotten = {
+            AlertsMemory().clear()
+            push.forget()
+        }
+        _account = State(initialValue: account)
+        _console = State(initialValue: console)
     }
 
     var body: some Scene {

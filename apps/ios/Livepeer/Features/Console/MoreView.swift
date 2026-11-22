@@ -28,11 +28,13 @@ struct MoreModels {
 /// pricing, billing and settings stay on the web, and the foot of the page says so.
 struct MoreView: View {
     let models: MoreModels
+    /// Alerts on this phone: where they stand is said beside their row.
+    let alerts: AlertsModel
     @Environment(InstanceStore.self) private var instance
     @Environment(\.palette) private var palette
     @Environment(\.openURL) private var openURL
 
-    enum Page: Hashable { case revenue, costs, grants, plans, compute, offered, system }
+    enum Page: Hashable { case revenue, costs, grants, plans, compute, offered, system, alerts }
 
     var body: some View {
         ScrollView {
@@ -53,6 +55,10 @@ struct MoreView: View {
                 }
                 ConsoleSection(title: "Instance") {
                     link("System", to: .system)
+                }
+                // What this phone is told. Where it stands is said beside the name, in mono, as a fact.
+                ConsoleSection(title: "This phone") {
+                    link("Alerts", to: .alerts, fact: alerts.summary)
                 }
                 Button { openURL(BuildConfig.instanceURL.appending(path: "operator")) } label: {
                     Text("Keys, pricing, billing and settings are on the web console.")
@@ -81,17 +87,19 @@ struct MoreView: View {
             case .compute: ComputeView(model: models.compute)
             case .offered: OfferedView(model: models.offered)
             case .system: SystemView(model: models.health)
+            case .alerts: AlertsView(model: alerts)
             }
         }
     }
 
-    private func link(_ name: String, to page: Page) -> some View {
+    private func link(_ name: String, to page: Page, fact: String = "") -> some View {
         NavigationLink(value: page) {
             HStack(spacing: 12) {
                 Text(name)
                     .text(.lead, weight: .medium)
                     .foregroundStyle(palette.foreground)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                if !fact.isEmpty { Text(fact).text(.caption, mono: true).foregroundStyle(palette.mutedForeground) }
                 Image(systemName: "chevron.right").imageScale(.small).foregroundStyle(palette.subtleForeground).accessibilityHidden(true)
             }
             .padding(.horizontal, 16)

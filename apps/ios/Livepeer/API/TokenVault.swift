@@ -16,11 +16,13 @@ nonisolated final class TokenVault: Sendable {
     static let userAccount = "device-session"
     /// The operator's console session: readable only while the phone is unlocked.
     static let operatorAccount = "operator-device-session"
+    /// What the console remembers about this phone's alerts, kept beside its session and under the same protection.
+    static let operatorAlertsAccount = "operator-alerts"
 
     init(service: String = Bundle.main.bundleIdentifier ?? "org.livepeer.app", account: String = TokenVault.userAccount) {
         self.service = service
         self.account = account
-        whileUnlockedOnly = account == Self.operatorAccount
+        whileUnlockedOnly = account == Self.operatorAccount || account == Self.operatorAlertsAccount
         current = Mutex(Self.read(service: service, account: account))
     }
 

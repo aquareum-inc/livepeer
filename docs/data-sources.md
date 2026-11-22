@@ -135,9 +135,9 @@ console. A phone sends its `aqo_` token and, for a change, an `X-Operator-Proof`
 | `operator_resolve_report`, `operator_set_user_status` | The two changes a phone may make | the operator role; on a phone, a proof each time | iOS and Android |
 | `operator_list_devices`, `operator_revoke_device`, `operator_revoke_all_devices` | The phones enrolled for the console, each with whether alerts reach it; revoke one or all | the operator role, web or API only | Not on mobile |
 | `operator_list_audit` | What operators' phones did and were refused, and each alert sent to one | the operator role, web or API only | Not on mobile |
-| `operator_get_alerts` | This phone's alerts: whether the instance can send to its platform, which kinds are on, when they end. Never the push token | its operator device session, unlocked | Server built (plan §18.8); the apps' Alerts page is not |
-| `operator_set_alerts` | Chooses the kinds and where to send them (`kinds`, `push_token`, on iOS `environment`); no kinds turns alerts off | its operator device session, a proof each time, bound to the push token | Server built; apps not |
-| `operator_test_alert` | Sends this phone "Alerts reach this phone.", three an hour | its operator device session, a proof each time | Server built; apps not |
+| `operator_get_alerts` | This phone's alerts: whether the instance can send to its platform, which kinds are on, when they end. Never the push token | its operator device session, unlocked | iOS and Android: More ▸ Alerts (plan §18.8) |
+| `operator_set_alerts` | Chooses the kinds and where to send them (`kinds`, `push_token`, on iOS `environment`); no kinds turns alerts off | its operator device session, a proof each time, bound to the push token | iOS and Android: More ▸ Alerts |
+| `operator_test_alert` | Sends this phone "Alerts reach this phone.", three an hour | its operator device session, a proof each time | iOS and Android: More ▸ Alerts |
 
 **Alerts to operators' phones** (plan §18.9) are sent by the instance itself, straight to Apple and Google
 with the publisher's own credentials (`APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `FCM_SERVICE_ACCOUNT`), from

@@ -49,6 +49,23 @@ rule: `CLAUDE.md` and the plan hold those.
   a `lastUsedAt` more than 7 days old shows "Signed out · alerts until …"; `"pushSealed": null` shows "not
   reaching".
 
+- **Chrome's first-run screen** in a fresh Android emulator asks to agree to its terms before a sign-in can
+  open. A mock sign-in can be finished without it: the address the app handed the browser is in `adb logcat`
+  (`…/auth/start?…`); follow its redirects from the Mac with cookies kept, and hand the final
+  `org.livepeer.app.dev://auth?…` address back with `adb shell am start -a android.intent.action.VIEW -d`.
+- **On Android a push token needs a real Firebase project**, even against a mock instance. With made-up
+  values in `mobile.android.firebase` the page can be seen off and the tray reaches "couldn't be given an
+  address"; nothing past that. With a real project's four values there (from the project's
+  `google-services.json`: `project_id`, `mobilesdk_app_id`, `current_key`, `project_number`) alerts turn on
+  end to end in an emulator with a Google Play image. Keep the file out of the repository; the build doesn't
+  read it.
+- **To see the stopped state**, set `alerts.pushSealed` to `null` on the phone's entry in
+  `DATA_DIR/operator-device-sessions.json` and pull the page down.
+- **A mock-only instance records alerts and sends none**, so nothing arrives on a phone. Its outbox is
+  `DATA_DIR/push-outbox.json`.
+- **On iOS the simulator gives a push token** with no paid team, so alerts can be turned on end to end there.
+  Taps on the system's own notification list from a driving tool are unreliable; opening an alert may need a hand.
+
 ## iOS simulator
 
 - **Point a build at another port** on the command line: `xcodebuild … INSTANCE_URL='http://localhost:<port>'`.
@@ -80,6 +97,10 @@ rule: `CLAUDE.md` and the plan hold those.
   enter the PIN, press MORE, then I AGREE; then `adb -e emu finger touch 1` and `adb -e emu finger remove 1`
   about eight times until "Fingerprint added". To match a prompt, one touch. Afterwards
   `adb shell locksettings clear --old 1111` removes the PIN and the fingerprint with it.
+- **After the emulator restarts it is locked, and nothing can be launched** ("Activity class does not exist")
+  until it is unlocked: `adb shell input keyevent 224`, `input keyevent 82`, `input text 1111`,
+  `input keyevent 66`.
+- **The console locks itself after five minutes**, in the middle of a run too. Unlock and carry on.
 - **The system fingerprint prompt screenshots as black**: Android protects it. Read its words from
   `adb shell uiautomator dump` instead.
 - **Finding things to tap.** `uiautomator dump` gives each element's text or description and its bounds; tapping

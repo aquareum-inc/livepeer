@@ -10,6 +10,10 @@ nonisolated enum BuildConfig {
         return url
     }()
 
+    /// Which of Apple's push services this build's push token belongs to: `development` for a build run from
+    /// Xcode, `production` for one from TestFlight or the App Store. The same value as the entitlement.
+    static let alertsEnvironment = (Bundle.main.object(forInfoDictionaryKey: "AlertsEnvironment") as? String) == "development" ? "development" : "production"
+
     /// This build's version, which the instance can ask to be at least a given one.
     static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
 }
