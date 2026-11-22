@@ -15,6 +15,8 @@ PROJECT SETUP, DATA and RULES, reproduced below so they load every session.
    - `docs/ui-actions.md` — every UI action and the API function behind it. Keep it current.
    - `docs/engine-requests.md` — requests and open questions for Mike (engine maintainer).
    - `docs/mobile/plan.md` — the native iOS and Android apps: scope, slices, API, sign-in, store rules.
+   - `docs/mobile/console-testing-notes.md` — how to run, drive and capture the operator console in the iOS
+     simulator and the Android emulator against a mock instance.
 3. Reference clones of the engine, console, node, Clearinghouse Batteries and Explorer live in `.reference/`
    (git-ignored). They are read-only reference material; never copy engine code into this repo.
 
