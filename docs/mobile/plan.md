@@ -354,6 +354,7 @@ Third-party dependencies, each justified:
 | AndroidX (Compose, Navigation, Lifecycle, Browser, DataStore) | Android | Google's own. |
 | Coil | Android | Compose has no image loader of its own; Coil is the one Google's documentation uses. |
 | Thinking orbs (vendored in `apps/ios/Livepeer/Vendor/ThinkingOrbs`; ported to Kotlin in `apps/android/.../design/orb`; MIT) | iOS, Android | The agent's working indicator, the same drawing as the web's `thinking-orbs` package. Vendored from a pinned commit rather than SwiftPM: the package tracks a branch of a 284 MB repository. |
+| Firebase Cloud Messaging (`com.google.firebase:firebase-messaging`) | Android | Google's own, and the only way an alert reaches an Android phone. Used for operator alerts and nothing else: no Analytics, no automatic start, and no push token until an operator turns alerts on. The app starts it itself from the project the instance names (`get_instance`), so the build carries nothing of any Firebase project and no Gradle plugin. |
 | Material icons (extended) | Android | The platform's own icon set as Compose vectors. Unused icons are stripped from release builds. |
 | None | iOS | Everything is in the SDK. |
 
@@ -1485,6 +1486,62 @@ Not done, and not proved:
   for the development config. The other new fixtures were captured over HTTP.
 - **A notification on a real phone**, including whether Android shows one when the app isn't running with
   Firebase started from run-time values (decision 19).
+
+**22 November 2026: stage 3 on Android.** At the owner's direction Android went before iOS this once: an
+Apple Developer membership was still being set up. Built from 18.9's Screens; design decisions 97 to 99;
+screenshots are `docs/screenshots/mobile/android-console-alerts-*.jpg` and `android-console-more-alerts-*.jpg`.
+
+- **More ▸ This phone ▸ Alerts**, with where they stand in mono beside it. The page (`AlertsScreen`) has one
+  switch a kind in the instance's words, the line about a phone being added, and one ink button that puts the
+  change in a tray and asks for the fingerprint. The switches are a draft until then.
+- **The model** (`AlertsModel`) reads `operator_get_alerts`, and changes with `operator_set_alerts` and
+  `operator_test_alert` through the same confirm path as every other change. Turning on asks, in order: the
+  system's permission to show notifications (the first time, never before), a push token, the match, the
+  instance. It remembers the kinds last chosen and the push token it registered in a sealed entry beside the
+  console's own token, and both go when the console signs out.
+- **Firebase is started by the app** from the instance's description (`FirebasePush`): when the app starts,
+  from the cached copy, and again before a push token is asked for. No `google-services.json`, no plugin.
+  Analytics and automatic start are switched off in the manifest.
+- **Alerts arriving.** In the background the system shows them. In front, `AlertsService` shows them itself,
+  unless the console is open and unlocked, when it reads Status again and shows nothing. Three channels in a
+  Console group: Service, Reports, Console sign-ins.
+- **A tapped alert** brings up the console's cover and, after the match, goes to Status, Jobs on Failed, or
+  Reports. `opens` is read as one of three words; anything else is Status.
+- **Status** says "Alerts have stopped on this phone." at its foot when they were on and aren't reaching it,
+  and signing out says alerts stop too.
+- **Signing out, or the session ending any other way, gives the push token up** on the phone as well
+  (`deleteToken`), so nothing more can arrive even if the instance couldn't be told.
+
+Decided while building:
+
+- **A page that can't offer alerts says why**: the instance hasn't set them up for Android (or hasn't named
+  its Firebase project), or the phone has no Google Play services. No switches are drawn.
+- **The test alert asks for the match straight from its row**, with no tray: there is nothing to explain and
+  nothing to undo. How it went is said under it.
+- **The notification's small icon is a plain bell** until a build carries its own instance's mark: the
+  system needs a drawable in the build, and the instance's mark arrives at run time.
+- **Whether the push token changed is found by asking for it** when the page or the console loads, and only
+  while alerts are on; nothing is recorded in the background.
+- **An alert tapped on a phone the console was never offered to does nothing.**
+
+Run for real in an emulator (API 37, Google Play image) against a mock-only instance whose config named a
+made-up Firebase project: the row on More; the page off, in dark, light and at the largest font size; a switch
+moved; the tray naming the kinds chosen; the system's permission question, refused once ("Notifications are
+off for Livepeer in Settings, so alerts can't show.") and then allowed; and, with no real project to give a
+push token, "This phone couldn't be given an address for alerts." Firebase started from the instance's values
+with no plugin and no resource file. The 16 unit tests of the model cover every state the page can be in.
+
+Not seen on Android, because no push token can be had without a real Firebase project:
+
+- **Alerts on**: the facts, saving a change of kinds, the test alert, turning off.
+- **Stopped and blocked**: the page and the line on Status.
+- **An alert arriving**, in the background, in front and with the app not running, and tapping it.
+- **Whether a notification shows when the app isn't running** with Firebase started this way (decision 19).
+- The channels in the system's settings, and anything on a real phone.
+
+Chrome's first-run screen in a fresh emulator asks to agree to its terms. The sign-ins were finished without
+it: the address the app handed the browser was read from the system log, followed from this machine, and the
+app's own callback address handed back with `adb shell am start`.
 
 ### 18.9 Stage 3: push alerts (specified and accepted 21 November 2026; server half built)
 

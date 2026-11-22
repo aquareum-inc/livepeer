@@ -45,6 +45,9 @@ class ConsoleSession(
     /** Milliseconds that only go forward, for timing the background. */
     private val elapsed: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
+    /** Called when the session has ended on this phone, however it ended: what was kept beside it goes too. */
+    var onForgotten: () -> Unit = {}
+
     enum class Stage {
         /** This phone has no console session. */
         SignedOut,
@@ -310,6 +313,7 @@ class ConsoleSession(
         vault.set(null)
         key.delete()
         _stage.value = Stage.SignedOut
+        onForgotten()
     }
 
     /** The instance sent the person back without a code, and said why. */

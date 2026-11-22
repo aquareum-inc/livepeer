@@ -61,7 +61,7 @@ fun offersPlace(place: OperatorAttentionOpens): Boolean = place == OperatorAtten
 /** The console's first screen. It answers one question: is anything wrong? */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StatusScreen(model: StatusModel, onBack: (() -> Unit)?, signOut: suspend () -> Unit, open: (OperatorAttentionOpens) -> Unit) {
+fun StatusScreen(model: StatusModel, onBack: (() -> Unit)?, alerts: AlertsStanding, openAlerts: () -> Unit, signOut: suspend () -> Unit, open: (OperatorAttentionOpens) -> Unit) {
     val state by model.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
@@ -78,7 +78,11 @@ fun StatusScreen(model: StatusModel, onBack: (() -> Unit)?, signOut: suspend () 
                     // The same rows at their final height, so nothing moves when the answer arrives.
                     StandIn { Column(verticalArrangement = Arrangement.spacedBy(24.dp)) { Sections(PLACEHOLDER, open) } }
                 }
-                SignOut(signOut)
+                Column {
+                    // What this phone knows for itself, so not a line in Needs you, whose lines are the instance's.
+                    if (alerts == AlertsStanding.Stopped || alerts == AlertsStanding.Blocked) AlertsStopped(openAlerts)
+                    SignOut(signOut, alertsOn = alerts == AlertsStanding.On || alerts == AlertsStanding.Blocked)
+                }
             }
         }
     }
@@ -237,9 +241,18 @@ private fun ServiceRow(name: String, good: Boolean, word: String, seen: Long?, n
     }
 }
 
+/** Alerts were on and no longer reach this phone. One quiet line, and the way to mend it. */
+@Composable
+private fun AlertsStopped(open: () -> Unit) {
+    val palette = LocalPalette.current
+    Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).pressable(label = "Opens Alerts", onClick = open), contentAlignment = Alignment.Center) {
+        BasicText("Alerts have stopped on this phone.", style = TypeSize.Body.style(FontWeight.Medium).copy(color = palette.foreground, textAlign = TextAlign.Center))
+    }
+}
+
 /** The way out of the console for good on this phone, kept quiet at the foot of the first screen. */
 @Composable
-private fun SignOut(signOut: suspend () -> Unit) {
+private fun SignOut(signOut: suspend () -> Unit, alertsOn: Boolean) {
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
     var confirming by rememberSaveable { mutableStateOf(false) }
@@ -250,7 +263,7 @@ private fun SignOut(signOut: suspend () -> Unit) {
         AlertDialog(
             onDismissRequest = { confirming = false },
             title = { Text("Sign out of the console?") },
-            text = { Text("This phone forgets the console and its key. To come back you sign in again.") },
+            text = { Text(if (alertsOn) "This phone forgets the console and its key. Alerts stop on this phone too. To come back you sign in again." else "This phone forgets the console and its key. To come back you sign in again.") },
             confirmButton = { TextButton({ confirming = false; scope.launch { signOut() } }) { Text("Sign out", color = palette.destructive) } },
             dismissButton = { TextButton({ confirming = false }) { Text("Cancel", color = palette.foreground) } },
             containerColor = palette.popover,

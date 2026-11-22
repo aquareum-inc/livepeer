@@ -20,6 +20,8 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import org.livepeer.app.alerts.Alert
+import org.livepeer.app.console.ConsoleSession
 import org.livepeer.app.design.LocalDarkTheme
 import org.livepeer.app.design.LocalPalette
 import org.livepeer.app.design.resolved
@@ -39,6 +41,7 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch { finishSignIn(if (result.resultCode == AuthTabIntent.RESULT_OK) result.resultUri else null) }
         }
         intent?.let(::returnFromBrowser)
+        intent?.let(::openedFromAlert)
 
         setContent {
             val instance by container.instance.description.collectAsStateWithLifecycle()
@@ -75,6 +78,20 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         returnFromBrowser(intent)
+        openedFromAlert(intent)
+    }
+
+    /**
+     * An alert was tapped. It brings up the console's cover, which asks for the match, and names one of three
+     * places to go to after it. Nothing else is read from it, and nothing happens on a phone the console has
+     * never been offered to.
+     */
+    private fun openedFromAlert(intent: Intent) {
+        val place = Alert.place(intent) ?: return
+        setIntent(Intent(this, MainActivity::class.java))
+        val console = container.console
+        val enrolled = console.session.stage.value != ConsoleSession.Stage.SignedOut
+        if (enrolled || ConsoleSession.offered(container.account.me.value, container.instance.description.value) || InstanceStore.consoleOnly(container.instance.description.value)) console.arrive(place)
     }
 
     /** A Custom Tab returning to this app's own address at the end of a sign-in. */

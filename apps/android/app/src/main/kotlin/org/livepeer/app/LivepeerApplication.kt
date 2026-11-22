@@ -3,9 +3,11 @@ package org.livepeer.app
 import android.app.Application
 import android.content.Context
 import org.livepeer.app.account.Account
+import org.livepeer.app.alerts.FirebasePush
 import org.livepeer.app.api.ApiTransport
 import org.livepeer.app.api.ConsoleTransport
 import org.livepeer.app.api.DeviceKey
+import org.livepeer.app.console.AlertsMemory
 import org.livepeer.app.console.Console
 import org.livepeer.app.console.ConsoleSession
 import org.livepeer.app.generated.OperatorApi
@@ -33,6 +35,9 @@ class LivepeerApplication : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        // From the description kept from the last launch, so an alert that starts the app finds Firebase ready
+        // to show it. Nothing is asked of Google here: a push token is made only when alerts are turned on.
+        container.push.start()
     }
 
     override fun newImageLoader(context: Context): ImageLoader =
@@ -57,10 +62,13 @@ class AppContainer(context: Context) {
     val characters = org.livepeer.app.characters.CharactersModel(api)
     val settings = org.livepeer.app.settings.SettingsModel(api)
 
+    /** How an operator's alerts reach this phone: through the Firebase project the instance names. */
+    val push = FirebasePush(context) { instance.description.value?.mobile?.android?.firebase }
+
     /** The operator's console: a session, a token entry and a key of its own, apart from everything above. */
     val console = TokenVault.operator(context).let { operatorVault ->
         Console(
-            ConsoleSession(
+            session = ConsoleSession(
                 api = OperatorApi(ConsoleTransport(BuildConfig.INSTANCE_URL, token = { operatorVault.token }, client = http)),
                 vault = operatorVault,
                 key = DeviceKey(context),
@@ -71,6 +79,10 @@ class AppContainer(context: Context) {
                 refreshInstance = instance::refresh,
                 elapsed = android.os.SystemClock::elapsedRealtime,
             ),
+            device = push,
+            // Beside the console's own token, sealed the same way, and gone when the console signs out.
+            memory = AlertsMemory(TokenVault(context, name = "operator-alerts", alias = "operator-alerts")),
+            scope = MainScope(),
         )
     }
 

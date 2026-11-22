@@ -70,11 +70,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.livepeer.app.AppContainer
 import org.livepeer.app.R
 import org.livepeer.app.account.SignInOptions
+import org.livepeer.app.alerts.Alert
 import org.livepeer.app.design.BrandSymbol
 import org.livepeer.app.design.LocalPalette
 import org.livepeer.app.design.PrimaryButton
@@ -87,8 +91,8 @@ import org.livepeer.app.generated.OperatorAttentionKind
 import org.livepeer.app.generated.OperatorAttentionOpens
 import org.livepeer.app.generated.TypeSize
 
-/** The console's session on this phone and what its four screens show. */
-class Console(val session: ConsoleSession) {
+/** The console's session on this phone and what its screens show. */
+class Console(val session: ConsoleSession, device: PushDevice, memory: AlertsMemory, private val scope: CoroutineScope) {
     val status = StatusModel { session.read { it.operatorStatus() } }
     val jobs = JobsModel { status, before, limit -> session.read { it.operatorListJobs(limit.toDouble(), status, before) } }
     val reports = ReportsModel(
@@ -110,12 +114,53 @@ class Console(val session: ConsoleSession) {
 
     val more = MoreModels(session)
 
+    val alerts = AlertsModel(
+        device = device,
+        memory = memory,
+        read = { session.read { it.operatorGetAlerts() } },
+        set = { kinds, pushToken, reason ->
+            session.confirm("operator_set_alerts", OperatorApi.operatorSetAlertsInput(kinds, pushToken), reason) { api, proof -> api.operatorSetAlerts(kinds, pushToken, proof = proof) }
+        },
+        test = { session.confirm("operator_test_alert", OperatorApi.operatorTestAlertInput(), "Send a test alert") { api, proof -> api.operatorTestAlert(proof).ok } },
+    )
+
+    private val _arrival = MutableStateFlow<Alert.Place?>(null)
+
+    /** Where a tapped alert points, until the console has gone there. */
+    val arrival: StateFlow<Alert.Place?> = _arrival
+
+    init {
+        session.onForgotten = alerts::forgotten
+    }
+
+    /** Whether the console is open in front of the person: an alert then needs no banner. */
+    val watching: Boolean get() = session.presented.value && session.stage.value == ConsoleSession.Stage.Open
+
+    /** An alert arrived while the console was open: what it is about is read again. */
+    fun heard() {
+        scope.launch { status.load() }
+    }
+
+    /**
+     * An alert was tapped. The console comes up on its cover and asks for the match; the place the alert
+     * points at is gone to once it is open. Nothing else comes of a tap.
+     */
+    fun arrive(place: Alert.Place) {
+        _arrival.value = place
+        if (!watching) session.present()
+    }
+
+    fun arrived() {
+        _arrival.value = null
+    }
+
     /** Reads every screen again: what was on screen before the console was last locked may be minutes old. */
     suspend fun load() = coroutineScope {
         launch { status.load() }
         launch { jobs.load() }
         launch { reports.load() }
         launch { users.load() }
+        launch { alerts.load() }
     }
 }
 
@@ -268,6 +313,9 @@ private fun ConsoleTabs(console: Console, back: (() -> Unit)?) {
     val unlocks by session.unlocks.collectAsStateWithLifecycle()
     val reports by console.reports.state.collectAsStateWithLifecycle()
     val users by console.users.state.collectAsStateWithLifecycle()
+    val alerts by console.alerts.state.collectAsStateWithLifecycle()
+    val stage by session.stage.collectAsStateWithLifecycle()
+    val arrival by console.arrival.collectAsStateWithLifecycle()
     val waiting = reports.waiting.size
 
     // Read again each time the console is unlocked.
@@ -280,10 +328,11 @@ private fun ConsoleTabs(console: Console, back: (() -> Unit)?) {
     val reported = status.status?.let { answer -> answer.attention.firstOrNull { it.kind == OperatorAttentionKind.ReportsWaiting }?.count?.toInt() ?: 0 }
     LaunchedEffect(reported) { if (reported != null && reported != console.reports.state.value.waiting.size) console.reports.load() }
     // One haptic for each change the instance confirmed.
-    var felt by remember { mutableIntStateOf(reports.changes + users.changes) }
-    LaunchedEffect(reports.changes + users.changes) {
-        if (reports.changes + users.changes > felt) haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-        felt = reports.changes + users.changes
+    val changes = reports.changes + users.changes + alerts.changes
+    var felt by remember { mutableIntStateOf(changes) }
+    LaunchedEffect(changes) {
+        if (changes > felt) haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+        felt = changes
     }
 
     val go: (ConsoleTab) -> Unit = { tab ->
@@ -295,6 +344,21 @@ private fun ConsoleTabs(console: Console, back: (() -> Unit)?) {
     }
     val onTab = ConsoleTab.entries.any { it.route == entry?.destination?.route }
     val leave: () -> Unit = { navigation.popBackStack() }
+    val toFailedJobs: () -> Unit = {
+        go(ConsoleTab.Jobs)
+        scope.launch { console.jobs.show(JobFilter.Failed) }
+    }
+    // A tapped alert leads to the place it points at, once the console is open, and to nothing else.
+    LaunchedEffect(arrival, stage) {
+        val place = arrival ?: return@LaunchedEffect
+        if (stage != ConsoleSession.Stage.Open) return@LaunchedEffect
+        when (place) {
+            Alert.Place.Jobs -> toFailedJobs()
+            Alert.Place.Reports -> go(ConsoleTab.Reports)
+            Alert.Place.Status -> go(ConsoleTab.Status)
+        }
+        console.arrived()
+    }
 
     Scaffold(
         containerColor = palette.background,
@@ -337,13 +401,10 @@ private fun ConsoleTabs(console: Console, back: (() -> Unit)?) {
             exitTransition = { fadeOut(motion.exit()) },
         ) {
             composable(ConsoleTab.Status.route) {
-                StatusScreen(console.status, back, signOut = session::signOut) { place ->
+                StatusScreen(console.status, back, alerts = alerts.standing, openAlerts = { navigation.navigate("more/${MorePage.Alerts.route}") }, signOut = session::signOut) { place ->
                     // Goes to where something that needs attention is dealt with.
                     when (place) {
-                        OperatorAttentionOpens.Jobs -> {
-                            go(ConsoleTab.Jobs)
-                            scope.launch { console.jobs.show(JobFilter.Failed) }
-                        }
+                        OperatorAttentionOpens.Jobs -> toFailedJobs()
                         OperatorAttentionOpens.Reports -> go(ConsoleTab.Reports)
                         OperatorAttentionOpens.Status, OperatorAttentionOpens.Unknown -> Unit
                     }
@@ -352,7 +413,7 @@ private fun ConsoleTabs(console: Console, back: (() -> Unit)?) {
             composable(ConsoleTab.Jobs.route) { JobsScreen(console.jobs, back) { navigation.navigate("job/${Uri.encode(it.id)}") } }
             composable(ConsoleTab.Reports.route) { ReportsScreen(console.reports, back) { navigation.navigate("report/${Uri.encode(it.id)}") } }
             composable(ConsoleTab.Users.route) { UsersScreen(console.users, back) { navigation.navigate("user/${Uri.encode(it.actorId)}") } }
-            composable(ConsoleTab.More.route) { MoreScreen(back) { navigation.navigate("more/${it.route}") } }
+            composable(ConsoleTab.More.route) { MoreScreen(back, alerts.summary) { navigation.navigate("more/${it.route}") } }
             composable("more/{page}") { entry ->
                 when (MorePage.entries.firstOrNull { it.route == entry.arguments?.getString("page") }) {
                     MorePage.Revenue -> RevenueScreen(console.more.overview, unlocks, leave)
@@ -362,6 +423,7 @@ private fun ConsoleTabs(console: Console, back: (() -> Unit)?) {
                     MorePage.Compute -> ComputeScreen(console.more.compute, unlocks, leave)
                     MorePage.Offered -> OfferedScreen(console.more.offered, unlocks, leave)
                     MorePage.System -> SystemScreen(console.more.health, unlocks, leave)
+                    MorePage.Alerts -> AlertsScreen(console.alerts, unlocks, leave)
                     null -> Spacer(Modifier.fillMaxSize())
                 }
             }
