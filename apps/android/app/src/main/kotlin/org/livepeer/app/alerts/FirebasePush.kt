@@ -32,10 +32,18 @@ class FirebasePush(private val context: Context, private val project: () -> Inst
 
     override val allowed: Boolean get() = NotificationManagerCompat.from(context).areNotificationsEnabled()
 
-    /** Starts Firebase with the instance's project, once. False while the instance hasn't named one. */
+    /**
+     * Starts Firebase with the instance's project. False while the instance hasn't named one. If the instance
+     * has since named a different project, Firebase is started again with that one: a push token from the old
+     * project would be no use to an instance that now sends through the new.
+     */
     fun start(): Boolean {
-        if (FirebaseApp.getApps(context).isNotEmpty()) return true
         val values = project() ?: return false
+        val running = FirebaseApp.getApps(context).firstOrNull()
+        if (running != null) {
+            if (running.options.projectId == values.projectId && running.options.applicationId == values.appId) return true
+            running.delete()
+        }
         FirebaseApp.initializeApp(context, FirebaseOptions.Builder().setProjectId(values.projectId).setApplicationId(values.appId).setApiKey(values.apiKey).setGcmSenderId(values.senderId).build())
         return true
     }

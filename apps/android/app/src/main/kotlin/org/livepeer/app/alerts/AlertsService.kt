@@ -3,6 +3,7 @@ package org.livepeer.app.alerts
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.UserManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -20,6 +21,8 @@ import org.livepeer.app.R
 class AlertsService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val alert = message.notification ?: return
+        // After a restart and before the first unlock, nothing the app keeps can be read: there is no console to ask.
+        if (!getSystemService(UserManager::class.java).isUserUnlocked) return
         val console = (application as LivepeerApplication).container.console
         if (console.watching) {
             console.heard()

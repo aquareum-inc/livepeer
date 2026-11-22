@@ -1531,7 +1531,8 @@ off for Livepeer in Settings, so alerts can't show.") and then allowed; and, wit
 push token, "This phone couldn't be given an address for alerts." Firebase started from the instance's values
 with no plugin and no resource file. The 16 unit tests of the model cover every state the page can be in.
 
-Not seen on Android, because no push token can be had without a real Firebase project:
+Not seen on Android in this run, because no push token can be had without a real Firebase project (most of
+it was seen later the same day, below):
 
 - **Alerts on**: the facts, saving a change of kinds, the test alert, turning off.
 - **Stopped and blocked**: the page and the line on Status.
@@ -1607,6 +1608,51 @@ Still not seen on iOS: opening the console from a tapped alert. Four more attemp
 failed the same way: a tap on a banner or on the notification list doesn't open the app, and a late one lands
 on whatever is under the banner. Earlier this was mistaken for the app quitting; it had not. It needs a hand
 on the simulator, or a real phone. Also not seen: the blocked state, and "not set up".
+
+**22 November 2026, later still: Android with a real Firebase project.** The owner made a Firebase project
+for development builds and registered `org.livepeer.app.dev` in it. Its four values (project id, app id, API
+key, sender id) went into the test instance's `mobile.android.firebase`; the `google-services.json` they came
+from is not used by the build and is ignored by git. Run again in the same emulator against a mock-only
+instance, with screenshots:
+
+- **A real push token, with Firebase started at run time.** The app started Firebase from the instance's
+  description, with no plugin and no resource file, and Google gave it a push token. That is the half of
+  decision 19 an emulator can settle. Whether a notification shows when the app isn't running is still open.
+- **Turning on, end to end**: the tray, the permission already given, the push token, the fingerprint prompt
+  titled "Turn on alerts", and the page on with "Stops 19 Dec" and "Last alert". The instance held the three
+  kinds and a sealed push token for the emulator (`android-console-alerts-on-dark.jpg`, `-on-light.jpg`,
+  `-on-largest-text.jpg`: labels wrap beside their switches and nothing is clipped).
+- **A test alert**: the fingerprint, then "Sent. It should arrive in a moment." and "Last alert just now"
+  (`android-console-alerts-tested-dark.jpg`). The mock instance's outbox held a message in the shape Firebase's
+  HTTP v1 API takes. Nothing arrived, because a mock-only instance records and doesn't send.
+- **Saving a change of kinds**: a switch moved, Save changes appeared, its tray named the two kinds left, and
+  after the fingerprint ("Save alert choices") the instance held them (`android-console-alerts-edited-dark.jpg`,
+  `android-console-alerts-save-dark.jpg`).
+- **Stopped.** With the push token marked dead on the instance, the page said "Alerts have stopped on this
+  phone." with the kinds as they were and Turn them back on; More said Stopped beside Alerts; Status carried
+  the line at its foot, and the line led to the page (`android-console-alerts-stopped-dark.jpg`,
+  `android-console-status-alerts-stopped-dark.jpg`). Turning them back on, with the fingerprint, gave the
+  instance a sealed push token again.
+- **The turn-off tray**, in ink (`android-console-alerts-turn-off-dark.jpg`). It was not confirmed.
+- 82 unit tests pass.
+
+Two faults found by running it, and mended:
+
+- **A different Firebase project was ignored until the app was reinstalled.** Firebase, once started, kept
+  the project it was started with, so an instance that changed its project (here, from made-up values to real
+  ones) got push tokens from the old one. `FirebasePush.start()` now compares the running project with the
+  instance's and starts again when they differ.
+- **The app could not start after the phone restarted, until the phone was unlocked.** The app's container
+  opens its sealed storage when it is made, and that storage can't be read before the first unlock after a
+  restart. The container is now made on first use, Firebase is started only once the phone is unlocked, and
+  `AlertsService` drops a message that arrives before then. So an alert sent between a restart and the first
+  unlock is not shown on Android, and nothing sends it again. Status shows what it was about once the
+  console is open.
+
+Still not seen on Android: **an alert arriving**, in the background, in front and with the app not running, and
+tapping one; the channels in the system's settings; the blocked state; anything on a real phone. An alert
+arriving needs an instance that isn't mock-only with `FCM_SERVICE_ACCOUNT` set, which is also the first time
+the Firebase sender will have spoken to Google.
 
 Found in passing, in stage 1's code, and left alone:
 

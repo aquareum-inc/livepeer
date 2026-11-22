@@ -43,3 +43,7 @@ DerivedData/
 *.ipa
 *.apk
 *.aab
+
+# A Firebase project's config file. The Android app doesn't use it: the instance names its project at run time
+# (mobile.android.firebase). It is only where those four values are copied from.
+google-services.json

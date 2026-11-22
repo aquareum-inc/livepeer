@@ -2,6 +2,7 @@ package org.livepeer.app
 
 import android.app.Application
 import android.content.Context
+import android.os.UserManager
 import org.livepeer.app.account.Account
 import org.livepeer.app.alerts.FirebasePush
 import org.livepeer.app.api.ApiTransport
@@ -29,15 +30,18 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 
 class LivepeerApplication : Application(), SingletonImageLoader.Factory {
-    lateinit var container: AppContainer
-        private set
+    /**
+     * Made when first needed, not when the process starts: Google's messaging can start the process after a
+     * restart and before the phone has been unlocked, when nothing the app keeps can be read yet.
+     */
+    val container: AppContainer by lazy { AppContainer(this) }
 
     override fun onCreate() {
         super.onCreate()
-        container = AppContainer(this)
         // From the description kept from the last launch, so an alert that starts the app finds Firebase ready
         // to show it. Nothing is asked of Google here: a push token is made only when alerts are turned on.
-        container.push.start()
+        // Before the first unlock that description can't be read, and an alert that arrives then isn't shown.
+        if (getSystemService(UserManager::class.java).isUserUnlocked) container.push.start()
     }
 
     override fun newImageLoader(context: Context): ImageLoader =
