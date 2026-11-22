@@ -1,0 +1,1 @@
+{"offered":true,"state":"on","kinds":[{"kind":"engine_not_ready","label":"The engine stops being ready","on":true},{"kind":"jobs_failing","label":"Jobs are failing","on":false},{"kind":"reports_waiting","label":"A report is waiting","on":true}],"until":"2026-12-22T04:38:14.818Z","last_alert_at":"2026-11-22T04:38:14.930Z"}

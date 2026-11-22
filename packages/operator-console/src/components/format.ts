@@ -18,6 +18,9 @@ export function ago(value: string | null | undefined, now = Date.now()): string 
   return `${Math.round(seconds / 86400)}d ago`;
 }
 
+/** A day without its time, "Dec 21": for something that ends on a date. */
+export const day = (value: string | null | undefined): string => (value ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(value)) : "—");
+
 export const host = (url: string): string => {
   try {
     return new URL(url).host;

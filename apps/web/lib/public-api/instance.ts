@@ -53,7 +53,15 @@ export function describeInstance(origin: string): InstanceDescription {
     surfaces: { app: config.surfaces.app, console: config.surfaces.console, api: config.surfaces.api, mcp: config.surfaces.mcp, mobile: config.surfaces.mobile ?? false, mobile_console: config.surfaces.mobileConsole ?? false },
     mobile: {
       ios: config.mobile?.ios ? { bundle_id: config.mobile.ios.bundleId, minimum_version: config.mobile.ios.minimumVersion ?? null } : null,
-      android: config.mobile?.android ? { application_id: config.mobile.android.applicationId, minimum_version: config.mobile.android.minimumVersion ?? null } : null,
+      android: config.mobile?.android
+        ? {
+            application_id: config.mobile.android.applicationId,
+            minimum_version: config.mobile.android.minimumVersion ?? null,
+            firebase: config.mobile.android.firebase
+              ? { project_id: config.mobile.android.firebase.projectId, app_id: config.mobile.android.firebase.appId, api_key: config.mobile.android.firebase.apiKey, sender_id: config.mobile.android.firebase.senderId }
+              : null,
+          }
+        : null,
     },
     sign_in: { methods: signInMethods().filter((method): method is SignInMethodName => method !== "operator"), sign_up: config.auth?.signUp ?? "open" },
     content: { characters: config.content?.characters ?? false, adult_content: config.content?.adultContent ?? false },

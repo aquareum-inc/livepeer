@@ -21,6 +21,9 @@ const INPUTS: Array<Record<string, unknown>> = [
   { status: "active", id: "usr_demo_priya", application_id: "default" },
   { id: "usr \"quoted\" / ünïcode \n line", status: "paused" },
   {},
+  // A list keeps the order it was given: turning alerts on, and turning them off.
+  { push_token: "5a".repeat(32), kinds: ["engine_not_ready", "reports_waiting"], environment: "development" },
+  { kinds: [] },
 ];
 const NONCE = "q0hY0mVtQ3v1c1m7m5mJf2J8h1b5V8l2r9x3X6n4u0A";
 
@@ -44,6 +47,8 @@ describe("operator proof vectors", () => {
     expect(vectors.inputs[0]!.canonical).toBe('{"id":"rep_8Jk2","outcome":"hidden"}');
     expect(vectors.inputs[3]!.canonical).toBe('{"application_id":"default","id":"usr_demo_priya","status":"active"}');
     expect(vectors.inputs[5]!.canonical).toBe("{}");
+    expect(vectors.inputs[6]!.canonical).toBe(`{"environment":"development","kinds":["engine_not_ready","reports_waiting"],"push_token":"${"5a".repeat(32)}"}`);
+    expect(vectors.inputs[7]!.canonical).toBe('{"kinds":[]}');
     expect(vectors.messages.confirm.message.split("\n")).toEqual(["livepeer-operator-confirm", NONCE, "operator_resolve_report", vectors.inputs[0]!.hash]);
   });
 });

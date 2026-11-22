@@ -133,8 +133,19 @@ console. A phone sends its `aqo_` token and, for a change, an `X-Operator-Proof`
 | `operator_overview`, `operator_health`, `operator_list_jobs`, `operator_list_users`, `operator_list_reports` | The console's reads a phone may make. Jobs take `status` and `before`; users take `query` | the operator role; on a phone, unlocked | iOS and Android use `operator_list_jobs` (Jobs and a job's page), `operator_list_users` (Users, a user's page) and `operator_list_reports` (Reports, a report's page). Stage 2 also uses `operator_overview` (Revenue and margin) and `operator_health` (System); |
 | `operator_costs`, `operator_list_grants`, `operator_list_plans`, `operator_list_compute`, `operator_list_capabilities` | Stage 2's reads: network cost by outcome and capability (`getCostSummary`), grants (`provider.budgets.listGrants`), plans (`provider.plans.listPlans`), compute operators from recent jobs (`listComputeOperators`, mocked), and every discovered capability with whether the instance offers it (`listOfferings` with `getCapabilitySetting` and the capability labels) | the operator role; on a phone, unlocked | iOS stage 2 (More); |
 | `operator_resolve_report`, `operator_set_user_status` | The two changes a phone may make | the operator role; on a phone, a proof each time | iOS and Android |
-| `operator_list_devices`, `operator_revoke_device`, `operator_revoke_all_devices` | The phones enrolled for the console; revoke one or all | the operator role, web or API only | Not on mobile |
-| `operator_list_audit` | What operators' phones did and were refused | the operator role, web or API only | Not on mobile |
+| `operator_list_devices`, `operator_revoke_device`, `operator_revoke_all_devices` | The phones enrolled for the console, each with whether alerts reach it; revoke one or all | the operator role, web or API only | Not on mobile |
+| `operator_list_audit` | What operators' phones did and were refused, and each alert sent to one | the operator role, web or API only | Not on mobile |
+| `operator_get_alerts` | This phone's alerts: whether the instance can send to its platform, which kinds are on, when they end. Never the push token | its operator device session, unlocked | Server built (plan §18.8); the apps' Alerts page is not |
+| `operator_set_alerts` | Chooses the kinds and where to send them (`kinds`, `push_token`, on iOS `environment`); no kinds turns alerts off | its operator device session, a proof each time, bound to the push token | Server built; apps not |
+| `operator_test_alert` | Sends this phone "Alerts reach this phone.", three an hour | its operator device session, a proof each time | Server built; apps not |
+
+**Alerts to operators' phones** (plan §18.9) are sent by the instance itself, straight to Apple and Google
+with the publisher's own credentials (`APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `FCM_SERVICE_ACCOUNT`), from
+`apps/web/lib/push`. They are not API client functions and have no mock in the data-source map: in mock-only
+mode the sender only records what it would have sent, in `DATA_DIR/push-outbox.json`, and offers both
+platforms. What triggers an alert is read through the operator client's existing functions (`getEngineHealth`
+every minute and `listJobs` every five, on a client holding the reader token and no admin token) and from the
+instance's own reports. Neither real sender has been run against Apple or Google yet.
 
 Every other operator operation has no `mobile` mark and is refused to a phone with 403 `web_only`.
 `operator_list_jobs` filters and pages by cutting from the engine's newest 500 jobs, because `GET /v1/jobs`

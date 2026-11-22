@@ -792,10 +792,13 @@ struct InstanceDescriptionMobileIos: Codable, Sendable, Hashable {
 struct InstanceDescriptionMobileAndroid: Codable, Sendable, Hashable {
     var applicationId: String
     var minimumVersion: String?
+    /// What the Android app starts Firebase Cloud Messaging with, to be given an address for alerts. None of it is secret: it ships in every Android app. Null when the instance has none.
+    var firebase: InstanceFirebase?
 
     enum CodingKeys: String, CodingKey {
         case applicationId = "application_id"
         case minimumVersion = "minimum_version"
+        case firebase
     }
 }
 
@@ -876,6 +879,21 @@ struct InstanceDescription: Codable, Sendable, Hashable {
         case signIn = "sign_in"
         case content
         case home
+    }
+}
+
+/// The public values of a Firebase project, as its settings page gives them for one Android app.
+struct InstanceFirebase: Codable, Sendable, Hashable {
+    var projectId: String
+    var appId: String
+    var apiKey: String
+    var senderId: String
+
+    enum CodingKeys: String, CodingKey {
+        case projectId = "project_id"
+        case appId = "app_id"
+        case apiKey = "api_key"
+        case senderId = "sender_id"
     }
 }
 
@@ -1147,6 +1165,60 @@ struct RatePoint: Codable, Sendable, Hashable {
         case source
         case observedAt = "observed_at"
         case observedBy = "observed_by"
+    }
+}
+
+/// Off, on, or on but Apple or Google has said the phone can no longer be reached.
+enum OperatorAlertsState: String, Codable, Sendable, Hashable, CaseIterable {
+    case off = "off"
+    case on = "on"
+    case notReaching = "not_reaching"
+    /// A value this build doesn't know, from a newer instance.
+    case unknown = "\u{0}unknown"
+
+    init(from decoder: Decoder) throws {
+        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+    }
+}
+
+/// Alerts on one operator's phone: whether the instance can send any, which are on, and until when.
+struct OperatorAlerts: Codable, Sendable, Hashable {
+    /// Whether this instance can send to this phone's platform at all.
+    var offered: Bool
+    /// Off, on, or on but Apple or Google has said the phone can no longer be reached.
+    var state: OperatorAlertsState
+    var kinds: [OperatorAlertChoice]
+    /// When alerts end unless the phone signs in again. Null while they are off.
+    var until: String?
+    var lastAlertAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case offered
+        case state
+        case kinds
+        case until
+        case lastAlertAt = "last_alert_at"
+    }
+}
+
+/// One choice on a phone's Alerts page, with the words for its switch.
+struct OperatorAlertChoice: Codable, Sendable, Hashable {
+    var kind: OperatorAlertKind
+    /// "The engine stops being ready".
+    var label: String
+    var on: Bool
+}
+
+/// Something an operator's phone can choose to be told about. The names are the ones Status uses.
+enum OperatorAlertKind: String, Codable, Sendable, Hashable, CaseIterable {
+    case engineNotReady = "engine_not_ready"
+    case jobsFailing = "jobs_failing"
+    case reportsWaiting = "reports_waiting"
+    /// A value this build doesn't know, from a newer instance.
+    case unknown = "\u{0}unknown"
+
+    init(from decoder: Decoder) throws {
+        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
     }
 }
 

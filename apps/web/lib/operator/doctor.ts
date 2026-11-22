@@ -4,6 +4,7 @@ import type { SystemCheck } from "@livepeer/operator-console";
 
 import { env } from "../env";
 import { instance } from "../instance";
+import { pushSetup } from "../push";
 
 async function probe(url: URL, token?: string): Promise<number> {
   try {
@@ -33,6 +34,13 @@ export async function runDoctor(): Promise<SystemCheck[]> {
 
   const secret = env("SESSION_SECRET") ?? "";
   add("SESSION_SECRET", secret.length >= 32 || mockOnly, secret.length >= 32 ? "set" : mockOnly ? "development default (mock-only)" : "missing", "Set a 32+ character SESSION_SECRET in .env");
+
+  // Alerts to operators' phones are optional: no credentials is fine, half-set or unreadable ones are not.
+  if (instance().surfaces.mobileConsole === true) {
+    const setup = pushSetup();
+    add("Alerts to iPhone", setup.ios.state !== "problem", setup.ios.state === "none" ? "not set up (optional)" : setup.ios.detail, "Set APNS_KEY (the .p8 file as base64 on one line), APNS_KEY_ID and APNS_TEAM_ID in .env, and mobile.ios.bundleId in the config");
+    add("Alerts to Android", setup.android.state !== "problem", setup.android.state === "none" ? "not set up (optional)" : setup.android.detail, "Set FCM_SERVICE_ACCOUNT (the service account's JSON as base64 on one line) in .env, and mobile.android.firebase in the config from the same Firebase project");
+  }
 
   if (mockOnly) {
     add("Engine", true, "skipped in mock-only mode");

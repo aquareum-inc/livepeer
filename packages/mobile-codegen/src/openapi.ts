@@ -59,7 +59,7 @@ for (const operation of operations) {
   const properties = input.properties ?? {};
   const required = new Set(input.required ?? []);
   const inPath = [...operation.path.matchAll(/\{(\w+)\}/g)].map((match) => match[1] as string);
-  const takesBody = operation.method === "POST" || operation.method === "PATCH";
+  const takesBody = operation.method === "POST" || operation.method === "PUT" || operation.method === "PATCH";
   const rest = Object.keys(properties).filter((name) => !inPath.includes(name));
 
   const parameters = [
@@ -106,7 +106,7 @@ const document = {
       ...(rewrite(schemas) as Record<string, Json>),
       Error: {
         type: "object",
-        properties: { error: { type: "object", properties: { status: { type: "number" }, message: { type: "string" }, code: { type: "string", description: "A stable reason a client can act on: signed_out, mobile_off, account_required, sign_in_expired; for the console on a phone: mobile_console_off, web_only, locked, proof_required, operator_session, operator_device_required, rate_limited." } }, required: ["status", "message"], additionalProperties: false } },
+        properties: { error: { type: "object", properties: { status: { type: "number" }, message: { type: "string" }, code: { type: "string", description: "A stable reason a client can act on: signed_out, mobile_off, account_required, sign_in_expired; for the console on a phone: mobile_console_off, web_only, locked, proof_required, operator_session, operator_device_required, rate_limited, alerts_not_offered, alerts_off." } }, required: ["status", "message"], additionalProperties: false } },
         required: ["error"],
         additionalProperties: false,
       },

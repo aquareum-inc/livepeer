@@ -100,6 +100,7 @@ const STATUS_TONE: Record<string, "neutral" | "live" | "warn"> = {
   revoked: "warn",
   exhausted: "warn",
   blocked: "warn",
+  not_reaching: "warn",
   refunded: "neutral",
   failed_after_payment: "warn",
 };

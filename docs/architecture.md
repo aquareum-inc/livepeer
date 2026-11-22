@@ -165,6 +165,33 @@ holds it:
   `packages/mobile-codegen` generates them into a separate `OperatorAPI` (Swift) and `OperatorApi` (Kotlin)
   that take an operator transport, and every change takes an `OperatorProof` argument.
 
+**Alerts to operators' phones** (`docs/mobile/plan.md` §18.9; the server half is built, the apps are not) tell
+a phone that something needs its operator and where to look. Nothing can be done from a notification.
+
+- *What triggers one.* `apps/web/lib/alerts/decide.ts` is the rules as one pure step: what was known, one
+  observation, what to send. The engine not ready on two checks a minute apart (and "ready again" after two
+  good ones, to the phones that were told); Status's own failing-jobs rule starting; a report being filed;
+  a phone being enrolled. The sentences are Status's (`ATTENTION` in `operations.ts`), and
+  `alerts/compose.ts` builds every notification from a closed list of them, with at most a count.
+- *Who notices.* `apps/web/instrumentation.ts` starts one watcher per server process
+  (`alerts/watcher.ts`): the only thing in the instance that runs between requests. Each minute, while the
+  console is offered on phones and some phone has alerts on, it reads the engine's health, and every five
+  minutes recent jobs, through `buildReaderClient()`: the operator client with the reader token and no admin
+  token. A lease in `DATA_DIR/operator-alerts.json` keeps a second process quiet. Reports and enrolments are
+  raised where they happen (`report_character`, `create_operator_device_session`) and sent without holding
+  up the request.
+- *Where a push token lives.* On the phone's operator device session record, sealed with `SESSION_SECRET`,
+  set only by `operator_set_alerts`, which needs a proof bound to that push token. It is never answered,
+  logged or written to the audit log, and it ends with the record, however that ends. A phone whose console
+  has idled out is kept, signed out, to its 30-day end while alerts still reach it.
+- *Sending.* `apps/web/lib/push` has one `PushSender` interface and three implementations with no
+  dependency: APNs over `node:http2` with a signed ES256 token, Firebase Cloud Messaging's HTTP v1 API as a
+  service account, and one that only records to `DATA_DIR/push-outbox.json`, which mock-only mode always
+  uses. Credentials are environment variables (`APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`,
+  `FCM_SERVICE_ACCOUNT`); the Android app's public Firebase values are config (`mobile.android.firebase`) and
+  are served in `get_instance`. A dead push token is dropped and the phone shows as not reached; refused
+  credentials are remembered for the System page; every send is an `alert` entry in the audit log.
+
 State the instance keeps itself lives in `apps/web/lib/data`: a `StateStore` interface and a JSON file in
 `DATA_DIR` behind it, until the instance has a database. Device sessions use it, and so does
 `apps/web/lib/moderation`: reports of shared characters, what each person blocked, and what the operator took

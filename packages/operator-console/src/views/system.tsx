@@ -25,9 +25,11 @@ export interface SystemViewProps {
   phones: OperatorPhonesProps;
   /** What those phones did and were refused, newest first. */
   phoneActivity: OperatorAuditEntry[];
+  /** Whether the instance can send alerts to each kind of phone. Null while the console isn't offered on phones. */
+  alerts: Array<{ to: string; detail: string }> | null;
 }
 
-export function SystemView({ health, healthError, provider, versions, checks, dataSources, sources, phones, phoneActivity }: SystemViewProps) {
+export function SystemView({ health, healthError, provider, versions, checks, dataSources, sources, phones, phoneActivity, alerts }: SystemViewProps) {
   const passing = checks.filter((check) => check.ok).length;
   return (
     <ConsolePage title="System" description="Whether the instance, the engine and the payment provider are connected and healthy." sources={sources}>
@@ -40,6 +42,7 @@ export function SystemView({ health, healthError, provider, versions, checks, da
               ["Cost sync", health ? health.cost_sync_error ?? ago(health.cost_sync_at) : "unknown"],
               ["Allocation mode", health?.allocation_mode ?? "unknown"],
               ["Payment provider", `${provider.name} (${provider.id})`],
+              ...(alerts ?? []).map((entry) => [`Alerts to ${entry.to}`, entry.detail]),
             ].map(([term, value]) => (
               <div key={String(term)} className="flex min-h-9 items-center justify-between gap-4 px-4 py-1.5">
                 <dt className="text-muted-foreground">{term}</dt>

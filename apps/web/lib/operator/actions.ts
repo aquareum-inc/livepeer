@@ -1,6 +1,6 @@
 "use server";
 
-import type { AccessKey, BillingSettings, CharacterReport, CapabilitySetting, CreditPack, EngineJob, Grant, OperatorDeviceSession, Payment, Plan, TopUpRange } from "@livepeer/api-client";
+import type { AccessKey, BillingSettings, CharacterReport, CapabilitySetting, CreditPack, EngineJob, Grant, OperatorPhone, Payment, Plan, TopUpRange } from "@livepeer/api-client";
 import { EngineError } from "@livepeer/api-client";
 import type { InstanceSettings } from "@livepeer/operator-console";
 import { revalidatePath } from "next/cache";
@@ -151,14 +151,14 @@ async function revoker() {
 }
 
 /** Revokes one operator phone; answers with the phones still enrolled. */
-export async function revokeOperatorPhoneAction(id: string): Promise<OperatorDeviceSession[]> {
+export async function revokeOperatorPhoneAction(id: string): Promise<OperatorPhone[]> {
   operatorDevices().revoke(id, await revoker());
   revalidatePath("/operator", "layout");
   return operatorDevices().list();
 }
 
 /** Revokes every operator phone; answers with the phones still enrolled. */
-export async function revokeAllOperatorPhonesAction(): Promise<OperatorDeviceSession[]> {
+export async function revokeAllOperatorPhonesAction(): Promise<OperatorPhone[]> {
   operatorDevices().revokeAll(await revoker());
   revalidatePath("/operator", "layout");
   return operatorDevices().list();

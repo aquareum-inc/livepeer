@@ -686,6 +686,8 @@ data class InstanceDescriptionMobileIos(
 data class InstanceDescriptionMobileAndroid(
     @SerialName("application_id") val applicationId: String,
     @SerialName("minimum_version") val minimumVersion: String? = null,
+    /** What the Android app starts Firebase Cloud Messaging with, to be given an address for alerts. None of it is secret: it ships in every Android app. Null when the instance has none. */
+    @SerialName("firebase") val firebase: InstanceFirebase? = null,
 )
 
 /** The native apps built for this instance. Sign-in returns only to these; an app not listed can't sign in. */
@@ -746,6 +748,15 @@ data class InstanceDescription(
     @SerialName("sign_in") val signIn: InstanceDescriptionSignIn,
     @SerialName("content") val content: InstanceDescriptionContent,
     @SerialName("home") val home: InstanceDescriptionHome,
+)
+
+/** The public values of a Firebase project, as its settings page gives them for one Android app. */
+@Serializable
+data class InstanceFirebase(
+    @SerialName("project_id") val projectId: String,
+    @SerialName("app_id") val appId: String,
+    @SerialName("api_key") val apiKey: String,
+    @SerialName("sender_id") val senderId: String,
 )
 
 /** A way to sign in that an instance can offer. */
@@ -974,6 +985,62 @@ data class RatePoint(
     @SerialName("observed_at") val observedAt: String,
     @SerialName("observed_by") val observedBy: String,
 )
+
+/** Off, on, or on but Apple or Google has said the phone can no longer be reached. */
+@Serializable(with = OperatorAlertsState.Serializer::class)
+enum class OperatorAlertsState(val value: String) {
+    Off("off"),
+    On("on"),
+    NotReaching("not_reaching"),
+
+    /** A value this build doesn't know, from a newer instance. */
+    Unknown("");
+
+    object Serializer : KSerializer<OperatorAlertsState> {
+        override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("OperatorAlertsState", PrimitiveKind.STRING)
+        override fun deserialize(decoder: Decoder): OperatorAlertsState = decoder.decodeString().let { value -> entries.firstOrNull { it.value == value } ?: Unknown }
+        override fun serialize(encoder: Encoder, value: OperatorAlertsState) = encoder.encodeString(value.value)
+    }
+}
+
+/** Alerts on one operator's phone: whether the instance can send any, which are on, and until when. */
+@Serializable
+data class OperatorAlerts(
+    /** Whether this instance can send to this phone's platform at all. */
+    @SerialName("offered") val offered: Boolean,
+    /** Off, on, or on but Apple or Google has said the phone can no longer be reached. */
+    @SerialName("state") val state: OperatorAlertsState,
+    @SerialName("kinds") val kinds: List<OperatorAlertChoice>,
+    /** When alerts end unless the phone signs in again. Null while they are off. */
+    @SerialName("until") val until: String? = null,
+    @SerialName("last_alert_at") val lastAlertAt: String? = null,
+)
+
+/** One choice on a phone's Alerts page, with the words for its switch. */
+@Serializable
+data class OperatorAlertChoice(
+    @SerialName("kind") val kind: OperatorAlertKind,
+    /** "The engine stops being ready". */
+    @SerialName("label") val label: String,
+    @SerialName("on") val on: Boolean,
+)
+
+/** Something an operator's phone can choose to be told about. The names are the ones Status uses. */
+@Serializable(with = OperatorAlertKind.Serializer::class)
+enum class OperatorAlertKind(val value: String) {
+    EngineNotReady("engine_not_ready"),
+    JobsFailing("jobs_failing"),
+    ReportsWaiting("reports_waiting"),
+
+    /** A value this build doesn't know, from a newer instance. */
+    Unknown("");
+
+    object Serializer : KSerializer<OperatorAlertKind> {
+        override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("OperatorAlertKind", PrimitiveKind.STRING)
+        override fun deserialize(decoder: Decoder): OperatorAlertKind = decoder.decodeString().let { value -> entries.firstOrNull { it.value == value } ?: Unknown }
+        override fun serialize(encoder: Encoder, value: OperatorAlertKind) = encoder.encodeString(value.value)
+    }
+}
 
 /** A value for the phone's key to sign, once, before it expires. */
 @Serializable

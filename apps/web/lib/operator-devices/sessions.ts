@@ -2,8 +2,9 @@ import "server-only";
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-import type { OperatorChallenge, OperatorDeviceSession, OperatorDeviceToken, OperatorUnlock } from "@livepeer/api-client";
+import type { OperatorAlertKind, OperatorChallenge, OperatorDeviceSession, OperatorDeviceToken, OperatorPhone, OperatorUnlock } from "@livepeer/api-client";
 
+import { seal, unseal } from "../auth/seal";
 import type { Identity } from "../auth/types";
 import type { AuditActor, AuditLog } from "./audit";
 import { confirmMessage, inputHash, readPublicKey, signed, unlockMessage } from "./proof";
@@ -27,11 +28,33 @@ export const MAX_FAILED_PROOFS = 5;
 export const REQUESTS_PER_MINUTE = 120;
 /** Nonces one session may have waiting; asking for more drops the oldest. */
 const MAX_PENDING_CHALLENGES = 8;
+/** A phone is told this long before its alerts end with its session. */
+export const ALERTS_WARNING_DAYS = 3;
 /** Last-used times are written at most this often, so every request doesn't rewrite the file. */
 const TOUCH_MS = 60 * 60 * 1000;
 const DAY_MS = 86_400_000;
 
 type Platform = OperatorDeviceRecord["platform"];
+
+/** A phone to send an alert to. The push token is unsealed only to be handed to Apple or Google. */
+export interface AlertTarget {
+  sessionId: string;
+  userId: string;
+  name: string;
+  deviceName: string;
+  platform: Platform;
+  environment: "production" | "development";
+  pushToken: string;
+}
+
+/** Where alerts stand on one phone. */
+export interface PhoneAlertState {
+  state: OperatorPhone["alerts"];
+  kinds: OperatorAlertKind[];
+  /** When they end unless the phone signs in again. */
+  until: string | null;
+  lastAlertAt: string | null;
+}
 
 export interface OperatorDeviceSessions {
   /** Called at the end of an operator's native sign-in. Null for anyone the provider doesn't mark as an operator. */
@@ -50,8 +73,34 @@ export interface OperatorDeviceSessions {
   unlock(session: OperatorDeviceRecord, nonce: string, signature: string): OperatorUnlock | null;
   /** Whether `proof` (`<nonce>.<signature>`) is this phone's, unused, in time and for exactly this operation and input. */
   prove(session: OperatorDeviceRecord, operation: string, input: Record<string, unknown>, proof: string): boolean;
-  /** Every operator phone, most recently used first. */
-  list(): OperatorDeviceSession[];
+  /**
+   * Every operator phone, most recently used first. A phone whose console has idled out stays on the list,
+   * marked signed out, for as long as alerts still reach it.
+   */
+  list(): OperatorPhone[];
+  /** Where alerts stand on a phone. */
+  alerts(session: OperatorDeviceRecord): PhoneAlertState;
+  /**
+   * Turns alerts on for these kinds at this push token, or off with no kinds. A push token belongs to one
+   * phone: any other session that held it loses it, so a phone that signed in again is never told twice.
+   */
+  setAlerts(session: OperatorDeviceRecord, input: { kinds: OperatorAlertKind[]; pushToken: string | null; environment: "production" | "development" }): PhoneAlertState;
+  /** Whether any phone has alerts on, so the watcher knows there is someone to tell. */
+  anyAlerts(): boolean;
+  /**
+   * The phones to tell: those that chose `kind`, or with null every phone with alerts on. `except` leaves a
+   * session out; `only` keeps to the sessions named.
+   */
+  alertTargets(kind: OperatorAlertKind | null, filter?: { except?: string; only?: readonly string[] }): AlertTarget[];
+  /** Apple or Google said a phone's push token is dead: it is forgotten, and the phone shows as not reached. */
+  dropPushToken(sessionId: string): void;
+  /** Notes that alerts reached these phones just now. */
+  alerted(sessionIds: readonly string[]): void;
+  /**
+   * The phones whose alerts end within a few days and haven't been told, and those whose alerts ended with
+   * their session just now. Each is answered once.
+   */
+  alertEndings(): { warn: Array<AlertTarget & { daysLeft: number }>; ended: AlertTarget[] };
   /** The phone signs itself out of the console. */
   end(session: OperatorDeviceRecord): boolean;
   /** An operator revokes a phone from the web console. */
@@ -72,6 +121,8 @@ function same(a: string, b: string): boolean {
 
 const actorOf = (record: OperatorDeviceRecord): AuditActor => ({ userId: record.userId, name: record.name, deviceId: record.id, deviceName: record.deviceName });
 
+const endOf = (record: OperatorDeviceRecord) => Date.parse(record.createdAt) + ABSOLUTE_DAYS * DAY_MS;
+
 export function toOperatorDeviceSession(record: OperatorDeviceRecord): OperatorDeviceSession {
   return {
     id: record.id,
@@ -82,9 +133,16 @@ export function toOperatorDeviceSession(record: OperatorDeviceRecord): OperatorD
     created_at: record.createdAt,
     last_used_at: record.lastUsedAt,
     last_unlocked_at: record.lastUnlockedAt,
-    expires_at: new Date(Date.parse(record.createdAt) + ABSOLUTE_DAYS * DAY_MS).toISOString(),
+    expires_at: new Date(endOf(record)).toISOString(),
   };
 }
+
+const alertState = (record: OperatorDeviceRecord): PhoneAlertState => ({
+  state: !record.alerts ? "off" : record.alerts.pushSealed ? "on" : "not_reaching",
+  kinds: record.alerts?.kinds ?? [],
+  until: record.alerts ? new Date(endOf(record)).toISOString() : null,
+  lastAlertAt: record.alerts?.lastAlertAt ?? null,
+});
 
 /**
  * Operator device sessions: what lets an operator's phone open the console. A separate record, token and
@@ -95,7 +153,36 @@ export function toOperatorDeviceSession(record: OperatorDeviceRecord): OperatorD
  */
 export function operatorDeviceSessions(store: OperatorDeviceStore, secret: string, audit: AuditLog, now: () => number = Date.now): OperatorDeviceSessions {
   const hash = (value: string) => createHmac("sha256", secret).update(value).digest("base64url");
-  const live = (record: OperatorDeviceRecord) => Date.parse(record.lastUsedAt) + IDLE_DAYS * DAY_MS > now() && Date.parse(record.createdAt) + ABSOLUTE_DAYS * DAY_MS > now();
+  const used = (record: OperatorDeviceRecord) => Date.parse(record.lastUsedAt) + IDLE_DAYS * DAY_MS > now();
+  const within = (record: OperatorDeviceRecord) => endOf(record) > now();
+  /** Whether the token still opens the console. */
+  const live = (record: OperatorDeviceRecord) => used(record) && within(record);
+  /**
+   * Whether the record stays. A phone whose console idled out is kept to its absolute end while alerts still
+   * reach it: alerts would otherwise stop on exactly the instances where nothing is wrong and nobody looks.
+   * Its token opens nothing; it is listed, and can be revoked.
+   */
+  const kept = (record: OperatorDeviceRecord) => within(record) && (used(record) || Boolean(record.alerts?.pushSealed));
+  const reachable = (record: OperatorDeviceRecord) => within(record) && Boolean(record.alerts?.pushSealed);
+
+  /** Unseals the push tokens of the records given. One that no longer unseals (the secret changed) is dropped. */
+  const targetsOf = (records: OperatorDeviceRecord[]): AlertTarget[] => {
+    const unreadable: string[] = [];
+    const targets = records.flatMap((record): AlertTarget[] => {
+      const pushToken = record.alerts?.pushSealed ? unseal<string>(record.alerts.pushSealed, secret) : null;
+      if (typeof pushToken !== "string") {
+        unreadable.push(record.id);
+        return [];
+      }
+      return [{ sessionId: record.id, userId: record.userId, name: record.name, deviceName: record.deviceName, platform: record.platform, environment: record.alerts?.environment ?? "production", pushToken }];
+    });
+    if (unreadable.length > 0) {
+      store.update((contents) => {
+        for (const record of contents.sessions) if (unreadable.includes(record.id)) record.alerts = null;
+      });
+    }
+    return targets;
+  };
   const windows = new Map<string, { start: number; count: number }>();
 
   /** Removes sessions and what was waiting for them. */
@@ -176,8 +263,9 @@ export function operatorDeviceSessions(store: OperatorDeviceStore, secret: strin
           lastUnlockedAt: null,
           unlockedUntil: 0,
           failedProofs: 0,
+          alerts: null,
         };
-        const lapsed = new Set(contents.sessions.filter((entry) => !live(entry)).map((entry) => entry.id));
+        const lapsed = new Set(contents.sessions.filter((entry) => !kept(entry)).map((entry) => entry.id));
         contents.sessions = contents.sessions.filter((entry) => !lapsed.has(entry.id));
         contents.challenges = contents.challenges.filter((entry) => !lapsed.has(entry.sessionId));
         contents.sessions.push(record);
@@ -267,9 +355,76 @@ export function operatorDeviceSessions(store: OperatorDeviceStore, secret: strin
     list() {
       return store
         .read()
-        .sessions.filter(live)
+        .sessions.filter(kept)
         .sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt))
-        .map(toOperatorDeviceSession);
+        .map((record) => {
+          const alerts = alertState(record);
+          return { ...toOperatorDeviceSession(record), alerts: alerts.state, alerts_until: alerts.until, signed_out: !used(record) };
+        });
+    },
+
+    alerts: alertState,
+
+    setAlerts(session, { kinds, pushToken, environment }) {
+      const stamp = new Date(now()).toISOString();
+      const pushHash = pushToken ? hash(`push\n${pushToken}`) : null;
+      return store.update((contents) => {
+        const record = contents.sessions.find((entry) => entry.id === session.id);
+        if (!record) return alertState({ ...session, alerts: null });
+        if (kinds.length === 0 || !pushToken || !pushHash) {
+          record.alerts = null;
+          return alertState(record);
+        }
+        for (const other of contents.sessions) if (other.id !== record.id && other.alerts?.pushHash === pushHash) other.alerts = null;
+        record.alerts = { kinds: [...kinds], pushSealed: seal(pushToken, secret), pushHash, environment, setAt: stamp, lastAlertAt: record.alerts?.lastAlertAt ?? null, warnedAt: null };
+        return alertState(record);
+      });
+    },
+
+    anyAlerts: () => store.read().sessions.some(reachable),
+
+    alertTargets(kind, filter = {}) {
+      return targetsOf(
+        store
+          .read()
+          .sessions.filter((record) => reachable(record) && (kind === null || record.alerts?.kinds.includes(kind)) && record.id !== filter.except && (!filter.only || filter.only.includes(record.id))),
+      );
+    },
+
+    dropPushToken(sessionId) {
+      store.update((contents) => {
+        const record = contents.sessions.find((entry) => entry.id === sessionId);
+        if (record?.alerts) record.alerts.pushSealed = null;
+      });
+    },
+
+    alerted(sessionIds) {
+      if (sessionIds.length === 0) return;
+      const stamp = new Date(now()).toISOString();
+      store.update((contents) => {
+        for (const record of contents.sessions) if (record.alerts && sessionIds.includes(record.id)) record.alerts.lastAlertAt = stamp;
+      });
+    },
+
+    alertEndings() {
+      const warning = ALERTS_WARNING_DAYS * DAY_MS;
+      const holding = store.read().sessions.filter((record) => record.alerts?.pushSealed);
+      const ended = holding.filter((record) => !within(record));
+      // A phone that turned alerts on inside the last few days saw the date on its Alerts page, and isn't told again.
+      const warn = holding.filter((record) => within(record) && endOf(record) - now() <= warning && !record.alerts?.warnedAt && Date.parse(record.alerts?.setAt ?? "") < endOf(record) - warning);
+      if (ended.length === 0 && warn.length === 0) return { warn: [], ended: [] };
+      const answer = {
+        warn: targetsOf(warn).map((target) => ({ ...target, daysLeft: Math.max(1, Math.ceil((endOf(warn.find((record) => record.id === target.sessionId) as OperatorDeviceRecord) - now()) / DAY_MS)) })),
+        ended: targetsOf(ended),
+      };
+      const stamp = new Date(now()).toISOString();
+      store.update((contents) => {
+        for (const record of contents.sessions) {
+          if (ended.some((entry) => entry.id === record.id)) record.alerts = null;
+          else if (record.alerts && warn.some((entry) => entry.id === record.id)) record.alerts.warnedAt = stamp;
+        }
+      });
+      return answer;
     },
 
     end(session) {

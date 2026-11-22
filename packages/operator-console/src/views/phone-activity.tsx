@@ -1,4 +1,4 @@
-import type { OperatorAuditEntry, OperatorDeviceSession } from "@livepeer/api-client";
+import type { OperatorAuditEntry, OperatorPhone } from "@livepeer/api-client";
 import type { ComponentType } from "react";
 
 import { ago, dateTime } from "../components/format";
@@ -6,12 +6,12 @@ import { Panel, Status } from "../components/parts";
 import { Table } from "../components/table";
 import type { ConsoleLinkProps } from "../shell/console-shell";
 
-const EVENT: Record<OperatorAuditEntry["event"], string> = { sign_in: "signed in", sign_out: "signed out", unlock: "unlocked", change: "changed", refused: "refused", revoked: "revoked" };
+const EVENT: Record<OperatorAuditEntry["event"], string> = { sign_in: "signed in", sign_out: "signed out", unlock: "unlocked", change: "changed", refused: "refused", revoked: "revoked", alert: "alerted" };
 
-/** What operators' phones did and were refused, newest first. */
+/** What operators' phones did, were refused and were told, newest first. */
 export function PhoneActivityPanel({ entries }: { entries: OperatorAuditEntry[] }) {
   return (
-    <Panel title="Phone activity" description="Every sign-in, unlock, change, refusal and revocation from an operator's phone. Kept on this server.">
+    <Panel title="Phone activity" description="Every sign-in, unlock, change, refusal and revocation from an operator's phone, and every alert sent to one. Kept on this server.">
       <Table
         caption="Phone activity"
         rows={entries}
@@ -40,7 +40,7 @@ export function PhoneActivityPanel({ entries }: { entries: OperatorAuditEntry[] 
 }
 
 /** Said on every console page for two days after a phone is enrolled, so an addition nobody expected is seen. */
-export function NewPhoneNotice({ phones, Link }: { phones: OperatorDeviceSession[]; Link: ComponentType<ConsoleLinkProps> }) {
+export function NewPhoneNotice({ phones, Link }: { phones: OperatorPhone[]; Link: ComponentType<ConsoleLinkProps> }) {
   const [latest] = phones;
   if (!latest) return null;
   return (

@@ -51,7 +51,7 @@ export async function runOperation(operation: Operation, context: Context, input
 
   try {
     const value = await operation.run(context, input);
-    context.audit.write("change", actor, { operation: operation.name, target: target(input), detail: describeChange(input) });
+    context.audit.write("change", actor, { operation: operation.name, target: target(input), detail: describeChange(operation.name, input) });
     return value;
   } catch (cause) {
     context.audit.write("change", actor, { operation: operation.name, target: target(input), detail: `failed: ${cause instanceof Error ? cause.message : "unknown"}`.slice(0, 200) });
@@ -59,8 +59,13 @@ export async function runOperation(operation: Operation, context: Context, input
   }
 }
 
-/** The decision a change carried, in the request's own words: "paused", "hidden". Never the whole input. */
-function describeChange(input: Record<string, unknown>): string | null {
+/**
+ * The decision a change carried, in the request's own words: "paused", "hidden", or which alerts were
+ * switched on. Never the whole input, and never a push token.
+ */
+function describeChange(operation: string, input: Record<string, unknown>): string | null {
+  // Only for the operation that takes kinds, and has checked them: an extra field on another change can't put words here.
+  if (operation === "operator_set_alerts") return Array.isArray(input.kinds) && input.kinds.length > 0 ? `alerts on: ${input.kinds.map(String).join(", ")}`.slice(0, 120) : "alerts off";
   const value = input.status ?? input.outcome;
   return typeof value === "string" ? value.slice(0, 40) : null;
 }

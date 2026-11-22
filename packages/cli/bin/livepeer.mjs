@@ -7,7 +7,7 @@
  *   5 the bundle failed to start · 6 the health check did not pass
  */
 import { spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createPrivateKey, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -227,6 +227,60 @@ async function probe(url, headers = {}) {
   }
 }
 
+/** A variable that holds a whole file as base64 on one line, read back as text. Null when it isn't that. */
+function fileFromBase64(value) {
+  if (!/^[A-Za-z0-9+/=_-]+$/.test(value)) return null;
+  const text = Buffer.from(value, "base64").toString("utf8");
+  return text.includes("\uFFFD") || text.trim() === "" ? null : text;
+}
+
+function privateKey(pem) {
+  try {
+    return createPrivateKey(pem);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the instance can send alerts to operators' iPhones: the same reading as apps/web/lib/push. Alerts
+ * are optional, so no credentials at all is fine; half-set or unreadable ones are not. Never prints a value.
+ */
+function alertsToIphone(env, config) {
+  const [key, keyId, teamId] = [env.APNS_KEY, env.APNS_KEY_ID, env.APNS_TEAM_ID];
+  if (!key && !keyId && !teamId) return { ok: true, detail: "not set up (optional)" };
+  const missing = [!key && "APNS_KEY", !keyId && "APNS_KEY_ID", !teamId && "APNS_TEAM_ID"].filter(Boolean);
+  if (missing.length > 0) return { ok: false, detail: `${missing.join(" and ")} missing` };
+  if (!/^[A-Z0-9]{10}$/.test(keyId)) return { ok: false, detail: "APNS_KEY_ID isn't a 10-character key id" };
+  if (!/^[A-Z0-9]{10}$/.test(teamId)) return { ok: false, detail: "APNS_TEAM_ID isn't a 10-character team id" };
+  const pem = fileFromBase64(key);
+  const parsed = pem ? privateKey(pem) : null;
+  if (!parsed) return { ok: false, detail: "APNS_KEY isn't the .p8 file as base64" };
+  if (parsed.asymmetricKeyType !== "ec" || parsed.asymmetricKeyDetails?.namedCurve !== "prime256v1") return { ok: false, detail: "APNS_KEY isn't an APNs authentication key (P-256)" };
+  if (!config?.mobile?.ios?.bundleId) return { ok: false, detail: "an APNs key is set but mobile.ios.bundleId is not" };
+  return { ok: true, detail: `key ${keyId} for ${config.mobile.ios.bundleId}` };
+}
+
+/** The same for Android phones: the Firebase service account, and the project's public values in the config. */
+function alertsToAndroid(env, config) {
+  if (!env.FCM_SERVICE_ACCOUNT) return { ok: true, detail: "not set up (optional)" };
+  const text = fileFromBase64(env.FCM_SERVICE_ACCOUNT);
+  let account = null;
+  try {
+    account = text ? JSON.parse(text) : null;
+  } catch {
+    account = null;
+  }
+  if (!account || account.type !== "service_account" || typeof account.project_id !== "string" || typeof account.client_email !== "string" || typeof account.private_key !== "string") {
+    return { ok: false, detail: "FCM_SERVICE_ACCOUNT isn't a service account's JSON file as base64" };
+  }
+  if (privateKey(account.private_key)?.asymmetricKeyType !== "rsa") return { ok: false, detail: "FCM_SERVICE_ACCOUNT's key isn't an RSA private key" };
+  const firebase = config?.mobile?.android?.firebase;
+  if (!firebase) return { ok: false, detail: "a service account is set but mobile.android.firebase is not" };
+  if (firebase.projectId !== account.project_id) return { ok: false, detail: `the service account is for ${account.project_id}, the config names ${firebase.projectId}` };
+  return { ok: true, detail: `project ${firebase.projectId}` };
+}
+
 async function doctor(options) {
   const dir = path.resolve(options.dir ?? ROOT);
   const checks = [];
@@ -260,6 +314,13 @@ async function doctor(options) {
   const mockOnly = env.MOCK_ONLY === "1" || env.MOCK_ONLY === "true";
   add("env file", existsSync(envFile), existsSync(envFile) ? ".env present" : ".env not found", "Run: livepeer setup --no-start");
   add("SESSION_SECRET", (env.SESSION_SECRET ?? "").length >= 32, (env.SESSION_SECRET ?? "") ? "set" : "missing", "Run: livepeer setup --no-start (generates one), or set a 32+ character value in .env");
+  // Alerts to operators' phones go straight to Apple and Google with the publisher's own credentials.
+  if (config?.surfaces?.mobileConsole === true) {
+    const iphone = mockOnly ? { ok: true, detail: "recorded, not sent (mock-only mode)" } : alertsToIphone(env, config);
+    const android = mockOnly ? { ok: true, detail: "recorded, not sent (mock-only mode)" } : alertsToAndroid(env, config);
+    add("alerts to iPhone", iphone.ok, iphone.detail, "Set APNS_KEY (the .p8 file as base64 on one line: base64 -i AuthKey_XXXXXXXXXX.p8), APNS_KEY_ID and APNS_TEAM_ID in .env, and mobile.ios.bundleId in the config");
+    add("alerts to Android", android.ok, android.detail, "Set FCM_SERVICE_ACCOUNT (the service account's JSON as base64 on one line) in .env, and mobile.android.firebase in the config from the same Firebase project");
+  }
   if (mockOnly) {
     add("engine keys", true, "not needed in mock-only mode");
   } else {

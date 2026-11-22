@@ -104,6 +104,18 @@ class OperatorApi(private val transport: OperatorTransport) {
     suspend fun operatorListCapabilities(): List<OfferedCapability> =
         transport.send(ListSerializer(OfferedCapability.serializer()), "GET", "/operator/capabilities", query = emptyMap(), body = null, proof = null)
 
+    /** Operator, from the console on a phone: this phone's alerts. Whether the instance can send any to it, which kinds are on, and when they end. Needs the console unlocked on this phone. */
+    suspend fun operatorGetAlerts(): OperatorAlerts =
+        transport.send(OperatorAlerts.serializer(), "GET", "/operator/device/alerts", query = emptyMap(), body = null, proof = null)
+
+    /** Operator, from the console on a phone: choose which alerts reach this phone and where to send them. No kinds turns alerts off and forgets where the phone is reached. Needs its own proof: a nonce for exactly this input, signed after a face or fingerprint. */
+    suspend fun operatorSetAlerts(kinds: List<String>, pushToken: String? = null, environment: String? = null, proof: OperatorProof): OperatorAlerts =
+        transport.send(OperatorAlerts.serializer(), "PUT", "/operator/device/alerts", query = emptyMap(), body = mapOf("kinds" to JsonArray(kinds.map(::JsonPrimitive)), "push_token" to pushToken?.let { JsonPrimitive(it) }, "environment" to environment?.let { JsonPrimitive(it) }), proof = proof)
+
+    /** Operator, from the console on a phone: send this phone a test alert, to see that alerts reach it. Three an hour. Needs its own proof: a nonce for exactly this input, signed after a face or fingerprint. */
+    suspend fun operatorTestAlert(proof: OperatorProof): Done =
+        transport.send(Done.serializer(), "POST", "/operator/device/alerts/test", query = emptyMap(), body = null, proof = proof)
+
     companion object {
         /** The input of operatorSetUserStatus as the instance hashes it, for createOperatorChallenge. */
         fun operatorSetUserStatusInput(id: String, status: String, applicationId: String? = null): Map<String, JsonElement> =
@@ -112,6 +124,14 @@ class OperatorApi(private val transport: OperatorTransport) {
         /** The input of operatorResolveReport as the instance hashes it, for createOperatorChallenge. */
         fun operatorResolveReportInput(id: String, outcome: String): Map<String, JsonElement> =
             mapOf("id" to JsonPrimitive(id), "outcome" to JsonPrimitive(outcome)).filterNotNullValues()
+
+        /** The input of operatorSetAlerts as the instance hashes it, for createOperatorChallenge. */
+        fun operatorSetAlertsInput(kinds: List<String>, pushToken: String? = null, environment: String? = null): Map<String, JsonElement> =
+            mapOf("kinds" to JsonArray(kinds.map(::JsonPrimitive)), "push_token" to pushToken?.let { JsonPrimitive(it) }, "environment" to environment?.let { JsonPrimitive(it) }).filterNotNullValues()
+
+        /** The input of operatorTestAlert as the instance hashes it, for createOperatorChallenge. */
+        fun operatorTestAlertInput(): Map<String, JsonElement> =
+            emptyMap()
 
         private fun Map<String, JsonElement?>.filterNotNullValues(): Map<String, JsonElement> = mapNotNull { (key, value) -> value?.let { key to it } }.toMap()
     }
