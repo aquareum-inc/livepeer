@@ -33,6 +33,32 @@ import org.livepeer.app.api.DeviceKeyFailure
 import org.livepeer.app.api.OperatorProofs
 import org.livepeer.app.api.TokenStore
 import org.livepeer.app.console.ChangeOutcome
+import org.livepeer.app.console.ConsoleRead
+import org.livepeer.app.console.ReadState
+import org.livepeer.app.console.blocked
+import org.livepeer.app.console.day
+import org.livepeer.app.console.factLine
+import org.livepeer.app.console.fee
+import org.livepeer.app.console.host
+import org.livepeer.app.console.lines
+import org.livepeer.app.console.marginLine
+import org.livepeer.app.console.markup
+import org.livepeer.app.console.money
+import org.livepeer.app.console.paid
+import org.livepeer.app.console.peak
+import org.livepeer.app.console.periodCost
+import org.livepeer.app.console.periodMargin
+import org.livepeer.app.console.periodRevenue
+import org.livepeer.app.console.priceLine
+import org.livepeer.app.console.allowanceLine
+import org.livepeer.app.console.unallocated
+import org.livepeer.app.console.usd
+import org.livepeer.app.generated.ComputeOperator
+import org.livepeer.app.generated.ComputeOperatorStatus
+import org.livepeer.app.generated.CostSummary
+import org.livepeer.app.generated.Grant
+import org.livepeer.app.generated.OfferedCapability
+import org.livepeer.app.generated.Plan
 import org.livepeer.app.console.ConsoleFormat
 import org.livepeer.app.console.ConsoleSession
 import org.livepeer.app.console.ConsoleSession.Stage
@@ -768,5 +794,101 @@ class ConsoleTest {
         assertFalse(adam.copy(allocation = null).canSuspend || adam.copy(allocation = null).canResume)
         assertEquals("Suspend Adam Soffer", UserStatus.Paused.prompt(adam))
         assertEquals("Resume Adam Soffer", UserStatus.Active.prompt(adam))
+    }
+
+    // The numbers (stage 2)
+
+    @Test
+    fun theStageTwoReadsDecode() {
+        val costs = fixture("operator_costs", CostSummary.serializer())
+        assertTrue(costs.byClass.delivered.usd > 0)
+        assertTrue(costs.byApp.getValue("text-to-video").delivered != null)
+        assertEquals("grt_launch", fixture("operator_list_grants", ListSerializer(Grant.serializer())).first().id)
+        assertTrue(fixture("operator_list_plans", ListSerializer(Plan.serializer())).all { it.name.isNotEmpty() })
+        assertTrue(fixture("operator_list_compute", ListSerializer(ComputeOperator.serializer())).none { it.status == ComputeOperatorStatus.Unknown })
+        assertEquals("Text to video", fixture("operator_list_capabilities", ListSerializer(OfferedCapability.serializer())).first().name)
+        assertEquals(14, fixture("operator_overview", OverviewStats.serializer()).series.size)
+    }
+
+    @Test
+    fun networkCostIsListedByCapabilityDearestFirst() {
+        val costs = fixture("operator_costs", CostSummary.serializer())
+        val lines = costs.lines
+        assertEquals("text-to-video", lines.first().app)
+        val totals = lines.map { it.delivered + it.lost }
+        assertEquals(totals.sortedDescending(), totals)
+        assertTrue(totals.all { it > 0 })
+        // Failed after payment and unknown outcomes are both money that bought nothing.
+        assertEquals(0.4, lines.first().lost, 0.000001)
+        assertTrue(lines.first().showsLost)
+        assertFalse(lines.first().copy(lost = 0.00002).showsLost)
+        assertEquals(15.398559 + 0.922029, costs.paid, 0.000001)
+        assertEquals("$0.0003", ConsoleFormat.fee(0.000319))
+        assertEquals("$7.20", ConsoleFormat.fee(7.2))
+        assertEquals("$0.00", ConsoleFormat.fee(0.0))
+    }
+
+    @Test
+    fun revenueAddsUpOverTheDaysShown() {
+        val stats = fixture("operator_overview", OverviewStats.serializer())
+        assertEquals(stats.periodRevenue - stats.periodCost, stats.periodMargin, 0.000001)
+        assertTrue(stats.peak >= stats.series.last().revenueUsd)
+        assertEquals("$1.50\u00A0· 25%", marginLine(1.5, 6.0))
+        assertEquals("$0.00", marginLine(0.0, 0.0))
+        assertEquals("8 Nov", ConsoleFormat.day("2026-11-08", Locale.UK))
+        assertEquals("soon", ConsoleFormat.day("soon"))
+        assertEquals("Failed\u00A0· 1\u00A0attempt", factLine(listOf("Failed", "1 attempt")))
+    }
+
+    @Test
+    fun grantsPlansComputeAndCapabilitiesInWords() {
+        val grant = fixture("operator_list_grants", ListSerializer(Grant.serializer())).first()
+        assertEquals("$500.00", ConsoleFormat.money(grant.funded))
+        assertEquals(290.0, grant.unallocated, 0.0)
+        assertEquals("12 XYZ", ConsoleFormat.money(grant.funded.copy(amount = "12", currency = "XYZ")))
+
+        val plan = fixture("operator_list_plans", ListSerializer(Plan.serializer())).first()
+        assertEquals("$18.00 a month", plan.priceLine)
+        assertEquals("2,000 credits a month", plan.allowanceLine)
+        assertEquals("default markup", ConsoleFormat.markup(plan.markup))
+        assertEquals("1.25×", ConsoleFormat.markup(1.25))
+
+        val compute = fixture("operator_list_compute", ListSerializer(ComputeOperator.serializer())).first()
+        assertEquals("orch-ams-2.example.test", compute.host)
+        assertEquals(listOf("67 jobs", "5 failed", "1.7 s median"), compute.facts)
+        assertFalse(compute.blocked)
+        assertEquals(listOf("1 job", "5 failed"), compute.copy(jobs = 1.0, medianResponseMs = null).facts)
+
+        val capability = fixture("operator_list_capabilities", ListSerializer(OfferedCapability.serializer())).first()
+        assertEquals("Offered" to Tone.Good, capability.standing)
+        assertEquals(listOf("5 of 6 ready", "default markup"), capability.facts)
+        assertEquals("No one ready" to Tone.Bad, capability.copy(readyCount = 0.0).standing)
+        assertEquals("Not offered" to Tone.Quiet, capability.copy(enabled = false).standing)
+        assertEquals("not seen lately", capability.copy(stale = true).facts.last())
+    }
+
+    @Test
+    fun aReadKeepsWhatItHasAndSaysWhyTheFirstOneFailed() = runBlocking {
+        var answer: () -> Int = { throw IOException() }
+        val read = ConsoleRead("It didn't load.") { answer() }
+        assertEquals(Phase.Loading, read.state.value.phase)
+        read.load()
+        assertEquals(Phase.Failed("It didn't load."), read.state.value.phase)
+
+        answer = { throw ApiError(500, "The engine didn't answer.") }
+        read.load()
+        assertEquals(Phase.Failed("The engine didn't answer."), read.state.value.phase)
+
+        answer = { 7 }
+        read.load()
+        assertEquals(ReadState(7, Phase.Loaded), read.state.value)
+
+        // A later failure keeps what is shown; a lock says nothing here at all.
+        answer = { throw IOException() }
+        read.load()
+        assertEquals(ReadState(7, Phase.Loaded), read.state.value)
+        answer = { throw ApiError(401, "Locked.", "locked") }
+        read.load()
+        assertEquals(ReadState(7, Phase.Loaded), read.state.value)
     }
 }

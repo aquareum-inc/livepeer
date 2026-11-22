@@ -20,12 +20,12 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ListAlt
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.MonitorHeart
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.People
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -52,7 +52,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -108,6 +107,8 @@ class Console(val session: ConsoleSession) {
             }
         },
     )
+
+    val more = MoreModels(session)
 
     /** Reads every screen again: what was on screen before the console was last locked may be minutes old. */
     suspend fun load() = coroutineScope {
@@ -251,9 +252,10 @@ private enum class ConsoleTab(val route: String, val label: String, val icon: Im
     Jobs("jobs", "Jobs", Icons.AutoMirrored.Rounded.ListAlt),
     Reports("reports", "Reports", Icons.Rounded.Flag),
     Users("users", "Users", Icons.Rounded.People),
+    More("more", "More", Icons.Rounded.MoreHoriz),
 }
 
-/** The console's own navigation bar: is anything wrong, what ran, what was reported, who uses it. */
+/** The console's own navigation bar: is anything wrong, what ran, what was reported, who uses it, and the numbers. */
 @Composable
 private fun ConsoleTabs(console: Console, back: (() -> Unit)?) {
     val palette = LocalPalette.current
@@ -311,7 +313,8 @@ private fun ConsoleTabs(console: Console, back: (() -> Unit)?) {
                                     Icon(tab.icon, contentDescription = null)
                                 }
                             },
-                            label = { Text(tab.label, maxLines = 1, softWrap = false, autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 12.sp * LocalDensity.current.fontScale.coerceAtMost(1.3f))) },
+                            // Five labels share the bar, so they stop growing where the bar's other text does and stay one size.
+                            label = { Text(tab.label, maxLines = 1, softWrap = false, style = barStyle(TypeSize.Caption, FontWeight.Medium)) },
                             modifier = if (count > 0) Modifier.semantics { contentDescription = "${tab.label}, $count waiting" } else Modifier,
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = palette.foreground,
@@ -349,6 +352,19 @@ private fun ConsoleTabs(console: Console, back: (() -> Unit)?) {
             composable(ConsoleTab.Jobs.route) { JobsScreen(console.jobs, back) { navigation.navigate("job/${Uri.encode(it.id)}") } }
             composable(ConsoleTab.Reports.route) { ReportsScreen(console.reports, back) { navigation.navigate("report/${Uri.encode(it.id)}") } }
             composable(ConsoleTab.Users.route) { UsersScreen(console.users, back) { navigation.navigate("user/${Uri.encode(it.actorId)}") } }
+            composable(ConsoleTab.More.route) { MoreScreen(back) { navigation.navigate("more/${it.route}") } }
+            composable("more/{page}") { entry ->
+                when (MorePage.entries.firstOrNull { it.route == entry.arguments?.getString("page") }) {
+                    MorePage.Revenue -> RevenueScreen(console.more.overview, unlocks, leave)
+                    MorePage.Costs -> CostsScreen(console.more.costs, unlocks, leave)
+                    MorePage.Grants -> GrantsScreen(console.more.grants, unlocks, leave)
+                    MorePage.Plans -> PlansScreen(console.more.plans, unlocks, leave)
+                    MorePage.Compute -> ComputeScreen(console.more.compute, unlocks, leave)
+                    MorePage.Offered -> OfferedScreen(console.more.offered, unlocks, leave)
+                    MorePage.System -> SystemScreen(console.more.health, unlocks, leave)
+                    null -> Spacer(Modifier.fillMaxSize())
+                }
+            }
             composable("job/{id}") { entry ->
                 val id = entry.arguments?.getString("id").orEmpty()
                 // The job as it was when its row was pressed: a refresh of the list doesn't change the page under the reader.

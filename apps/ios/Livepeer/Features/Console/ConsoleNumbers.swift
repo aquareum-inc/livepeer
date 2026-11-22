@@ -62,6 +62,8 @@ nonisolated extension CostSummary {
         /// Paid for work that failed after payment went, or whose outcome isn't known.
         let lost: Double
         var id: String { app }
+        /// Whether the lost part is large enough to write: at least a hundredth of a cent.
+        var showsLost: Bool { lost >= 0.00005 }
     }
 
     /// Capabilities by what they cost, dearest first; ones that cost nothing are left out.

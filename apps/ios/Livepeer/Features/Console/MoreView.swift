@@ -228,7 +228,7 @@ struct CostsView: View {
                 ConsoleSection(title: "By capability") {
                     ForEach(Array(summary.lines.enumerated()), id: \.element.id) { index, line in
                         if index > 0 { RowRule() }
-                        NamedRow(name: ConsoleFormat.name(ofApp: line.app), facts: [ConsoleFormat.fee(line.delivered) + " delivered"] + (line.lost > 0 ? [ConsoleFormat.fee(line.lost) + " failed"] : []))
+                        NamedRow(name: ConsoleFormat.name(ofApp: line.app), facts: [ConsoleFormat.fee(line.delivered) + " delivered"] + (line.showsLost ? [ConsoleFormat.fee(line.lost) + " failed"] : []))
                     }
                 }
             }

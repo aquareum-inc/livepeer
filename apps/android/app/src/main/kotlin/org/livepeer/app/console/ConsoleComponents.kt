@@ -37,7 +37,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -45,6 +47,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -186,10 +189,16 @@ fun ConsolePage(title: String?, onBack: (() -> Unit)?, content: @Composable Colu
     }
 }
 
-/** A pushed page: a back button, a short title, and room for one action; then what it shows, scrolling. */
+/**
+ * A pushed page: a back button, a short title, and room for one action; then what it shows, scrolling. A page
+ * that can be read again takes [refresh], and pulling it down runs it.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DetailPage(title: String, onBack: () -> Unit, action: @Composable () -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
+fun DetailPage(title: String, onBack: () -> Unit, action: @Composable () -> Unit = {}, refresh: (suspend () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val palette = LocalPalette.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var refreshing by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(palette.background).windowInsetsPadding(WindowInsets.statusBars)) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(48.dp).pressable(round = true, onClick = onBack).semantics { contentDescription = "Back" }, contentAlignment = Alignment.Center) {
@@ -198,11 +207,18 @@ fun DetailPage(title: String, onBack: () -> Unit, action: @Composable () -> Unit
             BasicText(title, style = barStyle(TypeSize.Lead, FontWeight.SemiBold).copy(color = palette.foreground), modifier = Modifier.weight(1f).padding(start = 4.dp).semantics { heading() })
             action()
         }
-        Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp).navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
-            content = content,
-        )
+        val page: @Composable () -> Unit = {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp).navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+                content = content,
+            )
+        }
+        if (refresh == null) {
+            page()
+        } else {
+            PullToRefreshBox(isRefreshing = refreshing, onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } }, modifier = Modifier.fillMaxSize()) { page() }
+        }
     }
 }
 
