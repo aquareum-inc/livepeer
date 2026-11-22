@@ -1469,7 +1469,8 @@ Run for real, against a mock-only instance on this machine:
 
 Not done, and not proved:
 
-- **Neither real sender has spoken to Apple or Google.** Hosts, headers, field names and error words are from
+- **Neither real sender has spoken to Apple or Google.** (Firebase's has since: see "real alerts on Android"
+  below.) Hosts, headers, field names and error words are from
   memory of their documentation and still marked *verify* in 18.9. Check each with real credentials before
   relying on it; the dead-or-wrong rule above depends on those error words.
 - **The security review** (18.9's review point) was run on 22 November 2026 at the owner's request, with
@@ -1653,6 +1654,54 @@ Still not seen on Android: **an alert arriving**, in the background, in front an
 tapping one; the channels in the system's settings; the blocked state; anything on a real phone. An alert
 arriving needs an instance that isn't mock-only with `FCM_SERVICE_ACCOUNT` set, which is also the first time
 the Firebase sender will have spoken to Google.
+
+**22 November 2026, night: real alerts on Android, through Google.** The owner put the development Firebase
+project's service account in `.env` (`FCM_SERVICE_ACCOUNT`). The same emulator, still enrolled with alerts on,
+was pointed at an instance that was not mock-only, so the Firebase sender sent for the first time. The
+instance ran with no admin token: nothing in the run could change the engine. Alerts from the watcher were
+brought on by editing what it remembers in `DATA_DIR/operator-alerts.json`, not by filing reports.
+
+- **The Firebase sender works as written.** Google gave the service account an access token and took the
+  message as `fcmMessage` builds it. The audit log read "test: sent" and the message reached the phone within
+  a second.
+- **A dead push token is dropped.** A phone enrolled earlier with a made-up push token got Google's
+  `UNREGISTERED`; the audit log read "phone not reachable (UNREGISTERED)" and its push token was removed.
+- **Decision 19 is settled for an emulator: run-time values are enough.** With the app's process not running,
+  the system started it for Firebase's receiver. Firebase's own start failed, as expected with no resource
+  file ("no default options were found"), the app started it from the description it keeps, and the
+  notification showed. A real phone from a maker that restricts background starts is still worth one look.
+- **In the background**: "Livepeer · 1 report is waiting" in the shade, on the Reports channel
+  (`android-console-alert-shade-dark.jpg`).
+- **In front, with the console closed**: `AlertsService` showed the same notification itself
+  (`android-console-alert-in-front-dark.jpg`, the bell in the status bar).
+- **With the console open and unlocked**: the test alert arrived and nothing was shown.
+- **The engine's alert**: "The engine is ready again", on the Service channel at high importance, beside the
+  report's at default importance (`android-console-alert-engine-dark.jpg`).
+- **A tapped alert**: the console's cover with the fingerprint prompt "Unlock the console", then Reports for
+  the report's alert (`android-console-alert-opened-reports-dark.jpg`) and Status for the engine's. From a
+  cold start and from the background. Tapped within a minute of leaving an open console, it went straight to
+  Reports with no match, which is stage 1's rule that a minute away doesn't lock it.
+- **The channels** are registered as designed: a Console group holding Service (high), Reports and Console
+  sign-ins (default).
+
+Found, and not mended:
+
+- **A tap on a stack of alerts opens the user app, not the console.** When two alerts were waiting, the system
+  put them under a summary of its own. Tapping that stack while it was collapsed opened the app with a plain
+  launch, carrying no place, and cleared both; the console did not come up. A tap on either alert's own row
+  works. The system's summary is not ours to set while Firebase shows the notification for us, which it does
+  whenever the app is not in front. The mend is to send Android the alert as data only, have `AlertsService`
+  show every one, and post a summary of our own that opens the console at Status. That changes what the
+  server sends, so it is for the owner to decide.
+- **The title repeats the app's name.** Expanded, a notification reads "Livepeer · now", then "Livepeer", then
+  the sentence, because the title is the instance's name and so is the app. Leaving the title off on Android
+  would read better; iOS needs it.
+- **A phone the instance can't send to is tried every time.** With no APNs key, each alert wrote "failed (not
+  set up)" to the audit log for each iPhone that had turned alerts on. Harmless, but it is noise: such a phone
+  could be skipped with one line the first time and none after.
+
+Still not seen on Android: the banner that drops down for the engine's alert (it had gone before the screen
+was read), the blocked state, a second alert of a kind replacing the first, and anything on a real phone.
 
 Found in passing, in stage 1's code, and left alone:
 
