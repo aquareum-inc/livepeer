@@ -77,6 +77,8 @@ rule: `CLAUDE.md` and the plan hold those.
 - **Reading notifications from a shell**: `adb shell dumpsys notification --noredact` has each one's tag,
   channel, title and text; `adb shell cmd statusbar expand-notifications` opens the shade.
 - **On iOS the simulator gives a push token** with no paid team, so alerts can be turned on end to end there.
+  With `APNS_KEY`, `APNS_KEY_ID` and `APNS_TEAM_ID` set and an instance that isn't mock-only, Apple's sandbox
+  delivers a real alert to that simulator; the App ID must exist in the key's team.
   Taps on the system's own notification list from a driving tool are unreliable; opening an alert may need a hand.
 
 ## iOS simulator

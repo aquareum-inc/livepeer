@@ -1469,8 +1469,8 @@ Run for real, against a mock-only instance on this machine:
 
 Not done, and not proved:
 
-- **Neither real sender has spoken to Apple or Google.** (Firebase's has since: see "real alerts on Android"
-  below.) Hosts, headers, field names and error words are from
+- **Neither real sender has spoken to Apple or Google.** (Both have since: see "real alerts on Android" and "a real alert
+  on iOS" below.) Hosts, headers, field names and error words are from
   memory of their documentation and still marked *verify* in 18.9. Check each with real credentials before
   relying on it; the dead-or-wrong rule above depends on those error words.
 - **The security review** (18.9's review point) was run on 22 November 2026 at the owner's request, with
@@ -1731,6 +1731,24 @@ only while the app is in front (`ConsoleSession.away`). iOS never had this: it a
 is in front.
 
 Still as it was: the title repeats the app's name, and a phone the instance can't send to is tried every time.
+
+**22 November 2026, night: a real alert on iOS, through Apple.** The owner's Apple Developer membership came
+through. An App ID for `org.livepeer.app.dev` with Push Notifications and one APNs key (sandbox and
+production, team scoped) were made, and the key and its two ids went into `.env`. The simulator from before,
+still enrolled with alerts on and the app not running, was sent a report's alert by the instance that really
+sends.
+
+- **The APNs sender works as written.** Apple's sandbox accepted the request first time: the signed token, the
+  headers and the payload are right. The audit log read "sent".
+- **It arrived on the simulator**: a banner, "Livepeer · 1 report is waiting"
+  (`ios-console-alert-apns-banner-dark.jpg`). A simulator's push token is good for Apple's sandbox, with a
+  build that no team signed.
+- **A dead push token is dropped.** A phone enrolled earlier with a made-up push token got Apple's
+  `BadDeviceToken`; the audit log read "phone not reachable (BadDeviceToken)" and its push token was removed.
+
+Still not seen on iOS: opening the console from a tapped alert (a tap on the banner from the driving tool
+did nothing, as before), time-sensitive delivery for the engine's alert, Apple's production service, a second
+alert of a kind replacing the first through Apple, and anything on a real iPhone.
 
 Found in passing, in stage 1's code, and left alone:
 
