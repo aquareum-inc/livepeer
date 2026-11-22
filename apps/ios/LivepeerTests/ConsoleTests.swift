@@ -376,6 +376,8 @@ struct ConsoleTests {
         #expect(lines.allSatisfy { $0.delivered + $0.lost > 0 })
         // Failed after payment and unknown outcomes are both money that bought nothing.
         #expect(abs((lines.first?.lost ?? 0) - 0.4) < 0.000001)
+        #expect(lines.first?.showsLost == true)
+        #expect(CostSummary.Line(app: "chat", delivered: 0.0003, lost: 0.00002).showsLost == false)
         #expect(abs(costs.paid - (15.398559 + 0.922029)) < 0.000001)
         #expect(ConsoleFormat.fee(0.000319) == "$0.0003")
         #expect(ConsoleFormat.fee(7.2) == "$7.20")

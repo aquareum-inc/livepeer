@@ -804,8 +804,8 @@ Not done, and why:
 
 ## 18. The operator console on phones (proposed 21 November 2026)
 
-Status: **accepted; the server and stage 1 on iOS and Android are built, and stage 2 on the server and iOS
-(18.8). The owner approved the design sample on 21 November 2026. Stage 2 on Android is next.** The owner accepted every recommendation in
+Status: **accepted; stages 1 and 2 are built on the server, iOS and Android (18.8). The owner approved the
+design sample on 21 November 2026. Stage 3 (push alerts) is next, and needs push credentials from the owner.** The owner accepted every recommendation in
 18.7. This section reverses two earlier lines: the console "stays on the
 web" (section 1) and device sessions "always have the `user` role" (section 5). Decisions the owner still
 has to make are in 18.7. A builder can start from this section alone, after reading sections 4, 5 and 7.
@@ -1352,8 +1352,9 @@ screenshots are `docs/screenshots/mobile/ios-console-{more,revenue,costs,grants,
 - **Fixtures** for the five new reads were captured over HTTP from a mock-only instance by a script that
   enrolled a key and unlocked as a phone would.
 
-Run for real in the simulator against a mock-only instance: every page in dark, the main ones in light and at
-the largest text size, and the line at the foot of More opening the web console in Safari.
+Run for real in the simulator against a mock-only instance: every page in dark; More, Revenue and margin,
+Network cost and What's offered in light; More and What's offered at the largest text size; and the line at
+the foot of More opening the web console in Safari.
 
 Still open after step 5:
 
@@ -1363,3 +1364,22 @@ Still open after step 5:
 - **A compute operator's and a capability's own page.** The lists carry everything today; a page each would
   want jobs by operator and by capability, which no marked read gives.
 - **The device key on real phones**, on both platforms, as above.
+
+**21 November 2026: step 6, stage 2 on Android.** The same More destination and seven read-only pages, from
+the iOS build's behaviour and words. Design decision 95; screenshots are
+`docs/screenshots/mobile/android-console-{more,revenue,costs,grants,plans,compute,offered,system}-*.jpg`, each in
+dark, light and at the largest font size.
+
+- `ConsoleRead` is the one model behind every page, as on iOS: read on opening, on each unlock and on pull to
+  refresh; a later failure keeps what is shown; a lock says nothing on the page. Pushed pages
+  (`DetailPage`) can now be pulled down to read again.
+- The derived values and words (`ConsoleNumbers.kt`) are tested against the same fixtures as iOS.
+- The console's five tab labels are set at the bar's size (decision 95). The user app's four still use the
+  older sizing, which lets each label pick its own size at the largest font setting.
+- A lost fee under a hundredth of a cent is left off a capability's line, on iOS too.
+
+Run for real in an emulator (API 37) against a mock-only instance: every page in dark, light and at the
+largest font size.
+
+Not seen on Android: the foot line opening the browser (it was seen on iOS), a page's failure and empty
+states (covered by unit tests of the model, not seen on screen), and anything on a real phone.
