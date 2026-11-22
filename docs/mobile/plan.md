@@ -1590,6 +1590,30 @@ Not seen on iOS:
 Notes for whoever tests next: the simulator gives a push token without a paid team; a mock instance's iOS
 outbox entry is a file `xcrun simctl push <udid> <bundle id> <file>` accepts as it is.
 
+**22 November 2026, later: more of iOS seen.** The Mac's disk was freed (two simulators and the iOS 27.1 runtime
+removed) and the simulator run was picked up again, with the build from before. Now seen, with screenshots:
+
+- **Light and the largest text size** (`ios-console-alerts-on-light.jpg`, `ios-console-alerts-on-largest-text.jpg`):
+  labels wrap beside their switches and nothing is clipped.
+- **Stopped.** With the push token marked dead on the instance, the page said "Alerts have stopped on this
+  phone." with the kinds as they were and Turn them back on; Status carried the line at its foot, and the
+  line led to the page (`ios-console-alerts-stopped-dark.jpg`, `ios-console-status-alerts-stopped-dark.jpg`).
+  Turning them back on, with Face ID, gave the instance a sealed push token again.
+- **Saving a change of kinds**: a switch moved, Save changes appeared, its tray named all three kinds, and
+  after Face ID the instance held them (`ios-console-alerts-edited-dark.jpg`, `ios-console-alerts-save-dark.jpg`).
+- **The turn-off tray**, in ink (`ios-console-alerts-turn-off-dark.jpg`). It was not confirmed.
+
+Still not seen on iOS: opening the console from a tapped alert. Four more attempts through the driving tool
+failed the same way: a tap on a banner or on the notification list doesn't open the app, and a late one lands
+on whatever is under the banner. Earlier this was mistaken for the app quitting; it had not. It needs a hand
+on the simulator, or a real phone. Also not seen: the blocked state, and "not set up".
+
+Found in passing, in stage 1's code, and left alone:
+
+- On a phone with no Face ID set up, the console's cover says "The console needs Face ID or Touch ID…" twice,
+  once in grey and once in red.
+- If the composer's keyboard is up when the console is opened, it stays up over the console's cover.
+
 ### 18.9 Stage 3: push alerts (specified and accepted 21 November 2026; server half built)
 
 Status: **accepted. The owner took all thirteen recommendations at its end on 21 November 2026. Step 1, the
