@@ -46,6 +46,25 @@
       "input": {},
       "canonical": "{}",
       "hash": "RBNvo1WzZ4oRRq0W9-hknpT7T8If536DEMBg9hyq_4o"
+    },
+    {
+      "input": {
+        "push_token": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "kinds": [
+          "engine_not_ready",
+          "reports_waiting"
+        ],
+        "environment": "development"
+      },
+      "canonical": "{\"environment\":\"development\",\"kinds\":[\"engine_not_ready\",\"reports_waiting\"],\"push_token\":\"5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\"}",
+      "hash": "JIgpMCcLEwpFITAKvDkgo6HouKTVKJBMKb2wxzPQePk"
+    },
+    {
+      "input": {
+        "kinds": []
+      },
+      "canonical": "{\"kinds\":[]}",
+      "hash": "t7kAyHL8AscoF_4U81qeigHiYUCzyiSVHP4R5qQRKeA"
     }
   ],
   "messages": {

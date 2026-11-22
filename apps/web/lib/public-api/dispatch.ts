@@ -59,8 +59,12 @@ export async function runOperation(operation: Operation, context: Context, input
   }
 }
 
-/** The decision a change carried, in the request's own words: "paused", "hidden". Never the whole input. */
+/**
+ * The decision a change carried, in the request's own words: "paused", "hidden", or which alerts were
+ * switched on. Never the whole input, and never a push token.
+ */
 function describeChange(input: Record<string, unknown>): string | null {
+  if (Array.isArray(input.kinds)) return (input.kinds.length === 0 ? "alerts off" : `alerts on: ${input.kinds.map(String).join(", ")}`).slice(0, 120);
   const value = input.status ?? input.outcome;
   return typeof value === "string" ? value.slice(0, 40) : null;
 }

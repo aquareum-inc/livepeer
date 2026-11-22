@@ -95,6 +95,27 @@ export interface InstanceConfig {
        * Older builds are asked to update.
        */
       minimumVersion?: string;
+      /**
+       * The Firebase project that sends this app its operator alerts, as the project's settings give it for the Android app. None of it is secret: the app is sent these and starts Firebase Cloud Messaging with them. The service account that sends is FCM_SERVICE_ACCOUNT in .env.
+       */
+      firebase?: {
+        /**
+         * The project id, as in the service account's project_id.
+         */
+        projectId: string;
+        /**
+         * The Android app's id in the project, such as 1:1234567890:android:0a1b2c3d4e5f.
+         */
+        appId: string;
+        /**
+         * The project's Android API key. It identifies the project; it authorises nothing by itself.
+         */
+        apiKey: string;
+        /**
+         * The project number.
+         */
+        senderId: string;
+      };
     };
   };
   /**

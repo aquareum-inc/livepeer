@@ -5,6 +5,7 @@ import { timingSafeEqual } from "node:crypto";
 import { quoteCredits, type ApiClient, type OperatorClient } from "@livepeer/api-client";
 import type { NextRequest } from "next/server";
 
+import { alerts } from "../alerts";
 import { apiFor } from "../api";
 import { SESSION_COOKIE, readSessionValue } from "../auth/session";
 import { devices, mobileEnabled } from "../devices";
@@ -98,5 +99,5 @@ export function carriesDeviceToken(request: NextRequest): boolean {
 
 /** Everything an operation is given besides its caller, built once per request. */
 export function requestContext(request: NextRequest, caller: Caller): Context {
-  return { ...caller, devices: devices(), operatorDevices: operatorDevices(), audit: operatorAudit(), moderation: moderation(), instance: describeInstance(requestOrigin(request)), labels: capabilityLabels, agentModelMenu, studioMediums, privacy: privacyDescription, quote: quoteCredits };
+  return { ...caller, devices: devices(), operatorDevices: operatorDevices(), audit: operatorAudit(), alerts: alerts(), moderation: moderation(), instance: describeInstance(requestOrigin(request)), labels: capabilityLabels, agentModelMenu, studioMediums, privacy: privacyDescription, quote: quoteCredits };
 }

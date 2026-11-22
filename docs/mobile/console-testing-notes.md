@@ -29,6 +29,26 @@ rule: `CLAUDE.md` and the plan hold those.
 - **Pausing the instance** to see loading rows: `kill -STOP <pid>` on the listener, act in the app, capture,
   then `kill -CONT <pid>`. Stopping it altogether shows Status's "Can't reach Livepeer."
 
+## Alerts (the server half; the apps' pages aren't built)
+
+- **A mock instance never contacts Apple or Google.** It records what it would have sent in
+  `<DATA_DIR>/push-outbox.json` (`.data/` at the repository root unless `DATA_DIR` says otherwise), newest
+  last, and offers alerts on both platforms. An iOS entry's `payload` is the APNs payload as it would be sent:
+  save it to a file and `xcrun simctl push <udid> org.livepeer.app.dev <file>` shows it in the simulator.
+- **The watcher starts with the server** and holds a lease in `<DATA_DIR>/operator-alerts.json`, which also
+  holds what is currently wrong. It checks once a minute, and only while some phone has alerts on.
+- **Seeing an alert without an app.** A phone has to enrol a key, unlock and confirm `operator_set_alerts` with
+  a proof; there is no way round that from a shell. A short Node script can stand in for the phone (sign in
+  as `sam@example.test` with `client=ios&purpose=operator`, post the code with a P-256 public key, sign the
+  nonces). The server half was run that way; `apps/web/lib/public-api/operator-phones.test.ts` does the same
+  through the route.
+- **Then:** file a report (above) to see "1 report is waiting" in the outbox; enrol a second phone to see "A
+  phone was added to the console"; `operator_test_alert` for "Alerts reach this phone." The mock engine is
+  always ready, so "The engine isn't ready" is only seen in the tests.
+- **States on the web's Operator phones panel** can be staged by editing `<DATA_DIR>/operator-device-sessions.json`:
+  a `lastUsedAt` more than 7 days old shows "Signed out · alerts until …"; `"pushSealed": null` shows "not
+  reaching".
+
 ## iOS simulator
 
 - **Point a build at another port** on the command line: `xcodebuild … INSTANCE_URL='http://localhost:<port>'`.

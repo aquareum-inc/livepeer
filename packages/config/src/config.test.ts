@@ -29,6 +29,17 @@ describe("presets", () => {
     expect(config.mobile).toEqual({ ios: { bundleId: "org.livepeer.app.dev" }, android: { applicationId: "org.livepeer.app.dev" } });
   });
 
+  it("takes a Firebase project's public values for the Android app, whole or not at all", () => {
+    const base = { name: "Phones", surfaces: { app: true, console: true, api: true, mcp: true, mobileConsole: true } };
+    const firebase = { projectId: "livepeer-test", appId: "1:1234567890:android:0a1b2c3d4e5f", apiKey: "AIzaSyTestTestTestTestTestTestTestTest", senderId: "1234567890" };
+    expect(validateConfig({ ...base, mobile: { android: { applicationId: "org.livepeer.app", firebase } } }).mobile?.android?.firebase).toEqual(firebase);
+    expect(validateConfig({ ...base, mobile: { android: { applicationId: "org.livepeer.app" } } }).mobile?.android?.firebase).toBeUndefined();
+    expect(() => validateConfig({ ...base, mobile: { android: { applicationId: "org.livepeer.app", firebase: { projectId: "livepeer-test" } } } })).toThrow();
+    expect(() => validateConfig({ ...base, mobile: { android: { applicationId: "org.livepeer.app", firebase: { ...firebase, appId: "not-an-app-id" } } } })).toThrow();
+    // A service account's private key has no place in the config file.
+    expect(() => validateConfig({ ...base, mobile: { android: { applicationId: "org.livepeer.app", firebase: { ...firebase, privateKey: "-----BEGIN PRIVATE KEY-----" } } } })).toThrow();
+  });
+
   it("adult content is off by default in both", () => {
     for (const name of PRESET_NAMES) expect(preset(name).content?.adultContent).toBe(false);
   });

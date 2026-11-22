@@ -127,6 +127,24 @@ struct OperatorAPI<Transport: OperatorTransport>: Sendable {
         try await transport.send("GET", "/operator/capabilities", query: [:], body: nil, proof: nil)
     }
 
+    /// Operator, from the console on a phone: this phone's alerts. Whether the instance can send any to it, which kinds are on, and when they end.
+    /// Needs the console unlocked on this phone.
+    func operatorGetAlerts() async throws -> OperatorAlerts {
+        try await transport.send("GET", "/operator/device/alerts", query: [:], body: nil, proof: nil)
+    }
+
+    /// Operator, from the console on a phone: choose which alerts reach this phone and where to send them. No kinds turns alerts off and forgets where the phone is reached.
+    /// Needs its own proof: a nonce for exactly this input, signed after a face or fingerprint.
+    func operatorSetAlerts(kinds: [String], pushToken: String? = nil, environment: String? = nil, proof: OperatorProof) async throws -> OperatorAlerts {
+        try await transport.send("PUT", "/operator/device/alerts", query: [:], body: ["kinds": .array(kinds.map { .string($0) }), "push_token": pushToken.map { .string($0) }, "environment": environment.map { .string($0) }], proof: proof)
+    }
+
+    /// Operator, from the console on a phone: send this phone a test alert, to see that alerts reach it. Three an hour.
+    /// Needs its own proof: a nonce for exactly this input, signed after a face or fingerprint.
+    func operatorTestAlert(proof: OperatorProof) async throws -> Done {
+        try await transport.send("POST", "/operator/device/alerts/test", query: [:], body: nil, proof: proof)
+    }
+
     /// The input of `operatorSetUserStatus` as the instance hashes it, for `createOperatorChallenge`.
     static func operatorSetUserStatusInput(id: String, status: String, applicationId: String? = nil) -> [String: JSONValue] {
         (["id": .string(id), "status": .string(status), "application_id": applicationId.map { .string($0) }] as [String: JSONValue?]).compactMapValues { $0 }
@@ -135,5 +153,15 @@ struct OperatorAPI<Transport: OperatorTransport>: Sendable {
     /// The input of `operatorResolveReport` as the instance hashes it, for `createOperatorChallenge`.
     static func operatorResolveReportInput(id: String, outcome: String) -> [String: JSONValue] {
         (["id": .string(id), "outcome": .string(outcome)] as [String: JSONValue?]).compactMapValues { $0 }
+    }
+
+    /// The input of `operatorSetAlerts` as the instance hashes it, for `createOperatorChallenge`.
+    static func operatorSetAlertsInput(kinds: [String], pushToken: String? = nil, environment: String? = nil) -> [String: JSONValue] {
+        (["kinds": .array(kinds.map { .string($0) }), "push_token": pushToken.map { .string($0) }, "environment": environment.map { .string($0) }] as [String: JSONValue?]).compactMapValues { $0 }
+    }
+
+    /// The input of `operatorTestAlert` as the instance hashes it, for `createOperatorChallenge`.
+    static func operatorTestAlertInput() -> [String: JSONValue] {
+        ([:] as [String: JSONValue?]).compactMapValues { $0 }
     }
 }

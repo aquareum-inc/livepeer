@@ -4,11 +4,23 @@ import type { Metadata } from "next";
 
 import release from "../../../../../release.config.json";
 
+import { alerts } from "@/lib/alerts";
 import { env } from "@/lib/env";
 import { mobileConsoleEnabled, operatorAudit, operatorDevices } from "@/lib/operator-devices";
 import { revokeAllOperatorPhonesAction, revokeOperatorPhoneAction } from "@/lib/operator/actions";
 import { operatorApi } from "@/lib/operator/client";
 import { runDoctor } from "@/lib/operator/doctor";
+import { pushSetup } from "@/lib/push";
+
+/** Whether alerts can be sent to each kind of phone, and whether Apple or Google last refused the instance's credentials. */
+function alertConnections(): Array<{ to: string; detail: string }> {
+  const setup = pushSetup();
+  const refused = alerts().refusals();
+  return ([["ios", "iPhone"], ["android", "Android"]] as const).map(([platform, to]) => {
+    const refusal = refused[platform];
+    return { to, detail: refusal ? `credentials refused ${new Date(refusal.at).toISOString().slice(0, 16).replace("T", " ")} UTC (${refusal.detail})` : setup[platform].state === "none" ? "not set up" : setup[platform].detail };
+  });
+}
 
 export const metadata: Metadata = { title: "System" };
 
@@ -41,6 +53,7 @@ export default async function SystemPage() {
       sources={[{ name: "getEngineHealth", source: healthSource }]}
       phones={{ phones: operatorDevices().list(), offered: mobileConsoleEnabled(), revoke: revokeOperatorPhoneAction, revokeAll: revokeAllOperatorPhonesAction }}
       phoneActivity={operatorAudit().list(200)}
+      alerts={mobileConsoleEnabled() ? alertConnections() : null}
     />
   );
 }

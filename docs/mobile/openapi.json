@@ -2964,6 +2964,162 @@
           }
         }
       }
+    },
+    "/operator/device/alerts": {
+      "get": {
+        "operationId": "operator_get_alerts",
+        "summary": "Operator, from the console on a phone: this phone's alerts. Whether the instance can send any to it, which kinds are on, and when they end.",
+        "x-operator": true,
+        "x-mobile": "read",
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAlerts"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "operator_set_alerts",
+        "summary": "Operator, from the console on a phone: choose which alerts reach this phone and where to send them. No kinds turns alerts off and forgets where the phone is reached.",
+        "x-operator": true,
+        "x-mobile": "confirm",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kinds": {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "engine_not_ready",
+                        "jobs_failing",
+                        "reports_waiting"
+                      ]
+                    },
+                    "description": "The kinds to switch on. Empty turns alerts off."
+                  },
+                  "push_token": {
+                    "type": "string",
+                    "description": "The address Apple or Google gave this phone for notifications. Needed unless kinds is empty."
+                  },
+                  "environment": {
+                    "enum": [
+                      "production",
+                      "development"
+                    ],
+                    "description": "iOS only: which of Apple's services issued push_token, from the build's aps-environment. Production unless said."
+                  }
+                },
+                "required": [
+                  "kinds"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAlerts"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operator/device/alerts/test": {
+      "post": {
+        "operationId": "operator_test_alert",
+        "summary": "Operator, from the console on a phone: send this phone a test alert, to see that alerts reach it. Three an hour.",
+        "x-operator": true,
+        "x-mobile": "confirm",
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Done"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4422,11 +4578,23 @@
                           "string",
                           "null"
                         ]
+                      },
+                      "firebase": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/components/schemas/InstanceFirebase"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "What the Android app starts Firebase Cloud Messaging with, to be given an address for alerts. None of it is secret: it ships in every Android app. Null when the instance has none."
                       }
                     },
                     "required": [
                       "application_id",
-                      "minimum_version"
+                      "minimum_version",
+                      "firebase"
                     ],
                     "additionalProperties": false
                   },
@@ -4531,6 +4699,31 @@
         ],
         "additionalProperties": false,
         "description": "What a client needs to know about an instance before anyone signs in: how it looks, what it serves and how to sign in. Read from the instance config, so there is no engine call behind it. URLs are absolute and theme colours are sRGB hex, so a client that can't read CSS can use them as they are."
+      },
+      "InstanceFirebase": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string"
+          },
+          "app_id": {
+            "type": "string"
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "sender_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "app_id",
+          "api_key",
+          "sender_id"
+        ],
+        "additionalProperties": false,
+        "description": "The public values of a Firebase project, as its settings page gives them for one Android app."
       },
       "SignInMethodName": {
         "type": "string",
@@ -4970,6 +5163,83 @@
           "observed_by"
         ],
         "additionalProperties": false
+      },
+      "OperatorAlerts": {
+        "type": "object",
+        "properties": {
+          "offered": {
+            "type": "boolean",
+            "description": "Whether this instance can send to this phone's platform at all."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "off",
+              "on",
+              "not_reaching"
+            ],
+            "description": "Off, on, or on but Apple or Google has said the phone can no longer be reached."
+          },
+          "kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorAlertChoice"
+            }
+          },
+          "until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When alerts end unless the phone signs in again. Null while they are off."
+          },
+          "last_alert_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "offered",
+          "state",
+          "kinds",
+          "until",
+          "last_alert_at"
+        ],
+        "additionalProperties": false,
+        "description": "Alerts on one operator's phone: whether the instance can send any, which are on, and until when."
+      },
+      "OperatorAlertChoice": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/OperatorAlertKind"
+          },
+          "label": {
+            "type": "string",
+            "description": "\"The engine stops being ready\"."
+          },
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "on"
+        ],
+        "additionalProperties": false,
+        "description": "One choice on a phone's Alerts page, with the words for its switch."
+      },
+      "OperatorAlertKind": {
+        "type": "string",
+        "enum": [
+          "engine_not_ready",
+          "jobs_failing",
+          "reports_waiting"
+        ],
+        "description": "Something an operator's phone can choose to be told about. The names are the ones Status uses."
       },
       "OperatorChallenge": {
         "type": "object",
@@ -5993,7 +6263,7 @@
               },
               "code": {
                 "type": "string",
-                "description": "A stable reason a client can act on: signed_out, mobile_off, account_required, sign_in_expired; for the console on a phone: mobile_console_off, web_only, locked, proof_required, operator_session, operator_device_required, rate_limited."
+                "description": "A stable reason a client can act on: signed_out, mobile_off, account_required, sign_in_expired; for the console on a phone: mobile_console_off, web_only, locked, proof_required, operator_session, operator_device_required, rate_limited, alerts_not_offered, alerts_off."
               }
             },
             "required": [

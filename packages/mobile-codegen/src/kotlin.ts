@@ -159,7 +159,7 @@ function method(operation: Operation): string {
 /** The whole input of a change, path values included: what the phone hashes when it asks for a nonce. */
 function confirmInput(operation: Operation): string {
   return `${docBlock(`The input of ${camel(operation.name)} as the instance hashes it, for createOperatorChallenge.`, "        ")}        fun ${camel(operation.name)}Input(${operation.parameters.map(argument).join(", ")}): Map<String, JsonElement> =
-            ${map(operation.parameters)}.filterNotNullValues()`;
+            ${operation.parameters.length === 0 ? "emptyMap()" : `${map(operation.parameters)}.filterNotNullValues()`}`;
 }
 
 const userOperations = operations.filter((operation) => !operation.operator);

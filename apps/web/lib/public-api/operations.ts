@@ -1,8 +1,8 @@
-import type { AgentModelEntry, ApiClient, CapabilityLabel, Character, Preferences, PrivacyDescription, ReportReason, DeviceSession, GenerationRequest, StudioMedium, DeviceToken, InstanceDescription, OfferedCapability, OperatorAttention, OperatorClient, OperatorStatus } from "@livepeer/api-client";
+import type { AgentModelEntry, ApiClient, CapabilityLabel, Character, Preferences, PrivacyDescription, ReportReason, DeviceSession, GenerationRequest, StudioMedium, DeviceToken, EngineJob, InstanceDescription, OfferedCapability, OperatorAlertKind, OperatorAlerts, OperatorAttention, OperatorClient, OperatorStatus } from "@livepeer/api-client";
 
 import type { Moderation } from "../moderation/moderation";
 import type { AuditLog } from "../operator-devices/audit";
-import type { OperatorDeviceSessions } from "../operator-devices/sessions";
+import type { OperatorDeviceSessions, PhoneAlertState } from "../operator-devices/sessions";
 import type { OperatorDeviceRecord } from "../operator-devices/store";
 
 type Schema = Record<string, unknown>;
@@ -28,6 +28,20 @@ export interface DeviceAccess {
   revokeAll(userId: string): number;
 }
 
+/** The instance's alerts to operators' phones, as the operations use them. */
+export interface AlertsAccess {
+  /** Whether the instance can send to a platform at all: it holds that platform's push credentials. */
+  offered(platform: "ios" | "android"): boolean;
+  /** Whether a push token looks like one of that platform's. */
+  accepts(platform: "ios" | "android", pushToken: string): boolean;
+  /** A new report was filed, and this many are waiting now. Phones are told without holding up the answer. */
+  reportFiled(waiting: number): void;
+  /** A phone was enrolled for the console. The other phones are told without holding up the answer. */
+  phoneAdded(sessionId: string): void;
+  /** Sends one phone a test. */
+  test(session: OperatorDeviceRecord): Promise<"sent" | "off" | "limited" | "not_delivered">;
+}
+
 export interface Context {
   /** How the caller authenticated. An operator device is held to the phone rules in `runOperation`. */
   via: Via;
@@ -43,6 +57,8 @@ export interface Context {
   operatorDevices: OperatorDeviceSessions;
   /** The record of what operators' phones did and were refused. */
   audit: AuditLog;
+  /** Alerts to operators' phones. */
+  alerts: AlertsAccess;
   /** Reports, blocks and characters taken down. */
   moderation: Moderation;
   /** This instance, as it describes itself to clients. */
@@ -69,7 +85,7 @@ export interface Operation {
   /** Tool name over MCP. */
   name: string;
   description: string;
-  method: "GET" | "POST" | "PATCH" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /** REST path under /api/v1; `{name}` segments become inputs. */
   path: string;
   input: Schema;
@@ -121,6 +137,22 @@ const operatorPhone = (context: Context): OperatorDeviceRecord => {
   if (!context.operatorDevice) throw new ApiError(403, "This needs the console's own session on a phone.", "operator_device_required");
   return context.operatorDevice;
 };
+
+/** What a phone can choose to be told, in the order and words its Alerts page shows. A kind added here needs no app release. */
+export const ALERT_CHOICES: ReadonlyArray<{ kind: OperatorAlertKind; label: string }> = [
+  { kind: "engine_not_ready", label: "The engine stops being ready" },
+  { kind: "jobs_failing", label: "Jobs are failing" },
+  { kind: "reports_waiting", label: "A report is waiting" },
+];
+
+/** A phone's alerts as its Alerts page reads them. It never holds the push token. */
+const alertsOf = (context: Context, session: OperatorDeviceRecord, state: PhoneAlertState): OperatorAlerts => ({
+  offered: context.alerts.offered(session.platform),
+  state: state.state,
+  kinds: ALERT_CHOICES.map((choice) => ({ ...choice, on: state.kinds.includes(choice.kind) })),
+  until: state.until,
+  last_alert_at: state.lastAlertAt,
+});
 
 /** Who is revoking a phone from the web console or the API, for the audit log. */
 const revoker = (context: Context) => ({ userId: context.account?.user.id ?? "operator_token", name: context.account?.user.name ?? "Operator API token", deviceId: null, deviceName: null });
@@ -230,10 +262,12 @@ export const OPERATIONS: Operation[] = [
     public: true,
     mcp: false,
     input: object({ code: text("The code from the sign-in callback"), verifier: text("The PKCE verifier whose challenge started the sign-in"), platform: { enum: ["ios", "android"] }, device_name: text("The phone's own name, shown in the list of operator phones"), public_key: text("The phone's P-256 public key, base64: the uncompressed point (iOS) or its SubjectPublicKeyInfo (Android)") }, ["code", "verifier", "platform", "public_key"]),
-    run: async ({ operatorDevices, instance }, input) => {
+    run: async ({ operatorDevices, instance, alerts }, input) => {
       if (!instance.surfaces.mobile_console) throw new ApiError(403, "This service doesn't offer its console on phones.", "mobile_console_off");
       const token = operatorDevices.redeemCode({ code: str(input, "code"), verifier: str(input, "verifier"), deviceName: str(input, "device_name"), platform: input.platform === "android" ? "android" : "ios", publicKey: str(input, "public_key") });
       if (!token) throw new ApiError(400, "That sign-in expired, was already used, or came without a usable key. Sign in again.", "sign_in_expired");
+      // Enrolling needs nothing from the web console, so every other operator's phone is told.
+      alerts.phoneAdded(token.device.id);
       return token;
     },
   },
@@ -403,7 +437,13 @@ export const OPERATIONS: Operation[] = [
       const found = await shared(context, str(input, "slug"));
       const reason = REPORT_REASONS.find((entry) => entry === input.reason);
       if (!reason) throw new ApiError(400, `reason is one of ${REPORT_REASONS.join(", ")}.`);
-      return context.moderation.report(user.id, found, reason, str(input, "note").trim().slice(0, 500) || null);
+      const waiting = () => context.moderation.reports().filter((entry) => entry.state === "open").length;
+      const before = waiting();
+      const report = context.moderation.report(user.id, found, reason, str(input, "note").trim().slice(0, 500) || null);
+      // Changing one's own open report is not a new report, and tells nobody.
+      const after = waiting();
+      if (after > before) context.alerts.reportFiled(after);
+      return report;
     },
   },
   {
@@ -588,7 +628,71 @@ export const OPERATIONS: Operation[] = [
       );
     },
   },
-  { name: "operator_list_devices", description: "Operator: the phones enrolled for the console, with who enrolled each and when it was last used and unlocked.", method: "GET", path: "/operator/devices", output: ["OperatorDeviceSession"], input: object({}), operator: true, run: async (context) => { operator(context); return context.operatorDevices.list(); } },
+  { name: "operator_list_devices", description: "Operator: the phones enrolled for the console, with who enrolled each, when it was last used and unlocked, and whether alerts reach it.", method: "GET", path: "/operator/devices", output: ["OperatorPhone"], input: object({}), operator: true, run: async (context) => { operator(context); return context.operatorDevices.list(); } },
+  {
+    name: "operator_get_alerts",
+    description: "Operator, from the console on a phone: this phone's alerts. Whether the instance can send any to it, which kinds are on, and when they end.",
+    method: "GET",
+    path: "/operator/device/alerts",
+    output: "OperatorAlerts",
+    input: object({}),
+    operator: true,
+    mobile: "read",
+    run: async (context) => {
+      const session = operatorPhone(context);
+      operator(context);
+      return alertsOf(context, session, context.operatorDevices.alerts(session));
+    },
+  },
+  {
+    name: "operator_set_alerts",
+    description: "Operator, from the console on a phone: choose which alerts reach this phone and where to send them. No kinds turns alerts off and forgets where the phone is reached.",
+    method: "PUT",
+    path: "/operator/device/alerts",
+    output: "OperatorAlerts",
+    input: object(
+      {
+        kinds: { type: "array", items: { enum: ALERT_CHOICES.map((choice) => choice.kind) }, description: "The kinds to switch on. Empty turns alerts off." },
+        push_token: text("The address Apple or Google gave this phone for notifications. Needed unless kinds is empty."),
+        environment: { enum: ["production", "development"], description: "iOS only: which of Apple's services issued push_token, from the build's aps-environment. Production unless said." },
+      },
+      ["kinds"],
+    ),
+    operator: true,
+    mobile: "confirm",
+    run: async (context, input) => {
+      const session = operatorPhone(context);
+      operator(context);
+      const asked = Array.isArray(input.kinds) ? input.kinds : null;
+      const kinds = ALERT_CHOICES.map((choice) => choice.kind).filter((kind) => asked?.includes(kind));
+      if (!asked || kinds.length !== asked.length) throw new ApiError(400, `kinds is a list of ${ALERT_CHOICES.map((choice) => choice.kind).join(", ")}, each once.`);
+      if (kinds.length === 0) return alertsOf(context, session, context.operatorDevices.setAlerts(session, { kinds: [], pushToken: null, environment: "production" }));
+      if (!context.alerts.offered(session.platform)) throw new ApiError(409, "This service hasn't set up alerts for this kind of phone.", "alerts_not_offered");
+      const pushToken = str(input, "push_token");
+      if (!context.alerts.accepts(session.platform, pushToken)) throw new ApiError(400, "push_token isn't an address Apple or Google gives a phone.");
+      const environment = session.platform === "ios" && input.environment === "development" ? "development" : "production";
+      return alertsOf(context, session, context.operatorDevices.setAlerts(session, { kinds, pushToken, environment }));
+    },
+  },
+  {
+    name: "operator_test_alert",
+    description: "Operator, from the console on a phone: send this phone a test alert, to see that alerts reach it. Three an hour.",
+    method: "POST",
+    path: "/operator/device/alerts/test",
+    output: "Done",
+    input: object({}),
+    operator: true,
+    // It changes nothing, but it isn't a read: a phone's reads are GETs and everything else carries its own proof.
+    mobile: "confirm",
+    run: async (context) => {
+      const session = operatorPhone(context);
+      operator(context);
+      const result = await context.alerts.test(session);
+      if (result === "off") throw new ApiError(409, "Alerts are off on this phone.", "alerts_off");
+      if (result === "limited") throw new ApiError(429, "Three test alerts an hour. Try again later.", "rate_limited");
+      return { ok: result === "sent" };
+    },
+  },
   {
     name: "operator_revoke_device",
     description: "Operator: revoke one operator phone. Its console stops on its next request; the person's user app is not affected.",
@@ -604,32 +708,48 @@ export const OPERATIONS: Operation[] = [
     },
   },
   { name: "operator_revoke_all_devices", description: "Operator: revoke every operator phone at once. Each operator signs in again on their phone to get the console back.", method: "DELETE", path: "/operator/devices", output: "Deleted", input: object({}), operator: true, run: async (context) => { operator(context); return { deleted: context.operatorDevices.revokeAll(revoker(context)) > 0 }; } },
-  { name: "operator_list_audit", description: "Operator: what operators' phones did and were refused, newest first: sign-ins, unlocks, changes, refusals and revocations.", method: "GET", path: "/operator/audit", output: ["OperatorAuditEntry"], input: object({ limit: { type: "number", default: 100 } }), operator: true, run: async (context, input) => { operator(context); return context.audit.list(Math.trunc(Number(input.limit)) || 100); } },
+  { name: "operator_list_audit", description: "Operator: what operators' phones did, were refused and were told, newest first: sign-ins, unlocks, changes, refusals, revocations and each alert sent.", method: "GET", path: "/operator/audit", output: ["OperatorAuditEntry"], input: object({ limit: { type: "number", default: 100 } }), operator: true, run: async (context, input) => { operator(context); return context.audit.list(Math.trunc(Number(input.limit)) || 100); } },
 ];
 
 /** Failures in the last hour at or above this are worth an operator's attention. */
-const FAILING_JOBS = 5;
+export const FAILING_JOBS = 5;
 /** Cost sync older than this is late. */
 const COST_SYNC_LATE_MS = 2 * 3600_000;
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
+/**
+ * The sentences Status gives the things an operator's phone can be alerted to. Alerts are built from these
+ * and nothing else, so a notification, the phone's Status screen and the web console say the same words.
+ */
+export const ATTENTION = {
+  engineNotReady: "The engine isn't ready",
+  jobsFailing: (failed: number) => `${plural(failed, "job", "jobs")} failed in the last hour`,
+  reportsWaiting: (waiting: number) => (waiting === 1 ? "1 report is waiting" : `${waiting} reports are waiting`),
+} as const;
+
+/** How many of these jobs failed in the hour before `now`. */
+export const failedInLastHour = (jobs: EngineJob[], now: number): number => jobs.filter((job) => job.state === "failed" && now - Date.parse(job.created_at) < 3600_000).length;
+
+/** The widest list of jobs the engine is asked for when counting failures. */
+export const FAILURES_WINDOW = JOBS_WINDOW;
+
 /** What the Status screen shows. What counts as wrong is decided here, so the web and phones agree. */
 async function status(client: OperatorClient, moderation: Moderation, now: number = Date.now()): Promise<OperatorStatus> {
   const [health, overview, jobs] = await Promise.all([client.getEngineHealth(), client.getOverview(), client.listJobs(JOBS_WINDOW)]);
   const service = health.data;
-  const failedLastHour = jobs.data.filter((job) => job.state === "failed" && now - Date.parse(job.created_at) < 3600_000).length;
+  const failedLastHour = failedInLastHour(jobs.data, now);
   const waiting = moderation.reports().filter((report) => report.state === "open").length;
   const syncedAgo = service.cost_sync_at ? now - Date.parse(service.cost_sync_at) : null;
   const attention: OperatorAttention[] = [];
-  if (!service.ready) attention.push({ kind: "engine_not_ready", message: "The engine isn't ready", count: null, opens: "status" });
+  if (!service.ready) attention.push({ kind: "engine_not_ready", message: ATTENTION.engineNotReady, count: null, opens: "status" });
   if (!service.discovery_fresh) attention.push({ kind: "discovery_stale", message: "Discovery is out of date", count: null, opens: "status" });
   if (service.cost_sync_error || syncedAgo === null || syncedAgo > COST_SYNC_LATE_MS) {
     const hours = syncedAgo === null ? null : Math.floor(syncedAgo / 3600_000);
     attention.push({ kind: "costs_not_synced", message: hours === null ? "Costs have never synced" : hours < 1 ? "Cost sync is failing" : `Costs haven't synced for ${hours} h`, count: hours, opens: "status" });
   }
-  if (failedLastHour >= FAILING_JOBS) attention.push({ kind: "jobs_failing", message: `${plural(failedLastHour, "job", "jobs")} failed in the last hour`, count: failedLastHour, opens: "jobs" });
-  if (waiting > 0) attention.push({ kind: "reports_waiting", message: waiting === 1 ? "1 report is waiting" : `${waiting} reports are waiting`, count: waiting, opens: "reports" });
+  if (failedLastHour >= FAILING_JOBS) attention.push({ kind: "jobs_failing", message: ATTENTION.jobsFailing(failedLastHour), count: failedLastHour, opens: "jobs" });
+  if (waiting > 0) attention.push({ kind: "reports_waiting", message: ATTENTION.reportsWaiting(waiting), count: waiting, opens: "reports" });
   return {
     checked_at: new Date(now).toISOString(),
     attention,

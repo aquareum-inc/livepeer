@@ -91,9 +91,13 @@ in `apps/web/lib/public-api/operations.ts`.
 | Operator · Plans (phone) | See the provider's plans as users are offered them | `operator_list_plans` (`provider.plans.listPlans`) | iOS and Android stage 2, read only: More ▸ Plans |
 | Operator · Reports (phone) | See the queue; keep a character up or take it down | `operator_list_reports`, `operator_resolve_report` (a proof from the phone each time) | iOS and Android: Reports, with a count on its tab; a report's page; Keep it up or Take it down in a tray, confirmed with a face or fingerprint |
 | Operator · Settings | Switch the console on phones on or off | `saveInstanceSettingsAction` (`surfaces.mobileConsole` in the instance config) | Not on mobile |
-| Operator · System | See the phones enrolled for the console | `operator_list_devices` (`operatorDevices().list()`) | Not on mobile |
+| Operator · System | See the phones enrolled for the console, and whether alerts reach each (on, off, not reaching, or signed out with alerts until a date) | `operator_list_devices` (`operatorDevices().list()`) | Not on mobile |
 | Operator · System | Revoke one operator phone, or all of them | `operator_revoke_device`, `operator_revoke_all_devices`; on the web `revokeOperatorPhoneAction`, `revokeAllOperatorPhonesAction` | Not on mobile |
-| Operator · System | Read what operators' phones did and were refused | `operator_list_audit` (`operatorAudit().list()`) | Not on mobile |
+| Operator · System | Read what operators' phones did and were refused, and each alert sent to one | `operator_list_audit` (`operatorAudit().list()`) | Not on mobile |
+| Operator · System | See whether the instance can send alerts to iPhone and to Android, and whether its credentials were last refused | `pushSetup()` (`apps/web/lib/push`) and the alerts' own record; no API client function | Not on mobile |
+| Console on a phone · More ▸ Alerts | Read this phone's alerts | `operator_get_alerts` | Planned (plan §18.9): the operation is built, the page is not |
+| Console on a phone · More ▸ Alerts | Turn alerts on, choose kinds, turn them off | `operator_set_alerts`, confirmed with a face or fingerprint | Planned: the operation is built, the page is not |
+| Console on a phone · More ▸ Alerts | Send a test alert | `operator_test_alert`, confirmed with a face or fingerprint | Planned: the operation is built, the page is not |
 | Operator · every page | See that a phone was enrolled in the last two days, and go to revoke it | `operator_list_devices` | Not on mobile |
 | Console on a phone | Sign in to the console (new provider sign-in, operators only), enrolling the phone's key | `/auth/start?purpose=operator`, then `create_operator_device_session` | iOS and Android: from an account tray row shown only to a signed-in operator (`get_me.role`) where the instance offers the console (`get_instance.surfaces.mobile_console`), or at launch on an instance that serves only its console; with any method the instance offers |
 | Console on a phone | Unlock with a face or fingerprint | `create_operator_challenge`, `unlock_operator_device_session` | iOS and Android |

@@ -439,7 +439,12 @@ export interface InstanceDescription {
   /** The native apps built for this instance. Sign-in returns only to these; an app not listed can't sign in. */
   mobile: {
     ios: { bundle_id: string; minimum_version: string | null } | null;
-    android: { application_id: string; minimum_version: string | null } | null;
+    android: {
+      application_id: string;
+      minimum_version: string | null;
+      /** What the Android app starts Firebase Cloud Messaging with, to be given an address for alerts. None of it is secret: it ships in every Android app. Null when the instance has none. */
+      firebase: InstanceFirebase | null;
+    } | null;
   };
   sign_in: { methods: SignInMethodName[]; sign_up: "open" | "invite" | "closed" };
   content: { characters: boolean; adult_content: boolean };
@@ -450,6 +455,14 @@ export interface InstanceDescription {
     /** Draw a live aurora over the background image. */
     aurora: boolean;
   };
+}
+
+/** The public values of a Firebase project, as its settings page gives them for one Android app. */
+export interface InstanceFirebase {
+  project_id: string;
+  app_id: string;
+  api_key: string;
+  sender_id: string;
 }
 
 /** The signed-in user, as the account menu shows them. */
@@ -497,6 +510,39 @@ export interface OperatorDeviceSession {
   expires_at: string;
 }
 
+/** An operator's phone as the web console lists it: the session, and whether alerts reach it. */
+export interface OperatorPhone extends OperatorDeviceSession {
+  /** Off, on, or on but Apple or Google has said the phone can no longer be reached. */
+  alerts: "off" | "on" | "not_reaching";
+  /** When alerts end unless the phone signs in again. Null while they are off. */
+  alerts_until: string | null;
+  /** The console has idled out on this phone, so it must sign in again; alerts still reach it until they end. */
+  signed_out: boolean;
+}
+
+/** Something an operator's phone can choose to be told about. The names are the ones Status uses. */
+export type OperatorAlertKind = "engine_not_ready" | "jobs_failing" | "reports_waiting";
+
+/** One choice on a phone's Alerts page, with the words for its switch. */
+export interface OperatorAlertChoice {
+  kind: OperatorAlertKind;
+  /** "The engine stops being ready". */
+  label: string;
+  on: boolean;
+}
+
+/** Alerts on one operator's phone: whether the instance can send any, which are on, and until when. */
+export interface OperatorAlerts {
+  /** Whether this instance can send to this phone's platform at all. */
+  offered: boolean;
+  /** Off, on, or on but Apple or Google has said the phone can no longer be reached. */
+  state: "off" | "on" | "not_reaching";
+  kinds: OperatorAlertChoice[];
+  /** When alerts end unless the phone signs in again. Null while they are off. */
+  until: string | null;
+  last_alert_at: string | null;
+}
+
 /** A new operator device session. The token is shown once; the instance keeps only a keyed hash of it. */
 export interface OperatorDeviceToken {
   token: string;
@@ -518,7 +564,7 @@ export interface OperatorUnlock {
 export interface OperatorAuditEntry {
   id: string;
   at: string;
-  event: "sign_in" | "sign_out" | "unlock" | "change" | "refused" | "revoked";
+  event: "sign_in" | "sign_out" | "unlock" | "change" | "refused" | "revoked" | "alert";
   user_id: string;
   user_name: string;
   device_id: string | null;

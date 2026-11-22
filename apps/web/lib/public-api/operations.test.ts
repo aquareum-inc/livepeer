@@ -10,7 +10,7 @@ import { moderation, type ModerationContents } from "../moderation/moderation";
 import { auditLog } from "../operator-devices/audit";
 import { operatorDeviceSessions } from "../operator-devices/sessions";
 import { TEST_SECRET, emptyAudit, emptyOperatorDevices } from "../operator-devices/testing";
-import { ApiError, OPERATIONS, matchOperation, type Account, type Context, type DeviceAccess } from "./operations";
+import { ApiError, OPERATIONS, matchOperation, type Account, type AlertsAccess, type Context, type DeviceAccess } from "./operations";
 
 const provider = createMockProvider();
 const client = createApiClient({ env: { MOCK_ONLY: "1" }, provider });
@@ -41,7 +41,8 @@ const agentModelMenu = async () => [];
 const studioMediums = async () => describeStudio([]);
 const desk = moderation(memoryStore<ModerationContents>({ reports: [], blocks: [], hidden: [] }));
 const audit = auditLog(emptyAudit());
-const base: Context = { via: "api_key", client, operator: null, account: null, devices, operatorDevice: null, operatorDevices: operatorDeviceSessions(emptyOperatorDevices(), TEST_SECRET, audit), audit, moderation: desk, privacy: () => describePrivacy(false), instance, labels, agentModelMenu, studioMediums, quote: quoteCredits };
+const alerts: AlertsAccess = { offered: () => true, accepts: () => true, reportFiled: vi.fn(), phoneAdded: vi.fn(), test: async () => "sent" };
+const base: Context = { via: "api_key", client, operator: null, account: null, devices, operatorDevice: null, operatorDevices: operatorDeviceSessions(emptyOperatorDevices(), TEST_SECRET, audit), audit, alerts, moderation: desk, privacy: () => describePrivacy(false), instance, labels, agentModelMenu, studioMediums, quote: quoteCredits };
 const adam: Account = { user: { id: "usr_demo_adam", name: "Adam Soffer", email: "adam@example.test" }, role: "user", deviceId: "dev_1" };
 
 describe("public API operations", () => {
@@ -103,8 +104,8 @@ describe("public API operations", () => {
       expect(operation.method === "GET", operation.name).toBe(operation.mobile === "read");
     }
     const marked = (mark: "read" | "confirm") => OPERATIONS.filter((operation) => operation.mobile === mark).map((operation) => operation.name).sort();
-    expect(marked("read")).toEqual(["operator_costs", "operator_health", "operator_list_capabilities", "operator_list_compute", "operator_list_grants", "operator_list_jobs", "operator_list_plans", "operator_list_reports", "operator_list_users", "operator_overview", "operator_status"]);
-    expect(marked("confirm")).toEqual(["operator_resolve_report", "operator_set_user_status"]);
+    expect(marked("read")).toEqual(["operator_costs", "operator_get_alerts", "operator_health", "operator_list_capabilities", "operator_list_compute", "operator_list_grants", "operator_list_jobs", "operator_list_plans", "operator_list_reports", "operator_list_users", "operator_overview", "operator_status"]);
+    expect(marked("confirm")).toEqual(["operator_resolve_report", "operator_set_alerts", "operator_set_user_status", "operator_test_alert"]);
   });
 
   it("answers the Status screen in one call, and says what needs the operator", async () => {
