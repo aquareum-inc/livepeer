@@ -1471,8 +1471,12 @@ Not done, and not proved:
 - **Neither real sender has spoken to Apple or Google.** Hosts, headers, field names and error words are from
   memory of their documentation and still marked *verify* in 18.9. Check each with real credentials before
   relying on it; the dead-or-wrong rule above depends on those error words.
-- **The owner's security review** of this change (18.9's review point), with `/security-review`. It hasn't
-  been run.
+- **The security review** (18.9's review point) was run on 22 November 2026 at the owner's request, with
+  `/security-review`: a reviewer that was given the code and the security model, not this log, read the whole
+  change. It found no vulnerability. One thing was tightened afterwards: the audit log describes a change as
+  "alerts on" or "alerts off" only for `operator_set_alerts`, so an extra `kinds` field on another change
+  can't put words in the record. It was a reading of the code. Nothing was attacked, the real senders were
+  not involved, and the apps' half doesn't exist yet to review.
 - **Everything in the apps**: the Alerts page, permission, registration, arriving from a notification
   (18.9's steps 2 and 3).
 - **A limit on filing reports per person.** 18.9's threat table suggested one; the alert's own hourly limit

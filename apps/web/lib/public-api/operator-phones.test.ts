@@ -371,6 +371,14 @@ describe("alerts on an operator's phone", () => {
     expect(operatorDevices().alertTargets(null, { only: [device.id] })).toEqual([]);
   });
 
+  it("are the only change whose record speaks of alerts: a stray field on another change can't put words in the log", async () => {
+    const device = enrol();
+    const input = { id: "usr_demo_priya", status: "active", kinds: ["nothing happened here"] };
+    const done = await call("operator_set_user_status", { token: device.token, input, proof: await proofFor(device, "operator_set_user_status", input) });
+    expect(done.status).toBe(200);
+    expect(lastAudit()).toMatchObject({ event: "change", operation: "operator_set_user_status", target: "usr_demo_priya", detail: "active" });
+  });
+
   it("never answer with, log or store in the clear the push token", async () => {
     const device = enrol();
     await unlock(device);
