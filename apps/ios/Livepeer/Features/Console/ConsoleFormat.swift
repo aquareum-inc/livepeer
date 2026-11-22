@@ -31,7 +31,8 @@ nonisolated enum ConsoleFormat {
         "\(day(date)) \(date.formatted(.dateTime.hour().minute().second()))"
     }
 
-    private static func day(_ date: Date) -> String {
+    /// A day without its time, "21 Dec": for something that ends on a date.
+    static func day(_ date: Date) -> String {
         date.formatted(.dateTime.day().month(.abbreviated))
     }
 

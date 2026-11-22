@@ -1543,6 +1543,53 @@ Chrome's first-run screen in a fresh emulator asks to agree to its terms. The si
 it: the address the app handed the browser was read from the system log, followed from this machine, and the
 app's own callback address handed back with `adb shell am start`.
 
+**22 November 2026: stage 3 on iOS, in the simulator.** The same page and behaviour as Android, from 18.9's
+Screens; design decision 100; screenshots are `docs/screenshots/mobile/ios-console-alerts-*.jpg`,
+`ios-console-more-alerts-dark.jpg` and `ios-console-alert-*.jpg`.
+
+- **No dependency.** `SystemPush` asks the system for permission and for this phone's push token, and is the
+  notification centre's delegate; `AppDelegate` exists only to hand it the push token. A push token is asked
+  for only while alerts are on or being turned on.
+- **The entitlement** (`Config/Livepeer.entitlements`): `aps-environment`, set by a build setting
+  (`development` in Debug, `production` in Release), and time-sensitive delivery for the engine alone
+  (decision 17). The same build setting goes into `Info.plist`, so the app tells the instance which of Apple's
+  services its push token is from. A build for a real phone now needs a paid Apple Developer team.
+- **The model** (`AlertsModel`) and the page (`AlertsView`) match Android's: a draft of switches, one ink
+  button, a tray, then permission, push token, Face ID and the instance, in that order. What the phone
+  remembers is its own Keychain entry beside the console's token, readable only while the phone is unlocked.
+- **An alert in front** shows no banner while the console is open and unlocked: Status reads itself again.
+  Otherwise the system shows it. **A tapped alert** brings up the cover and goes to one of three places.
+- **Switches are the app's grey, not ink.** An ink switch has a white thumb on a near-white track in dark;
+  the Settings screens already use the muted tint for the same reason. Not the system's green either way.
+
+Run for real in the simulator (iPhone 18 Pro, iOS 27) against a mock-only instance, end to end:
+
+- The row on More; the page off; one switch moved; the tray naming the kinds chosen; the system's permission
+  question; a real push token from the simulator; Face ID; and the page on, with "Stops Dec 22" and "Last
+  alert". The instance held the kinds, `development` and a sealed push token for "iPhone 18 Pro".
+- A test alert: Face ID, then "Sent. It should arrive in a moment." and "Last alert just now".
+- A report filed by an ordinary user over HTTP produced "1 report is waiting" for this phone in the outbox,
+  with no character's name and none of the reporter's words. That payload, delivered with `xcrun simctl push`:
+  with the console open, no banner, and the Reports tab's count went to 1; with the app in the background, a
+  banner and a line on the lock screen reading "Livepeer · 1 report is waiting".
+- 65 unit tests pass, 16 of them for alerts.
+
+Not seen on iOS:
+
+- **Opening the console from a tapped alert.** The simulator tool's taps and swipes didn't land reliably on
+  the system's own notification list, so the last step (cover, Face ID, the Reports queue) was not seen. The
+  unit tests cover what a payload leads to and that arriving brings up the cover; the path through the
+  system has not run.
+- **Light theme and the largest text size.** Only dark was captured: the Mac's disk filled during this work
+  and the simulator was shut down before more could be taken.
+- Saving a change of kinds, turning off, the stopped and blocked states, the line on Status, and "not set up".
+- **Anything through Apple's real push service**, time-sensitive delivery, and anything on a real phone.
+  `xcrun simctl push` sends no collapse id, so two alerts of a kind showed as two lines; through Apple the
+  newer replaces the older.
+
+Notes for whoever tests next: the simulator gives a push token without a paid team; a mock instance's iOS
+outbox entry is a file `xcrun simctl push <udid> <bundle id> <file>` accepts as it is.
+
 ### 18.9 Stage 3: push alerts (specified and accepted 21 November 2026; server half built)
 
 Status: **accepted. The owner took all thirteen recommendations at its end on 21 November 2026. Step 1, the

@@ -49,6 +49,16 @@ rule: `CLAUDE.md` and the plan hold those.
   a `lastUsedAt` more than 7 days old shows "Signed out · alerts until …"; `"pushSealed": null` shows "not
   reaching".
 
+- **Chrome's first-run screen** in a fresh Android emulator asks to agree to its terms before a sign-in can
+  open. A mock sign-in can be finished without it: the address the app handed the browser is in `adb logcat`
+  (`…/auth/start?…`); follow its redirects from the Mac with cookies kept, and hand the final
+  `org.livepeer.app.dev://auth?…` address back with `adb shell am start -a android.intent.action.VIEW -d`.
+- **On Android a push token needs a real Firebase project**, even against a mock instance. With made-up
+  values in `mobile.android.firebase` the page can be seen off and the tray reaches "couldn't be given an
+  address"; nothing past that.
+- **On iOS the simulator gives a push token** with no paid team, so alerts can be turned on end to end there.
+  Taps on the system's own notification list from a driving tool are unreliable; opening an alert may need a hand.
+
 ## iOS simulator
 
 - **Point a build at another port** on the command line: `xcodebuild … INSTANCE_URL='http://localhost:<port>'`.

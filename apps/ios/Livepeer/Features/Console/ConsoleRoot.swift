@@ -153,6 +153,8 @@ struct ConsoleTabs: View {
     @Environment(ConsoleSession.self) private var session
     @State private var tab = Destination.status
     @State private var models: Models?
+    /// What is pushed on More, held here so Status and a tapped alert can lead to a page of it.
+    @State private var morePath: [MoreView.Page] = []
 
     enum Destination: Hashable { case status, jobs, reports, users, more }
 
@@ -162,13 +164,19 @@ struct ConsoleTabs: View {
         let reports: ReportsModel
         let users: UsersModel
         let more: MoreModels
+        let alerts: AlertsModel
     }
 
     var body: some View {
         TabView(selection: $tab) {
             Tab("Status", systemImage: "waveform.path.ecg", value: Destination.status) {
                 NavigationStack {
-                    if let models { StatusView(model: models.status) { place in open(place) } }
+                    if let models {
+                        StatusView(model: models.status, alerts: models.alerts, openAlerts: {
+                            tab = .more
+                            morePath = [.alerts]
+                        }) { place in open(place) }
+                    }
                 }
             }
             Tab("Jobs", systemImage: "list.bullet.rectangle", value: Destination.jobs) {
@@ -188,8 +196,8 @@ struct ConsoleTabs: View {
                 }
             }
             Tab("More", systemImage: "ellipsis", value: Destination.more) {
-                NavigationStack {
-                    if let models { MoreView(models: models.more) }
+                NavigationStack(path: $morePath) {
+                    if let models { MoreView(models: models.more, alerts: models.alerts) }
                 }
             }
         }
@@ -217,7 +225,24 @@ struct ConsoleTabs: View {
                         }
                     }
                 ),
-                more: MoreModels(session: session)
+                more: MoreModels(session: session),
+                alerts: AlertsModel(
+                    device: SystemPush.shared,
+                    memory: AlertsMemory(),
+                    read: { try await session.read { try await $0.operatorGetAlerts() } },
+                    set: { kinds, pushToken, reason in
+                        // Only a phone turning alerts on names which of Apple's services its push token is from.
+                        let environment = pushToken == nil ? nil : SystemPush.shared.environment
+                        return try await session.confirm("operator_set_alerts", input: OperatorAPI<ConsoleTransport>.operatorSetAlertsInput(kinds: kinds, pushToken: pushToken, environment: environment), reason: reason) { api, proof in
+                            try await api.operatorSetAlerts(kinds: kinds, pushToken: pushToken, environment: environment, proof: proof)
+                        }
+                    },
+                    test: {
+                        try await session.confirm("operator_test_alert", input: OperatorAPI<ConsoleTransport>.operatorTestAlertInput(), reason: "Send a test alert") { api, proof in
+                            try await api.operatorTestAlert(proof: proof).ok
+                        }
+                    }
+                )
             )
         }
         // Read again each time the console is unlocked: what was on screen may be minutes old.
@@ -227,8 +252,16 @@ struct ConsoleTabs: View {
             async let jobs: Void = models.jobs.load()
             async let reports: Void = models.reports.load()
             async let users: Void = models.users.load()
-            _ = await (status, jobs, reports, users)
+            async let alerts: Void = models.alerts.load()
+            _ = await (status, jobs, reports, users, alerts)
         }
+        // An alert arrived while the console was open: what it is about is read again, and no banner is shown.
+        .onChange(of: session.heard) {
+            Task { await models?.status.load() }
+        }
+        // A tapped alert leads to the place it points at, once the console is open, and to nothing else.
+        .onChange(of: session.arrival, initial: true) { arrive() }
+        .onChange(of: session.stage) { arrive() }
         // When Status hears of a different number of waiting reports than the queue holds, the queue is read
         // again, so the count on the Reports tab never disagrees with the sentence on Status.
         .onChange(of: models?.status.status.map(Self.waitingReports)) { _, reported in
@@ -239,6 +272,16 @@ struct ConsoleTabs: View {
         .onChange(of: models?.reports.changes) {
             Task { await models?.status.load() }
         }
+    }
+
+    private func arrive() {
+        guard let place = session.arrival, session.stage == .open else { return }
+        switch place {
+        case .jobs: open(.jobs)
+        case .reports: open(.reports)
+        case .status: tab = .status
+        }
+        session.arrived()
     }
 
     /// Goes to where something that needs attention is dealt with.
