@@ -265,7 +265,9 @@ events feed exists (R2); before that the instance would only be polling on the a
 - a notification preference per user, and a deep link from the notification to the conversation or tile.
 
 Not built until R2 lands. The apps will ask for notification permission only at the moment a user starts
-a long render and leaves, never at launch.
+a long render and leaves, never at launch. The operator alerts of 18.9 don't wait on R2; these notifications
+will reuse their sender (`apps/web/lib/push`) and the publisher's credentials, with their own push tokens on
+user device sessions.
 
 ## 7. Design
 
@@ -506,7 +508,8 @@ notifications, their own purchasing and content choices, and time for store revi
 - An Apple Developer Program team and a Play Console account, when signing and distribution start.
 - Bundle identifiers for the flagship (proposed `org.livepeer.app`; *verify* who owns the name).
 - An app icon for the flagship, or approval to derive one from the symbol.
-- Push credentials (an APNs key, a Firebase project), when notifications are built.
+- Push credentials (an APNs key, a Firebase project), when notifications are built. What the operator
+  alerts of 18.9 need is listed at its end.
 
 ## 16. Open questions
 
@@ -805,7 +808,8 @@ Not done, and why:
 ## 18. The operator console on phones (proposed 21 November 2026)
 
 Status: **accepted; stages 1 and 2 are built on the server, iOS and Android (18.8). The owner approved the
-design sample on 21 November 2026. Stage 3 (push alerts) is next, and needs push credentials from the owner.** The owner accepted every recommendation in
+design sample on 21 November 2026. Stage 3 (push alerts) is specified in 18.9 and not built: it waits on the
+decisions there and on push credentials from the owner.** The owner accepted every recommendation in
 18.7. This section reverses two earlier lines: the console "stays on the
 web" (section 1) and device sessions "always have the `user` role" (section 5). Decisions the owner still
 has to make are in 18.7. A builder can start from this section alone, after reading sections 4, 5 and 7.
@@ -972,7 +976,7 @@ failure:
 |---|---|---|
 | 1. Away from the desk | Console sign-in, unlock and lock, switching from the user app. **Status** (health and what needs attention). **Jobs** (recent, failures, one job's attempts). **Reports** (the queue, keep up or take down). **Users** (search, one user, suspend and resume). Web: Operator phones page, audit log. | Resolve a report; suspend and resume a user |
 | 2. The numbers | Revenue, wholesale cost and margin over time; costs by capability; grants and their funding; compute operators; what's offered; system version and checks. All read-only. | None |
-| 3. Being told | Push alerts when the engine stops being ready, failures spike or a report is waiting, with a per-operator choice of which. Needs push credentials and device-token operations. | None |
+| 3. Being told | Push alerts when the engine stops being ready, failures spike or a report is waiting, with a per-operator choice of which. Needs push credentials and device-token operations. Specified in 18.9; not built. | None |
 | 4. Selected changes | Only after the owner decides each: top up a user (capped), assign a plan, switch a capability off, block a compute operator. | As decided |
 | Stays on the web | API and access keys, pricing and markup, billing, credit packs, creating grants, instance settings, surfaces, appearance, operator phones. | — |
 
@@ -1077,7 +1081,7 @@ test fails if an operation has `mobile` without `operator: true` or without an `
 | `get_me` (changed) | — | Gains `role`, so the app knows whether to offer the console. Offering is not access: the server decides. |
 
 Check before adding a per-job or per-user read: if the list responses already carry what the detail screen
-shows, no new operation is needed. Stage 3 adds push-token operations; they are specified with that stage.
+shows, no new operation is needed. Stage 3's operations are specified in 18.9.
 
 **Config.** `surfaces.mobileConsole: boolean` in the instance schema, `false` in both presets, with a
 switch on the web console's Surfaces settings and a check in `./livepeer doctor`. It is independent of
@@ -1132,7 +1136,7 @@ entry.
 | 6 | Top-ups and plan changes on phones | Keep on the web. Revisit at stage 4 with a per-action and daily cap, once the audit log has been in use. |
 | 7 | One app or a separate console app | One app, as agreed. *Verify* at submission how each store treats a console-only instance's app (an admin tool with no public content); it may need review notes and a demo operator account. |
 | 8 | Custom scheme or universal links for the operator callback | Custom scheme with PKCE for the first release, as section 5. The device key makes an intercepted code useless. Move both flows to universal links together. |
-| 9 | Push alerts | Stage 3, not stage 1. Pull to refresh is enough for the sample and avoids push credentials early. |
+| 9 | Push alerts | Stage 3, not stage 1. Pull to refresh is enough for the sample and avoids push credentials early. Stage 3's own decisions are 11 to 23, in 18.9. |
 | 10 | Should the web console also ask for a fresh sign-in or a passkey before its riskiest changes | Out of scope here, but worth a follow-up: phones will have a stronger check per change than the web does. |
 
 ### 18.8 Log
@@ -1383,3 +1387,351 @@ largest font size.
 
 Not seen on Android: the foot line opening the browser (it was seen on iOS), a page's failure and empty
 states (covered by unit tests of the model, not seen on screen), and anything on a real phone.
+
+**21 November 2026: stage 3 specified.** Push alerts are written up in 18.9: what triggers one, the
+operations, where push tokens live and what ends them, what a notification may contain, what a self-hoster
+supplies, the screens, the threats and thirteen decisions for the owner (11 to 23). Nothing is built: no
+operation, no code in either app, no variable in `.env.example`, no row in `docs/data-sources.md` or
+`docs/ui-actions.md`, and no design decision logged. Those are added when it is built.
+
+### 18.9 Stage 3: push alerts (specified 21 November 2026; not built)
+
+Status: **a specification. Nothing here is built, and nothing is until the owner has answered the decisions
+at its end. The apps also wait for push credentials.** It adds no way to change anything from a phone. A
+builder can start from this subsection after reading 18.2, 18.5 and 18.8. Facts about Apple's and Google's
+services are from memory of their documentation, not checked against it today; each is marked *verify* and
+is checked when it is built.
+
+Three lines hold throughout:
+
+- **An alert is a pointer.** It says that something needs the operator and where to look. What and who are
+  read in the console, after a face or fingerprint. A notification never unlocks or does anything.
+- **The token alone still does nothing.** Turning alerts on, off, or pointing them at another phone is a
+  change, so it needs its own proof from the device key (18.2). A stolen `aqo_` token can't redirect or
+  silence them.
+- **Alerts say what Status says.** What counts as wrong stays decided in one place on the server, so a
+  notification, the phone's Status screen and the web console never disagree.
+
+**What it is not.** It is not uptime monitoring: the instance sends the alerts, so an instance that is down,
+or can't reach Apple or Google, says nothing. An operator who needs to know the instance itself is down
+needs a monitor outside it, and the Alerts page says so. It is not notifications for users ("Your video is
+ready", section 6), which wait on R2; they will share the sender and the credentials below, and nothing
+else. There are no actions on a notification, no badge on the app's icon, no quiet hours of our own (the
+phone's Focus and Do Not Disturb do that), and no email or webhook (decision 22 below).
+
+**What triggers an alert.** Each kind uses the name and the sentence `operator_status` already gives it
+(`OperatorAttention.kind` and `message`), and an alert is sent when a kind *starts*, not for as long as it
+lasts.
+
+| Kind | Starts when | Sent again | Ends when | Says |
+|---|---|---|---|---|
+| `engine_not_ready` | The engine answers not ready, or can't be reached, on two checks a minute apart | Not while it lasts | It answers ready on two checks | "The engine isn't ready". When it ends: "The engine is ready again" (decision 15 below) |
+| `jobs_failing` | Status's own rule holds: 5 or more jobs failed in the last hour (`FAILING_JOBS`) | Not while it lasts | Status hasn't listed it for 30 minutes | "14 jobs failed in the last hour" |
+| `reports_waiting` | A report is filed and the queue was empty | While the queue isn't empty: only when more have been filed, and at most once an hour | The queue is empty | "1 report is waiting", "4 reports are waiting" |
+| `phone_added` | A phone enrols for the console (decision 12 below) | Each time | — | "A phone was added to the console" |
+
+- `discovery_stale` and `costs_not_synced` stay on Status and send nothing (decision 11 below).
+- The two-check rule means a restart of the engine doesn't page anyone. The half hour before `jobs_failing`
+  can start again stops a count that hovers around five from alerting each time it crosses.
+- A report that only edits the reporter's own open report (which `moderation.report` already folds into one)
+  is not a new report and sends nothing.
+- `phone_added` goes to every *other* phone with alerts on, and is not one of the operator's choices: it is
+  the phone-side half of the web's new-phone notice (design decision 67), which exists because enrolling needs
+  nothing from the web.
+- Each operator chooses, per phone, which of the first three kinds reach that phone. A kind that is switched
+  off is never sent there, including its "ready again".
+
+**How the instance notices.** Nothing in the instance runs between requests today. Stage 3 adds one watcher,
+in `apps/web/lib/alerts`:
+
+- It starts with the server (Next's `instrumentation.ts`, once per process, and once only under `next dev`'s
+  reloads) when `surfaces.mobileConsole` is on, and does nothing while it is off or while no phone has
+  alerts on.
+- Every minute it reads the engine's health; every five minutes the recent jobs. Both go through the
+  operator client's existing functions (`getEngineHealth`, `listJobs`) on a client built with the **reader
+  token only**. The rules that turn those answers into attention are the ones in `status()`, moved into a
+  function both call, so there is one definition. Today's figures are not read: no alert uses them.
+- `reports_waiting` and `phone_added` are not polled. They are raised where they happen, in
+  `report_character` and at enrolment.
+- What is currently wrong, since when, and when each kind was last sent is kept in
+  `DATA_DIR/operator-alerts.json` behind the same `StateStore`, so a restart doesn't send everything again.
+  A condition that is already true when the instance first starts is new, and is sent.
+- **One sender at a time.** The file holds a lease (a holder id and a time, renewed each minute). A second
+  server process sees the lease and stays quiet, and takes over if it lapses. The file store has no lock
+  across processes, so two processes started in the same instant could both send once; the collapse rule
+  below makes that one line on the phone. The database implementation makes it exact.
+- Deciding is a pure function, `decide(previous, snapshot, now)`, that returns what to send. Sending is
+  separate. That is what the tests drive, and what a later channel would reuse.
+- If R2's events feed arrives and carries readiness and failures, the watcher can listen instead of asking.
+  Nothing here waits for it.
+
+**Operations.** Each is added to `operations.ts` first, with its `output`, then `pnpm api:openapi` and
+`corepack pnpm mobile:generate`, then its rows in `docs/data-sources.md` and `docs/ui-actions.md`.
+
+| Operation | Method and path | Phone | Notes |
+|---|---|---|---|
+| `operator_get_alerts` (new) | `GET /operator/device/alerts` | Read, unlocked | This phone's alerts, as `OperatorAlerts` (below). |
+| `operator_set_alerts` (new) | `PUT /operator/device/alerts` | Change, proof each time | Input: `kinds` (the kinds to switch on), `push_token`, and on iOS `environment` (`production` or `development`, from the build's `aps-environment`). An empty `kinds` turns alerts off and forgets the push token. The proof is bound to the whole input, so to this push token. Answers `OperatorAlerts`. |
+| `operator_test_alert` (new) | `POST /operator/device/alerts/test` | Unlocked, no proof | Sends "Alerts reach this phone." to this phone. Three an hour per session. It changes nothing, so it is marked `read`; that it sends is why it has a limit. |
+| `operator_list_devices` (changed) | — | Web only | Each phone gains `alerts` (`off`, `on`, `not_reaching`) and `alerts_until`. |
+| `operator_list_audit` (changed) | — | Web only | A new event, `alert`: one entry per phone an alert was sent to, with the kind and whether Apple or Google accepted it. |
+| `get_instance` (changed) | — | — | `mobile.android` gains `firebase` (decision 19 below): the four public values the Android app needs before it can ask for a push token. |
+
+```json
+{
+  "offered": true,
+  "state": "on",
+  "kinds": [
+    { "kind": "engine_not_ready", "label": "The engine stops being ready", "on": true },
+    { "kind": "jobs_failing", "label": "Jobs are failing", "on": true },
+    { "kind": "reports_waiting", "label": "A report is waiting", "on": false }
+  ],
+  "until": "2026-12-21T09:14:00Z",
+  "last_alert_at": null
+}
+```
+
+- `offered` is whether this instance can send to this phone's platform at all (credentials present, below).
+  It is in this answer and not in `get_instance`, which anyone can read.
+- `state` is `off`, `on`, or `not_reaching` once Apple or Google has said the push token is dead.
+- The labels come from the instance, as capability names do (4.1), so the two apps and the web say the same
+  words and a kind added later needs no app release.
+- **No answer ever contains a push token.** The guard test (no phone read may contain "token", "secret" or
+  a key) covers `operator_get_alerts` as it stands, and stays as blunt as it is.
+- The three new operations act on *this phone's* session. Called from the web console, with the operator API
+  token or with a user's `aqd_` token they answer `operator_device_required`, as the challenge does today.
+- The audit entry for `operator_set_alerts` names the kinds switched on, or "off". Never the push token.
+
+**Where push tokens live, and what ends them.**
+
+- On the operator device session's own record (`operator-device-sessions.json`): the kinds, the platform,
+  the iOS environment, when it was set, when it last reached the phone, and the push token **sealed with
+  `SESSION_SECRET`**, as a user session's builder key is. Unlike a session token it can't be kept as a hash,
+  because the instance has to send to it. Sealed, the store alone is of no use and rotating the secret ends
+  every one with the sessions.
+- A push token belongs to one session. Setting it on a second session removes it from the first, so a phone
+  that signed in again is never told twice.
+- A push token is never written to a log, an audit entry, an error message or an answer.
+- The phone keeps two things beside its operator token, in the same protected store, and removes them on
+  sign-out: the kinds last chosen (to offer them again after the monthly sign-in) and the push token it last
+  registered (to notice when the system has issued another).
+
+| What happens | Effect on alerts |
+|---|---|
+| The operator turns alerts off (a confirmed change) | The push token is forgotten at once. |
+| "Sign out of the console on this phone" | Ends with the session. The question says so. |
+| Revoke or Revoke all on the web; the person is suspended; their operator role is removed in the console; five refused proofs | Ends with the session, on the next send at the latest. Nothing more is sent to that phone, not even a goodbye. |
+| `SESSION_SECRET` is rotated | Every push token becomes unreadable and is dropped. |
+| The session's absolute end (30 days) | Ends. The phone is told three days before ("Alerts from Livepeer stop on this phone in 3 days. Sign in to the console to keep them.") and once at the end. |
+| The session idles out (7 days without opening the console) | Decision 14 below. Recommended: the token stops opening the console, as today, but alerts carry on to the absolute end. The record is kept, listed on Operator phones as "Signed out · alerts until 21 Dec", and can be revoked. |
+| Apple or Google says the push token is dead (the app was removed, or the token was replaced) | The token is dropped and the state becomes `not_reaching`, shown on the phone's Alerts page and on Operator phones. |
+| The system issues the phone a new push token | The app notices at launch that it differs from the one it registered. It can't register the new one without a proof, so it shows "Alerts have stopped on this phone" (below) and the operator turns them back on with one match. In nearly every case this happens (a restore, a reinstall, cleared data) the device key is gone too and the phone must sign in again anyway. |
+| Notifications are switched off for the app in the phone's settings | Nothing changes on the server; the phone shows nothing. The Alerts page says so and offers the system's settings. |
+| `surfaces.mobileConsole` is turned off | Nothing is sent while it is off. Records lapse with their sessions. |
+
+**What a notification may contain.** Notifications are read on a lock screen, mirrored to watches and cars,
+pass through Apple and Google in a form they can read, and are seen without the biometric the console
+demands. So:
+
+| | Allowed | Never |
+|---|---|---|
+| Title | The instance's name | — |
+| Body | One of the fixed sentences in the trigger table, with at most a count | A user's name, email or id; a character's name or its author; a reporter's words or the reason; a job's id, what ran or its error; a compute operator's host; any amount of money; a token, key or address |
+| Data | `kind`, and `opens`: one of `status`, `jobs`, `reports` | A URL, an id, anything else |
+
+- The body is built from a closed list of sentence forms. A test builds every notification the instance can
+  send, from fixtures full of names, emails, ids and error text, and fails if any of it appears.
+- **Tapping** opens the app at the console's cover; after the match the console is at the place `opens`
+  names (Jobs on its Failed chip, the Reports queue, or Status). The phone treats `opens` as one of three
+  known words and anything else as Status. A notification can never open a web address or carry out a
+  change.
+- **One line per kind.** A newer alert of a kind replaces the older one (`apns-collapse-id` and Android's
+  `tag`, both `console-<kind>`), so "The engine is ready again" replaces "The engine isn't ready" instead of
+  sitting under it.
+- **An alert that can't be delivered lapses**: after an hour for the engine and jobs, twelve for reports and
+  a phone being added. A phone switched on in the morning isn't told about a night that is over.
+- Only visible notifications are sent. No silent or background push, no notification extension, nothing
+  that runs the app with the operator token while nobody is looking.
+- Sound is the system's default. On iOS the thread is `console`; on Android there are three channels in a
+  Console group, named for the person who will see them in the system's settings: **Service** (engine, jobs),
+  **Reports**, and **Console sign-ins** (a phone being added). On an instance with both surfaces this keeps
+  operator alerts apart from whatever the user app sends later.
+- The words are English and composed on the server, as Status's are.
+
+As sent, for the builder (*verify* field names against each service when built):
+
+```json
+{ "aps": { "alert": { "title": "Livepeer", "body": "The engine isn't ready" }, "sound": "default", "thread-id": "console" },
+  "kind": "engine_not_ready", "opens": "status" }
+```
+
+```json
+{ "message": { "token": "<push token>", "notification": { "title": "Livepeer", "body": "The engine isn't ready" },
+    "data": { "kind": "engine_not_ready", "opens": "status" },
+    "android": { "ttl": "3600s", "notification": { "channel_id": "console_service", "tag": "console-engine_not_ready" } } } }
+```
+
+**What a self-hoster must supply.** A push for an app can only be sent with credentials from the developer
+account that publishes that app. So there is no shared relay, and none is possible for an app built under
+someone else's identifier: each instance sends straight to Apple and Google with its publisher's own
+credentials, and nobody else sees its alerts. Alerts are optional. Without credentials for a platform the
+console works as it does today and that platform's Alerts page says they aren't set up.
+
+| For | From the publisher's account | Given to the instance as |
+|---|---|---|
+| iPhone | The app's identifier with the Push Notifications capability; an APNs authentication key (a `.p8` file), its key id, and the team id. Where Apple offers it, a key limited to this one app (*verify*). | `APNS_KEY` (the file, base64 on one line), `APNS_KEY_ID`, `APNS_TEAM_ID`. The topic is `mobile.ios.bundleId` from the config. |
+| Android | A Firebase project with the app registered under `mobile.android.applicationId`; a service account that may send messages and nothing else. | `FCM_SERVICE_ACCOUNT` (its JSON, base64 on one line). In `instance.config.json`, not secret: `mobile.android.firebase` with `projectId`, `appId`, `apiKey` and `senderId` from the project's settings. |
+| Both | The instance must be able to reach `api.push.apple.com`, `api.sandbox.push.apple.com` (development builds), `fcm.googleapis.com` and `oauth2.googleapis.com` on 443 (*verify* hosts). | — |
+
+- The four variables are environment variables only, listed in `.env.example` with a line each when this is
+  built, never in the config file, never logged, never sent to a phone.
+- **No new dependency on the server.** APNs is HTTP/2 with a short-lived signed token (`node:http2`,
+  `node:crypto`); Firebase's HTTP v1 API is a signed request for an access token and a POST. Both live in
+  `apps/web/lib/push` behind one `PushSender` interface, with a third implementation that records what would
+  be sent to `DATA_DIR/push-outbox.json`. `MOCK_ONLY=1` always uses the recording one, so a mock instance
+  never contacts Apple or Google, offers alerts on both platforms, and lets the screens, the tests and CI run
+  with no credentials. On the iOS simulator a recorded payload can be shown with `xcrun simctl push`.
+- **`./livepeer doctor`**, when `surfaces.mobileConsole` is on, says for each platform named in `mobile`
+  whether alerts are set up: the key parses, the ids have the right shape, the Firebase values are present
+  and their project matches the service account's. With `--online` it also proves the credentials are
+  accepted, without a phone (*verify* the cheapest way for each service). Missing credentials are a note,
+  not a failure.
+- **`./livepeer mobile init`** (section 13) writes nothing new. The iOS push entitlement is the same in
+  every build; the Android notification icon is drawn from the icon it already writes.
+- **Android adds one dependency, Firebase Cloud Messaging** (Google's own; section 8's table gains the
+  line), with analytics and automatic start switched off. The app starts it itself from the values in the
+  cached instance description, so the build still carries only name, icon, identifier and instance URL.
+  *Verify on a real phone* that a notification shows when the app isn't running; if it doesn't, the four
+  values become build-time values written by `mobile init` (decision 19 below). A phone without Google Play
+  services can't receive alerts and is told so.
+- iOS adds no dependency.
+- **Store forms.** A push token is a device identifier collected for the app to work: it goes on Apple's
+  privacy label and Google's data safety form. Alerts are opt-in and never marketing. *Verify* at
+  submission.
+
+**Screens.** The same on both platforms unless said. Design decisions are logged from 96 on in
+`docs/design-proposals.md` as they are built, and every state is screenshotted in dark, light and at the
+largest text size into `docs/screenshots/mobile/{ios,android}-console-alerts-*.jpg`, with the notification
+itself on a lock screen.
+
+- **Where.** More gains a fourth group, **This phone**, with one row: Alerts, and its state in mono ("Off",
+  "On · 2 of 3", "Stopped"). Nothing asks the operator to turn alerts on: no prompt at sign-in, and the
+  system's permission question is never shown at launch.
+- **The Alerts page** is a pushed page, read like the other More pages (`ConsoleRead`: on opening, on each
+  unlock, on pull to refresh, keeping what is shown if a later read fails).
+  - A sentence at the top: "Alerts are off on this phone." or "This phone is told when something needs you."
+  - **Tell this phone when**: one switch a kind, with the instance's labels. Under the group, one quiet
+    line: "A phone being added to the console is always told." Switches are tinted ink, not the system's
+    green: green is never on a control.
+  - The switches edit a draft. They don't change anything alone, because every change needs its own match
+    and three prompts for three switches would be absurd. One ink button applies the draft: **Turn on
+    alerts** when they are off, **Save changes** when the draft differs from what is on, and no button
+    otherwise.
+  - Facts in mono when on: "Stops" with the date ("21 Dec, unless this phone signs in again") and "Last
+    alert" ("3 d ago", "None yet").
+  - Quiet rows at the foot when on: "Send a test alert", and "Turn off alerts" in outline. Turning off takes
+    nothing from anyone else, so it is not red.
+  - One line of small print: "Alerts come from this service. If it is down, it can't tell you."
+- **Turning on** is the usual two steps and a match. The button opens a tray: "Turn on alerts on this
+  phone? Livepeer will send a notification here when the engine stops being ready or jobs are failing. A
+  notification never names a person or shows what was reported. Alerts stop when the console signs out on
+  this phone." The second sentence names the kinds chosen. Its one button, Turn on alerts, then: the system's permission question (the first time only);
+  the system's push token; the face or fingerprint; `operator_set_alerts`. The tray closes when the instance
+  has answered, with one haptic. A refusal at any step leaves the tray open and says why.
+- **States the page must draw**, each with its own words and at most one action:
+  - Loading: the rows at their final height.
+  - Not set up for this platform (`offered` false): "This service hasn't set up alerts for iPhone. They
+    need push credentials on the server; `./livepeer doctor` says what is missing." No switches, no button.
+  - Permission refused, now or later: "Notifications are off for Livepeer in Settings, so alerts can't
+    show." with Open Settings. The page reads the permission again when the app returns.
+  - Stopped (`not_reaching`, or the phone's push token has changed): "Alerts have stopped on this phone."
+    with Turn them back on, which is the turning-on flow with the remembered kinds.
+  - No push token from the system (no network, or no Google Play services): said in the tray, nothing sent.
+  - Couldn't read: the page's usual failure state, keeping what was shown.
+- **Status** gains one quiet line at its foot, above signing out, only when alerts were on and have stopped:
+  "Alerts have stopped on this phone." It opens the Alerts page. It is the phone's own knowledge, so it is
+  not a row in Needs you, whose lines are the server's (design decision 69).
+- **Signing out of the console** gains a sentence in its question when alerts are on: "Alerts stop on this
+  phone too."
+- **Arriving from a notification.** The app opens on the console's cover, whatever was in front, and asks
+  for the match; the tabs are already set to the place underneath, as they are after any lock (design decision 75).
+  A session that has ended shows the sign-in cover with its reason. With the console open and unlocked, no
+  banner is shown: Status is read again, and the badge on Reports follows it (design decision 83).
+- **iOS.** `UNUserNotificationCenter` for permission (alert and sound, no badge) and an application delegate
+  for the push token. The app asks the system for its push token only while alerts are on or being turned
+  on. The entitlement is `aps-environment`; decision 17 below adds time-sensitive delivery for the engine alone.
+- **Android.** The `POST_NOTIFICATIONS` permission, asked at the same moment on Android 13 and later and not
+  needed before it. The three channels are created when alerts are first turned on. The small icon is the
+  instance's mark in one colour. `onNewToken` only records that the push token changed.
+- **Web console.** Operator phones gains an Alerts column ("On", "Off", "Not reaching", and "Signed out ·
+  alerts until 21 Dec" under decision 14 below). Phone activity shows each alert sent, to which phone, and whether
+  it was accepted. System says, beside the phones, whether the instance can send to iPhone and to Android,
+  and if a service last refused its credentials. No new switch in Settings (decision 20 below).
+
+**Threats it adds.**
+
+| Threat | What stops it |
+|---|---|
+| Someone reads a notification on a locked phone, a watch or a shared screen | It holds one fixed sentence and a count. No name, id, error or amount. Hiding previews is the phone's own setting. |
+| Apple and Google can read what passes through them | The same: nothing in it identifies a person or says what was reported. |
+| A stolen `aqo_` token points alerts at another phone, or turns them off | `operator_set_alerts` needs a proof from the device key, bound to the push token. The token alone can read nothing and change nothing, as before. |
+| A snatched, unlocked phone with the console open turns alerts off | Needs a new match, like any change. |
+| The store file is copied | Push tokens are sealed with `SESSION_SECRET`. A push token is in any case only an address: nothing can be sent to it without the publisher's credentials, and nothing can be read with it. |
+| The APNs key or the Firebase service account leaks | Whoever holds them can send notifications to that publisher's app, to push tokens they also hold. A forged alert can lie; it can't open an address, carry out a change or show data, and the console shows the true state after the match. The service account may only send messages; the APNs key is limited to the app where Apple allows. Rotating them is done in Apple's and Google's consoles. |
+| A forged or misleading notification pushes an operator to act | Notifications carry no actions. Every decision is made in the console, on what the instance says after a match. |
+| Any signed-in user files reports to make operators' phones buzz | One alert when the queue stops being empty, then at most one an hour, as one line. Filing has no limit of its own today beyond one open report per person per character; a limit per person is worth adding with this stage. |
+| A flapping engine or a failure count hovering at the line wakes people repeatedly | Two checks to start and to end; half an hour clear before jobs can alert again; one line per kind. |
+| Alerts stop and nobody notices (a dead push token, refused credentials, a stopped watcher, an instance that is down) | `not_reaching` on the phone and on the web; refused credentials on System and in `doctor`; every send in Phone activity; the test alert; the warnings before a session's end. An instance that is down can't say so: stated on the page, not solved. |
+| A former operator, or a phone left in a drawer, keeps being told | Ends with revocation, which removing an operator already calls for (18.2); 30 days at most otherwise. Such a phone is listed on Operator phones for as long as it is told anything. What it is told contains nothing to act on. |
+| The watcher becomes a way to reach the engine | It holds the reader token only, on the server, and makes two kinds of read. It adds no route, takes no input from a request, and nothing it reads is sent to a phone except a count. |
+| A phone is told the wrong service's news (a build pointed at another instance) | A push token is good only for the app and publisher it was issued to; another instance's credentials are refused for it, and it becomes `not_reaching`. |
+| The phone chooses `environment` | It only picks Apple's development or production service. A wrong choice is a refused send. |
+| A second server process sends everything twice | The lease; and one line per kind if it ever slips. |
+| A rooted or jailbroken phone | Not defended, as in 18.2. |
+
+**Build order, review and tests.**
+
+1. **Server**, which needs no credentials: the sender interface with the recording implementation and the
+   two real ones, `doctor`'s checks, alerts on the session record and everything that ends them, the three
+   operations and the three changed ones, the watcher and `decide`, the audit event, the web console's
+   column and lines. **Review point (security):** the owner reviews it alone, with `/security-review`, as at
+   point A: it touches the session store and adds a marked operation.
+2. **iOS**, then **Android** from the same spec: the Alerts page and its states, permission, registration,
+   arriving from a notification. These need the credentials to be run for real (decision 23 below).
+3. **On real phones**, before either app's change merges: a notification arrives with the app closed, in
+   the background and in front; tapping lands in the right place after the match; a revoked phone hears
+   nothing more; turning alerts off stops them at once. The simulator and emulator can't show all of this,
+   and the device key still hasn't run on a real phone (18.8).
+
+Tests the server change must include: `decide` for every row of the trigger table (two checks, the half
+hour, one alert while it lasts, "ready again" once and only to phones that were told, the hourly limit on
+reports, an edited report sending nothing, the new phone left out of its own alert); `operator_set_alerts`
+with no proof, a proof made for another push token, a user's `aqd_` token and a web session, each refused;
+every row of the "what ends them" table removing the push token; one push token moving between two
+sessions; a dead push token becoming `not_reaching`; nothing sent with the flag off, to a kind switched
+off, or in mock-only mode to anything but the outbox; the lease; the test alert's limit; the content test
+above; and that no log line or audit entry holds a push token. `operator_get_alerts` is captured into
+`docs/mobile/fixtures/` for the native decoding tests.
+
+**Decisions for the owner**, numbered on from 18.7.
+
+| # | Decision | Recommendation |
+|---|---|---|
+| 11 | Which conditions send an alert | The three in 18.3: the engine isn't ready, jobs are failing, a report is waiting. Stale discovery and late cost sync stay on Status: neither needs anyone at night, and both can be added as kinds later without an app release. |
+| 12 | Tell the other operators' phones when a phone is added to the console | Yes, always, with no switch. It is the web notice's reasoning (design decision 67) carried to the place operators will actually see it. |
+| 13 | How much a notification says | Status's sentence with its count, and never a name, id, error or amount. The alternative, "Something needs you" and nothing more, hides little and costs a trip into the console to learn whether to get out of bed. |
+| 14 | What a quiet week does to alerts | Alerts carry on to the session's 30-day end even when the console has idled out at 7 days, with a warning three days before. Ending them at 7 days would stop alerts on exactly the instances where nothing is wrong and nobody opens the console. The 7-day idle rule for *opening* the console doesn't change. |
+| 15 | Say when it is over | Only for the engine: "The engine is ready again", to the phones that were told it wasn't. Otherwise someone woken has to open the console to learn it mended itself. |
+| 16 | Timing and thresholds | Two checks a minute apart; Status's 5-failed-in-an-hour rule as it is; reports at most hourly. Five in an hour is a count, not a share, and will be noisy on a busy instance: change it for Status and alerts together once there are live numbers, not for alerts alone. |
+| 17 | May an alert break through Focus or Do Not Disturb | Only the engine: time-sensitive on iOS (one more entitlement, no approval from Apple, and each person can switch it off), a high-importance channel on Android. Never Apple's critical alerts, which override the mute switch and need Apple's permission. |
+| 18 | Where the watcher runs | Inside the instance's server process, with the lease. A separate worker in the Compose bundle is one more thing for a self-hoster to run for two reads a minute. Alerts therefore need the long-running server the bundle starts. |
+| 19 | Firebase's four public values: read from the instance at run time, or written into the Android build | Run time, in `get_instance`, so a build still differs only by name, icon, identifier and instance URL. Fall back to build-time values only if the real-phone check fails. |
+| 20 | A separate switch for alerts in the config | None. Alerts are offered when `surfaces.mobileConsole` is on and the credentials for that platform are present; each operator then chooses on their own phone. |
+| 21 | Choices per phone or per operator | Per phone, on the session record, so they end with it and need no new store. The phone remembers the last choice and offers it again after the monthly sign-in. |
+| 22 | Email or a webhook as well | Not in stage 3. The watcher decides and a sender sends, so another channel can be added without touching the rules. It would be the only channel that works for an operator without the app. |
+| 23 | Build the server half before the credentials exist | Yes, when stage 3 is approved: it needs none, runs against the recording sender, and is the half that wants the security review. The apps wait for the credentials and two real phones, because what matters in them can't be run without. |
+
+**Needed from the owner to build it:** answers to 11 to 23; for the flagship, an APNs key with its key id
+and team id, the Push Notifications capability on `org.livepeer.app` and `org.livepeer.app.dev`, and a
+Firebase project with both Android identifiers registered and a send-only service account; a real iPhone
+and a real Android phone with Google Play services.
