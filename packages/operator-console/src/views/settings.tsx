@@ -43,7 +43,7 @@ const SURFACES: Array<{ key: keyof InstanceSettings["surfaces"]; label: string; 
   { key: "app", label: "User app", name: "the user app", hint: "Chat, studio, characters and library.", stops: "Every user loses chat, studio, characters and library, including anything they have open." },
   { key: "api", label: "API", name: "the API", hint: "The instance's REST API.", stops: "Apps and scripts built on the API stop working. Their keys stay valid, but every request is refused." },
   { key: "mcp", label: "MCP server", name: "the MCP server", hint: "Tools for agents.", stops: "Agents connected over MCP lose their tools." },
-  { key: "mobile", label: "Phone apps", name: "the phone apps", hint: "This instance's iOS and Android apps. Turn off to pause them, say while a bad release is fixed. Phones stay signed in.", stops: "The apps stop working and say the service isn't offered on phones. Signed-in phones carry on when you turn it back on." },
+  { key: "mobile", label: "User app on phones", name: "the user app on phones", hint: "Chat, studio, characters and library in this instance's iOS and Android apps. Turn off to pause it, say while a bad release is fixed. Phones stay signed in.", stops: "The user app stops working on phones and says the service isn't offered there. Signed-in phones carry on when you turn it back on." },
   { key: "mobileConsole", label: "Console on phones", name: "the console on phones", hint: "Lets operators open this console in the phone app, behind Face ID or a fingerprint. They can check status, jobs, reports and users, decide a report and suspend a user. Keys, pricing, billing and settings stay here.", stops: "Operators' phones lose the console at once and say it isn't offered. Their phones stay enrolled and carry on when you turn it back on." },
 ];
 
@@ -159,7 +159,7 @@ export function SettingsView({ initial, phoneAppsNamed, file, save }: SettingsVi
             <div className="divide-y divide-hairline rounded-card border border-hairline bg-card">
               {SURFACES.map((surface) => ((surface.key === "mobile" || surface.key === "mobileConsole") && !phoneAppsNamed ? (
                 // With no app named, phones can't sign in whatever the switch says, so there is nothing to switch.
-                <Line key={surface.key} label={surface.label} hint={surface.key === "mobileConsole" ? "Needs a phone app named in the config file, as above." : "No phone apps are set up for this instance. Name them under mobile in the config file (mobile.ios.bundleId, mobile.android.applicationId) to offer them."} />
+                <Line key={surface.key} label={surface.label} hint={surface.key === "mobileConsole" ? "Needs an iOS or Android app named in the config file, as above." : "No iOS or Android app is set up for this instance. Name one under mobile in the config file (mobile.ios.bundleId, mobile.android.applicationId) to offer it."} />
               ) : (
                 <Line key={surface.key} label={surface.label} hint={surface.hint}>
                   <Switch checked={value.surfaces[surface.key]} onCheckedChange={(checked) => set({ surfaces: { ...value.surfaces, [surface.key]: checked } })} aria-label={surface.label} />
