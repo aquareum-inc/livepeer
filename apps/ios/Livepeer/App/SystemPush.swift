@@ -63,16 +63,20 @@ final class SystemPush: NSObject, PushDevice, UNUserNotificationCenterDelegate {
 
     // MARK: What arrives, and what is tapped
 
+    // Both of these run on the main actor, and must: the system is told a notification has been dealt with when
+    // they return, and UIKit aborts the app if it is told from any other thread. A tapped alert crashed a real
+    // iPhone that way while these were `nonisolated`.
+
     /// An alert arrived with the app in front. With the console open there is no banner: the console reads its
     /// screens again and shows what the alert is about. Otherwise it is shown as it would have been.
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         let ours = AlertPlace(payload: notification.request.content.userInfo) != nil
-        return await quietly(ours) ? [] : [.banner, .list, .sound]
+        return quietly(ours) ? [] : [.banner, .list, .sound]
     }
 
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         guard let place = AlertPlace(payload: response.notification.request.content.userInfo) else { return }
-        await opened(place)
+        opened(place)
     }
 
     private func quietly(_ ours: Bool) -> Bool {
