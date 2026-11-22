@@ -8,7 +8,11 @@ export interface PushTarget {
   environment: "production" | "development";
 }
 
-/** A visible notification. There is no other kind: nothing sent runs the app while nobody is looking. */
+/**
+ * A visible notification. There is no other kind. On iOS the system shows it; on Android the app is handed the
+ * words and shows them at once, and does nothing else with them: nothing sent makes the app call the instance
+ * while nobody is looking.
+ */
 export interface PushNotification {
   title: string;
   body: string;

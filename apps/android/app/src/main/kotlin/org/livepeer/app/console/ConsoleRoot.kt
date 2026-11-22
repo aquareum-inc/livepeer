@@ -133,8 +133,11 @@ class Console(val session: ConsoleSession, device: PushDevice, memory: AlertsMem
         session.onForgotten = alerts::forgotten
     }
 
-    /** Whether the console is open in front of the person: an alert then needs no banner. */
-    val watching: Boolean get() = session.presented.value && session.stage.value == ConsoleSession.Stage.Open
+    /**
+     * Whether the console is open in front of the person: an alert then needs no banner. A console left open
+     * with the app in the background is not in front of anyone, and an alert must show.
+     */
+    val watching: Boolean get() = session.presented.value && session.stage.value == ConsoleSession.Stage.Open && !session.away
 
     /** An alert arrived while the console was open: what it is about is read again. */
     fun heard() {

@@ -245,9 +245,8 @@ describe("sending to Google", () => {
     expect(JSON.parse(calls[1]?.body ?? "")).toEqual({
       message: {
         token: android.token,
-        notification: { title: "Livepeer", body: "The engine isn't ready" },
-        data: { kind: "engine_not_ready", opens: "status" },
-        android: { ttl: "3600s", priority: "HIGH", notification: { channel_id: "console_service", tag: "console-engine_not_ready" } },
+        data: { title: "Livepeer", body: "The engine isn't ready", kind: "engine_not_ready", opens: "status", channel: "console_service", tag: "console-engine_not_ready" },
+        android: { ttl: "3600s", priority: "HIGH" },
       },
     });
   });

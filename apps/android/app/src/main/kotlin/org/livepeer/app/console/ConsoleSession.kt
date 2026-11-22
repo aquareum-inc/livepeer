@@ -87,6 +87,9 @@ class ConsoleSession(
     private var relock: Job? = null
     private var leftAt: Long? = null
 
+    /** The app is in the background: whatever the console's stage, nobody is looking at it. */
+    val away: Boolean get() = leftAt != null
+
     /** Whether the phone can open the console at all: a fingerprint or face is set up. */
     val biometrics: Boolean get() = key.available
 

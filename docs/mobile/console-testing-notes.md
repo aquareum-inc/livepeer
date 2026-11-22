@@ -71,6 +71,9 @@ rule: `CLAUDE.md` and the plan hold those.
   the phone's session id in `told` for "The engine is ready again", two checks later.
 - **To close the app without stopping it**, press Home and `adb shell am kill <application id>`. A
   force-stopped app is sent nothing by Firebase, which is Android's rule, not a fault.
+- **Two alerts are drawn as two rows at first** and as one stack of two when the shade is closed and opened
+  again half a minute later. Tap the stack then, to test where a stack leads.
+- **An alert sent while the console is open in front shows nothing**, by design. Press Home first to see one.
 - **Reading notifications from a shell**: `adb shell dumpsys notification --noredact` has each one's tag,
   channel, title and text; `adb shell cmd statusbar expand-notifications` opens the shade.
 - **On iOS the simulator gives a push token** with no paid team, so alerts can be turned on end to end there.

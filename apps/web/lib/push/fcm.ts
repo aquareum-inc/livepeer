@@ -17,14 +17,19 @@ export interface FcmOptions {
   wait?: (ms: number) => Promise<void>;
 }
 
-/** What Firebase is handed for an Android phone: the words, the channel, and where in the console to go. Nothing else. */
+/**
+ * What Firebase is handed for an Android phone: the words, the channel, the line they replace and where in the
+ * console to go. Nothing else. It goes as data, which the app shows as a notification the moment it arrives,
+ * and not as Firebase's own notification: that one is shown by the system whenever the app isn't in front,
+ * outside the app's reach, and the system then stacks two alerts under a summary that opens the user app
+ * instead of the console. Shown by the app, every alert and the stack itself open the console.
+ */
 export function fcmMessage(pushToken: string, notification: PushNotification): Record<string, unknown> {
   return {
     message: {
       token: pushToken,
-      notification: { title: notification.title, body: notification.body },
-      data: { kind: notification.kind, opens: notification.opens },
-      android: { ttl: `${notification.lifeSeconds}s`, priority: notification.urgent ? "HIGH" : "NORMAL", notification: { channel_id: notification.channel, tag: notification.collapse } },
+      data: { title: notification.title, body: notification.body, kind: notification.kind, opens: notification.opens, channel: notification.channel, tag: notification.collapse },
+      android: { ttl: `${notification.lifeSeconds}s`, priority: notification.urgent ? "HIGH" : "NORMAL" },
     },
   };
 }

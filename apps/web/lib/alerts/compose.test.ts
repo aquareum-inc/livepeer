@@ -47,9 +47,11 @@ describe("what a notification may contain", () => {
       expect(Object.keys(ios).sort()).toEqual(["aps", "kind", "opens"]);
       expect(Object.keys(ios.aps as object).sort()).toEqual(notification.urgent ? ["alert", "interruption-level", "sound", "thread-id"] : ["alert", "sound", "thread-id"]);
       const android = (fcmMessage("a-push-token", notification) as { message: Record<string, unknown> }).message;
-      expect(Object.keys(android).sort()).toEqual(["android", "data", "notification", "token"]);
-      expect(android.data).toEqual({ kind: notification.kind, opens: notification.opens });
-      // Nothing visible is silent, and nothing wakes the app to work unseen.
+      // Android is handed the words as data and shows them itself, so a stack of alerts opens the console too.
+      expect(Object.keys(android).sort()).toEqual(["android", "data", "token"]);
+      expect(android.data).toEqual({ title: notification.title, body: notification.body, kind: notification.kind, opens: notification.opens, channel: notification.channel, tag: notification.collapse });
+      expect(Object.keys(android.android as object).sort()).toEqual(["priority", "ttl"]);
+      // Nothing visible is silent on iOS, and nothing on either carries more than the words and where to look.
       const text = JSON.stringify([ios, android]);
       expect(text).not.toMatch(/content-available|mutable-content|content_available|https?:|opd_/);
     }

@@ -440,9 +440,14 @@ class ConsoleTest {
         // Under a minute in the background keeps it open; over a minute locks it.
         instance.refusal = null
         phone.session.unlock()
+        assertFalse(phone.session.away)
         phone.session.left()
+        // Open, but in the background: nobody is looking, so an alert that arrives now must be shown.
+        assertEquals(Stage.Open, phone.session.stage.value)
+        assertTrue(phone.session.away)
         phone.clock += 59_000
         phone.session.returned()
+        assertFalse(phone.session.away)
         assertEquals(Stage.Open, phone.session.stage.value)
         phone.session.left()
         phone.clock += 61_000
