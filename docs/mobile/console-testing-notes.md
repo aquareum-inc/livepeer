@@ -63,7 +63,22 @@ rule: `CLAUDE.md` and the plan hold those.
   `DATA_DIR/operator-device-sessions.json` and pull the page down.
 - **A mock-only instance records alerts and sends none**, so nothing arrives on a phone. Its outbox is
   `DATA_DIR/push-outbox.json`.
+- **To see a real alert arrive on Android**, run the instance without `MOCK_ONLY`, with `FCM_SERVICE_ACCOUNT`
+  in the root `.env`, the same `SESSION_SECRET` and `DATA_DIR` the phone enrolled under, and
+  `ENGINE_ADMIN_TOKEN=` (empty) so the run can't change the engine. The watcher checks once a minute. To make
+  it send without filing a report, edit `DATA_DIR/operator-alerts.json`: set `state.reports` to an old
+  `lastSentAt` with `unannounced: true` for "N reports are waiting"; set `state.engine` to `down: true` with
+  the phone's session id in `told` for "The engine is ready again", two checks later.
+- **To close the app without stopping it**, press Home and `adb shell am kill <application id>`. A
+  force-stopped app is sent nothing by Firebase, which is Android's rule, not a fault.
+- **Two alerts are drawn as two rows at first** and as one stack of two when the shade is closed and opened
+  again half a minute later. Tap the stack then, to test where a stack leads.
+- **An alert sent while the console is open in front shows nothing**, by design. Press Home first to see one.
+- **Reading notifications from a shell**: `adb shell dumpsys notification --noredact` has each one's tag,
+  channel, title and text; `adb shell cmd statusbar expand-notifications` opens the shade.
 - **On iOS the simulator gives a push token** with no paid team, so alerts can be turned on end to end there.
+  With `APNS_KEY`, `APNS_KEY_ID` and `APNS_TEAM_ID` set and an instance that isn't mock-only, Apple's sandbox
+  delivers a real alert to that simulator; the App ID must exist in the key's team.
   Taps on the system's own notification list from a driving tool are unreliable; opening an alert may need a hand.
 
 ## iOS simulator

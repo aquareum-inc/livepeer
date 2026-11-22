@@ -16,6 +16,9 @@ object AlertChannels {
     const val SIGN_INS = "console_sign_ins"
     private const val GROUP = "console"
 
+    /** The channels this build makes. An alert naming any other arrives in Service. */
+    val ALL = setOf(SERVICE, REPORTS, SIGN_INS)
+
     /** Makes the channels. Safe to call again: the system keeps what the person has since changed. */
     fun create(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)

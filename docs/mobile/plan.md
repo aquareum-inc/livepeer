@@ -1469,7 +1469,8 @@ Run for real, against a mock-only instance on this machine:
 
 Not done, and not proved:
 
-- **Neither real sender has spoken to Apple or Google.** Hosts, headers, field names and error words are from
+- **Neither real sender has spoken to Apple or Google.** (Both have since: see "real alerts on Android" and "a real alert
+  on iOS" below.) Hosts, headers, field names and error words are from
   memory of their documentation and still marked *verify* in 18.9. Check each with real credentials before
   relying on it; the dead-or-wrong rule above depends on those error words.
 - **The security review** (18.9's review point) was run on 22 November 2026 at the owner's request, with
@@ -1654,6 +1655,101 @@ tapping one; the channels in the system's settings; the blocked state; anything 
 arriving needs an instance that isn't mock-only with `FCM_SERVICE_ACCOUNT` set, which is also the first time
 the Firebase sender will have spoken to Google.
 
+**22 November 2026, night: real alerts on Android, through Google.** The owner put the development Firebase
+project's service account in `.env` (`FCM_SERVICE_ACCOUNT`). The same emulator, still enrolled with alerts on,
+was pointed at an instance that was not mock-only, so the Firebase sender sent for the first time. The
+instance ran with no admin token: nothing in the run could change the engine. Alerts from the watcher were
+brought on by editing what it remembers in `DATA_DIR/operator-alerts.json`, not by filing reports.
+
+- **The Firebase sender works as written.** Google gave the service account an access token and took the
+  message as `fcmMessage` builds it. The audit log read "test: sent" and the message reached the phone within
+  a second.
+- **A dead push token is dropped.** A phone enrolled earlier with a made-up push token got Google's
+  `UNREGISTERED`; the audit log read "phone not reachable (UNREGISTERED)" and its push token was removed.
+- **Decision 19 is settled for an emulator: run-time values are enough.** With the app's process not running,
+  the system started it for Firebase's receiver. Firebase's own start failed, as expected with no resource
+  file ("no default options were found"), the app started it from the description it keeps, and the
+  notification showed. A real phone from a maker that restricts background starts is still worth one look.
+- **In the background**: "Livepeer · 1 report is waiting" in the shade, on the Reports channel
+  (`android-console-alert-shade-dark.jpg`).
+- **In front, with the console closed**: `AlertsService` showed the same notification itself
+  (`android-console-alert-in-front-dark.jpg`, the bell in the status bar).
+- **With the console open and unlocked**: the test alert arrived and nothing was shown.
+- **The engine's alert**: "The engine is ready again", on the Service channel at high importance, beside the
+  report's at default importance (`android-console-alert-engine-dark.jpg`).
+- **A tapped alert**: the console's cover with the fingerprint prompt "Unlock the console", then Reports for
+  the report's alert (`android-console-alert-opened-reports-dark.jpg`) and Status for the engine's. From a
+  cold start and from the background. Tapped within a minute of leaving an open console, it went straight to
+  Reports with no match, which is stage 1's rule that a minute away doesn't lock it.
+- **The channels** are registered as designed: a Console group holding Service (high), Reports and Console
+  sign-ins (default).
+
+Found, and not mended:
+
+- **A tap on a stack of alerts opens the user app, not the console.** (Mended the same night: next entry.) When two alerts were waiting, the system
+  put them under a summary of its own. Tapping that stack while it was collapsed opened the app with a plain
+  launch, carrying no place, and cleared both; the console did not come up. A tap on either alert's own row
+  works. The system's summary is not ours to set while Firebase shows the notification for us, which it does
+  whenever the app is not in front. The mend is to send Android the alert as data only, have `AlertsService`
+  show every one, and post a summary of our own that opens the console at Status. That changes what the
+  server sends, so it is for the owner to decide.
+- **The title repeats the app's name.** Expanded, a notification reads "Livepeer · now", then "Livepeer", then
+  the sentence, because the title is the instance's name and so is the app. Leaving the title off on Android
+  would read better; iOS needs it.
+- **A phone the instance can't send to is tried every time.** With no APNs key, each alert wrote "failed (not
+  set up)" to the audit log for each iPhone that had turned alerts on. Harmless, but it is noise: such a phone
+  could be skipped with one line the first time and none after.
+
+Still not seen on Android: the banner that drops down for the engine's alert (it had gone before the screen
+was read), the blocked state, a second alert of a kind replacing the first, and anything on a real phone.
+
+**22 November 2026, night: a stack of alerts opens the console.** The owner chose the mend above. Built, and
+run in the same emulator against the instance that really sends; design decision 101.
+
+- **The instance sends Android the alert as data**: the words, the kind, the place, the channel and the line
+  it replaces (`fcmMessage`). Priority is as before: high for the engine alone. iOS is unchanged.
+- **`AlertsService` shows every alert**, in front, in the background and with the app not running, through
+  `AlertNotifications`: one line per kind, in a stack with a summary of the app's own. A line opens the console
+  at its place; the stack opens it at Status. The summary goes when no line is left under it.
+- **What a message may leave out** (`Alert.read`): one with no words or no kind is not shown; a channel this
+  build doesn't know is Service, as a place it doesn't know is Status.
+- **A build from before this change shows nothing** for an alert sent this way, and this build shows nothing
+  for one sent the old way. No build has been released, so nothing is kept for the old shape.
+
+Seen, each through Google: with the app's process not running, two alerts arrived and were shown under the
+app's summary, with no summary of the system's; reopened, the shade drew them as one stack of two
+(`android-console-alert-stack-dark.jpg`); a tap on the stack brought up the cover and, after the fingerprint,
+Status, and cleared both. One alert alone: a tap, the fingerprint, Reports, and nothing left in the shade
+(`android-console-alert-shade-dark.jpg`). With the console open and unlocked in front, a test alert was sent
+and nothing was shown. 84 unit tests pass on Android, 196 on the web.
+
+A fault this uncovered, and mended: **an alert that arrived while the console was open but the app was in the
+background was swallowed.** The console counted as watched whenever it was open, and it stays open for a
+minute after the app leaves the front. While the system showed background alerts this could not be seen; once
+the app showed them, the first one sent after pressing Home never appeared. The console now counts as watched
+only while the app is in front (`ConsoleSession.away`). iOS never had this: it asks the app only when the app
+is in front.
+
+Still as it was: the title repeats the app's name, and a phone the instance can't send to is tried every time.
+
+**22 November 2026, night: a real alert on iOS, through Apple.** The owner's Apple Developer membership came
+through. An App ID for `org.livepeer.app.dev` with Push Notifications and one APNs key (sandbox and
+production, team scoped) were made, and the key and its two ids went into `.env`. The simulator from before,
+still enrolled with alerts on and the app not running, was sent a report's alert by the instance that really
+sends.
+
+- **The APNs sender works as written.** Apple's sandbox accepted the request first time: the signed token, the
+  headers and the payload are right. The audit log read "sent".
+- **It arrived on the simulator**: a banner, "Livepeer · 1 report is waiting"
+  (`ios-console-alert-apns-banner-dark.jpg`). A simulator's push token is good for Apple's sandbox, with a
+  build that no team signed.
+- **A dead push token is dropped.** A phone enrolled earlier with a made-up push token got Apple's
+  `BadDeviceToken`; the audit log read "phone not reachable (BadDeviceToken)" and its push token was removed.
+
+Still not seen on iOS: opening the console from a tapped alert (a tap on the banner from the driving tool
+did nothing, as before), time-sensitive delivery for the engine's alert, Apple's production service, a second
+alert of a kind replacing the first through Apple, and anything on a real iPhone.
+
 Found in passing, in stage 1's code, and left alone:
 
 - On a phone with no Face ID set up, the console's cover says "The console needs Face ID or Touch ID…" twice,
@@ -1817,8 +1913,13 @@ demands. So:
   sitting under it.
 - **An alert that can't be delivered lapses**: after an hour for the engine and jobs, twelve for reports and
   a phone being added. A phone switched on in the morning isn't told about a night that is over.
-- Only visible notifications are sent. No silent or background push, no notification extension, nothing
-  that runs the app with the operator token while nobody is looking.
+- Only visible notifications are sent. No notification extension, and nothing that makes the app call the
+  instance with the operator token while nobody is looking. On iOS the system shows the notification. On
+  Android the words go as data and the app shows them the moment they arrive, doing nothing else with them
+  (changed on 22 November 2026 after running it: see 18.8). Shown by the system, two alerts were stacked
+  under a summary of the system's own, and a tap on the stack opened the user app.
+- **A stack of alerts opens the console too.** On Android the lines sit under a summary the app posts; a tap
+  on a line goes to its place, a tap on the stack to Status.
 - Sound is the system's default. On iOS the thread is `console`; on Android there are three channels in a
   Console group, named for the person who will see them in the system's settings: **Service** (engine, jobs),
   **Reports**, and **Console sign-ins** (a phone being added). On an instance with both surfaces this keeps
@@ -1833,9 +1934,10 @@ As sent, for the builder (*verify* field names against each service when built):
 ```
 
 ```json
-{ "message": { "token": "<push token>", "notification": { "title": "Livepeer", "body": "The engine isn't ready" },
-    "data": { "kind": "engine_not_ready", "opens": "status" },
-    "android": { "ttl": "3600s", "notification": { "channel_id": "console_service", "tag": "console-engine_not_ready" } } } }
+{ "message": { "token": "<push token>",
+    "data": { "title": "Livepeer", "body": "The engine isn't ready", "kind": "engine_not_ready", "opens": "status",
+              "channel": "console_service", "tag": "console-engine_not_ready" },
+    "android": { "ttl": "3600s", "priority": "HIGH" } } }
 ```
 
 **What a self-hoster must supply.** A push for an app can only be sent with credentials from the developer

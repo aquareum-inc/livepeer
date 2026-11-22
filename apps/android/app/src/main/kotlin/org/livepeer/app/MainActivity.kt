@@ -21,6 +21,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import org.livepeer.app.alerts.Alert
+import org.livepeer.app.alerts.AlertNotifications
 import org.livepeer.app.console.ConsoleSession
 import org.livepeer.app.design.LocalDarkTheme
 import org.livepeer.app.design.LocalPalette
@@ -73,6 +74,11 @@ class MainActivity : ComponentActivity() {
                 LivepeerRoot(container) { uri -> AuthTabIntent.Builder().build().launch(signIn, uri, BuildConfig.APPLICATION_ID) }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        AlertNotifications.tidy(this)
     }
 
     override fun onNewIntent(intent: Intent) {

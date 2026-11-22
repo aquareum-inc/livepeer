@@ -357,4 +357,24 @@ class AlertsTest {
         // Anything else, including an address, is Status.
         for (other in listOf(null, "", "users", "https://example.test/sign-in", "more/alerts")) assertEquals(Alert.Place.Status, Alert.place(other))
     }
+
+    @Test
+    fun anAlertIsReadFromTheWordsTheInstanceSends() {
+        val sent = mapOf("title" to "Livepeer", "body" to "2 reports are waiting", "kind" to "reports_waiting", "opens" to "reports", "channel" to "console_reports", "tag" to "console-reports_waiting")
+        assertEquals(Alert("Livepeer", "2 reports are waiting", "reports_waiting", Alert.Place.Reports, "console_reports", "console-reports_waiting"), Alert.read(sent))
+        // A message with no words or no kind isn't an alert, and nothing is shown for it.
+        assertNull(Alert.read(sent - "body"))
+        assertNull(Alert.read(sent + ("body" to " ")))
+        assertNull(Alert.read(sent - "kind"))
+        assertNull(Alert.read(emptyMap()))
+    }
+
+    @Test
+    fun whatAnAlertLeavesOutOrGetsWrongFallsBackToWhatThisBuildKnows() {
+        val bare = Alert.read(mapOf("body" to "The engine isn't ready", "kind" to "engine_not_ready"))
+        assertEquals(Alert("", "The engine isn't ready", "engine_not_ready", Alert.Place.Status, "console_service", "console-engine_not_ready"), bare)
+        // A channel or a place this build has never heard of is Service and Status, never something made up on the phone.
+        val odd = Alert.read(mapOf("body" to "Something new", "kind" to "later_kind", "opens" to "https://example.test", "channel" to "marketing", "tag" to ""))
+        assertEquals(Alert("", "Something new", "later_kind", Alert.Place.Status, "console_service", "console-later_kind"), odd)
+    }
 }
