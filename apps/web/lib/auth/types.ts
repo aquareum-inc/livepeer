@@ -8,6 +8,11 @@ export interface Session {
   role: Role;
   /** The signed-in user's engine key (lpk_…), sent on their behalf. */
   builderKey: string | null;
+  /**
+   * The workspace the person is working in, or absent for their personal account. Only a pointer: membership
+   * and role are read from the provider on every request, so a removed member's cookie opens nothing.
+   */
+  workspaceId?: string | null;
   /** Unix seconds. */
   expiresAt: number;
 }
