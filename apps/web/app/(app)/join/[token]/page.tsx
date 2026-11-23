@@ -1,5 +1,4 @@
 import { DataSourceBadge, JoinWorkspace } from "@livepeer/user-app";
-import { Page } from "@livepeer/ui";
 import type { Metadata } from "next";
 
 import { acceptInvitationAction, declineInvitationAction } from "@/lib/actions";
@@ -12,7 +11,7 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
   const { token } = await params;
   const [invitation, list] = await Promise.all([(await api()).getInvitation(token), accounts()]);
   return (
-    <Page title="Invitation" width="narrow">
+    <>
       <JoinWorkspace
         invitation={invitation.data}
         alreadyMember={Boolean(invitation.data && list?.accounts.some((entry) => entry.id === invitation.data?.workspace_id))}
@@ -20,6 +19,6 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
         decline={declineInvitationAction}
       />
       {isDev ? <DataSourceBadge sources={[{ name: "getInvitation", source: invitation.source }]} /> : null}
-    </Page>
+    </>
   );
 }

@@ -12,6 +12,12 @@ export const ROLE_SUMMARY: Record<WorkspaceRole, string> = {
   member: "Makes things with the workspace's credit and sees their own usage.",
 };
 
+/** The same, said to the person who is about to hold the role. */
+export const ROLE_FOR_YOU: Record<Exclude<WorkspaceRole, "owner">, string> = {
+  admin: "Invite and remove people, make API keys and see everyone's usage, as well as making things.",
+  member: "Make things with the workspace's credit, and see what you've used.",
+};
+
 export const count = (value: number) => new Intl.NumberFormat("en").format(value);
 
 export function initials(name: string): string {
