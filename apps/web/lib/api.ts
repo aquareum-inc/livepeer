@@ -35,8 +35,9 @@ export async function workspaceOf(session: { userId: string; workspaceId?: strin
  * what the instance offers; `network` lists everything discovered, for comparing the two (the studio uses it to
  * tell a mode the operator withdrew from one no operator offers yet). Never run anything with a `network` client.
  * `workspaceId` is the workspace the person is working in; callers must have checked they belong (`workspaceOf`).
+ * `viaApiKey` is for a workspace's API key, which has no person behind it.
  */
-export function apiFor(user: { id: string; name: string } | null, scope: "offered" | "network" = "offered", workspaceId: string | null = null): ApiClient {
+export function apiFor(user: { id: string; name: string } | null, scope: "offered" | "network" = "offered", workspaceId: string | null = null, viaApiKey = false): ApiClient {
   const config = instance();
   const url = config.engine?.url ?? env("ENGINE_URL");
   const mockOnly = env("MOCK_ONLY");
@@ -45,7 +46,9 @@ export function apiFor(user: { id: string; name: string } | null, scope: "offere
     describeApps: async (apps) => (await describeApps(apps)).data,
     env: mockOnly ? { MOCK_ONLY: mockOnly } : {},
     ...(scope === "offered" ? { offers: (app: string) => isCapabilityEnabled(app, instance().capabilities) } : {}),
-    ...(user ? { user, workspaceId } : {}),
+    ...(user ? { user } : {}),
+    workspaceId,
+    viaApiKey,
     pricing: {
       creditsPerUsd: config.pricing?.creditsPerUsd ?? 100,
       default: config.pricing?.markup?.default ?? 1.3,

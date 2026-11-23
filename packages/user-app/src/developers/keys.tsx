@@ -64,7 +64,7 @@ export function KeysScreen({ initialKeys, create, revoke }: KeysScreenProps) {
                   {key.status === "revoked" ? <Badge tone="warn">Revoked</Badge> : null}
                 </p>
                 <p className="mt-0.5 font-mono text-[11px] text-subtle-foreground">
-                  {key.prefix}… · created {date(key.created_at)} · last used {date(key.last_used_at)}
+                  {key.prefix}… · created {date(key.created_at)}{key.created_by ? ` by ${key.created_by}` : ""} · last used {date(key.last_used_at)}
                 </p>
               </div>
               {key.status === "active" ? <Button variant="ghost" size="sm" onClick={() => setRevoking(key)}>Revoke</Button> : null}

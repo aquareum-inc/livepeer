@@ -216,6 +216,8 @@ export interface MediaItem {
   /** A still of the media, when there is one. Tiles without one show `artwork`. */
   image: string | null;
   artwork: MockArtwork;
+  /** In a workspace's library, the name of the member who made or added it. Null in a personal library. */
+  made_by: string | null;
 }
 
 /** What a client says about a file from the device before it sends it. */
@@ -325,6 +327,13 @@ export interface ApiKey {
   created_at: string;
   last_used_at: string | null;
   status: "active" | "revoked";
+  /** In a workspace, the name of the member who made the key. Null for a personal key. */
+  created_by: string | null;
+}
+
+/** A key a bearer token belongs to, and the workspace whose credit it spends (null for a personal key). */
+export interface VerifiedApiKey extends ApiKey {
+  workspace_id: string | null;
 }
 
 export interface CreatedApiKey extends ApiKey {

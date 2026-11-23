@@ -74,9 +74,10 @@ export async function authenticate(request: NextRequest): Promise<Caller | null>
       // Always `operator: null`, whatever the role: a user's device session never does operator work.
       return { via: "device", client: apiFor(user), operator: null, account: { user, role: device.role ?? "user", deviceId: device.id }, operatorDevice: null };
     }
-    const client = apiFor(null);
-    const key = (await client.verifyApiKey(token)).data;
-    return key ? { via: "api_key", client, operator: null, account: null, operatorDevice: null } : null;
+    const key = (await apiFor(null).verifyApiKey(token)).data;
+    if (!key) return null;
+    // A workspace's key works in that workspace: its credit, its library.
+    return { via: "api_key", client: apiFor(null, "offered", key.workspace_id, key.workspace_id !== null), operator: null, account: null, operatorDevice: null };
   }
 
   const session = readSessionValue(request.cookies.get(SESSION_COOKIE)?.value);

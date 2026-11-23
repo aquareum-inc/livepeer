@@ -30,7 +30,9 @@ import {
 import { MOCK_AGENT_MODELS } from "./mock/agent-models";
 import { MOCK_OFFERINGS } from "./mock/offerings";
 import { MOCK_SHOWCASE, MOCK_STARTERS } from "./mock/showcase";
-import { createStoredGeneration, latency, readStoredGeneration } from "./mock/store";
+import type { ConversationHome } from "./mock/conversations";
+import type { Owner } from "./mock/shared";
+import { createStoredGeneration, generationOwner, latency, readStoredGeneration } from "./mock/store";
 import { createMockProvider } from "./provider/mock";
 import {
   balanceInCredits,
@@ -81,6 +83,7 @@ import type {
   ShowcaseItem,
   UploadRequest,
   UploadTicket,
+  VerifiedApiKey,
   VideoAnalysis,
 } from "./types";
 
@@ -237,7 +240,7 @@ export interface ApiClient {
   createApiKey(label: string): Promise<Sourced<CreatedApiKey>>;
   revokeApiKey(id: string): Promise<Sourced<ApiKey | null>>;
   /** Checks a bearer token presented to the instance API. */
-  verifyApiKey(secret: string): Promise<Sourced<ApiKey | null>>;
+  verifyApiKey(secret: string): Promise<Sourced<VerifiedApiKey | null>>;
 
   getPreferences(): Promise<Sourced<Preferences>>;
   /** Deletes the signed-in user's account with the identity provider, on their own request. */
@@ -278,6 +281,11 @@ export interface ApiClientOptions {
    * plan, usage and keys the calls act on. The person's role in it is read from the provider on each call.
    */
   workspaceId?: string | null;
+  /**
+   * The caller is an API key, not a person. A workspace's key spends its credit and does nothing else, so it
+   * is held to what a member may do without being looked up as one.
+   */
+  viaApiKey?: boolean;
   provider?: PaymentProvider;
   pricing?: MarkupRule;
   /**
@@ -330,6 +338,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   /** The person's role in the current account, from the provider. They own their personal account. */
   const role = async (): Promise<WorkspaceRole> => {
     if (!workspaceId) return "owner";
+    if (options.viaApiKey) return "member";
     const member = (await provider.workspaces.listMembers(workspaceId)).find((entry) => entry.user_id === user.id);
     if (!member) throw new NotAllowed("You're not a member of this workspace.");
     return member.role;
@@ -350,6 +359,10 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     await allow("spend");
     if ((await provider.workspaces.get(workspaceId))?.status === "paused") throw new NotAllowed("This workspace is suspended, so nothing can be made in it for now.");
   };
+  /** Whose the things made here are: the workspace's, by this person. Null in a personal account. */
+  const owner: Owner | null = workspaceId ? { scope: workspaceId, by: user.name } : null;
+  /** Chats in a workspace are each member's own. */
+  const home: ConversationHome | null = workspaceId ? { scope: workspaceId, by: user.name, userId: user.id } : null;
   const creditsOf = async (id: string): Promise<number> => {
     const allocation = await provider.budgets.getAllocation(id);
     return allocation ? balanceInCredits(allocation, pricing) : 0;
@@ -500,7 +513,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       await allow("view_all_usage");
       await latency(120, 240);
       const [rows, members, users] = await Promise.all([provider.usage.getUsageByMember(id), provider.workspaces.listMembers(id), provider.identity.listUsers()]);
-      const keys = listStoredKeys();
+      const keys = listStoredKeys(id);
       return mock(
         rows.map((row): MemberUsageRow => {
           const figures = { credits: row.credits, jobs: row.jobs, last_used_at: row.last_used_at };
@@ -549,53 +562,55 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       mustOffer(request.app);
       await mustSpend();
       await latency(240, 480);
-      return mock(createStoredGeneration(request));
+      return mock(createStoredGeneration(request, 0, owner));
     },
     async getGeneration(id) {
       await latency(60, 140);
-      const generation = readStoredGeneration(id);
-      if (generation?.state === "succeeded") addGenerationToLibrary(generation);
+      // A generation is read in the account it was made in.
+      const madeIn = generationOwner(id);
+      const generation = madeIn !== undefined && (madeIn?.scope ?? null) === workspaceId ? readStoredGeneration(id) : null;
+      if (generation?.state === "succeeded") addGenerationToLibrary(generation, madeIn ?? null);
       return mock(generation);
     },
 
     async listConversations() {
       await latency(60, 140);
-      return mock(listStoredConversations());
+      return mock(listStoredConversations(home));
     },
     async getConversation(id) {
       await latency(60, 140);
-      return mock(readStoredConversation(id));
+      return mock(readStoredConversation(id, home));
     },
     async createConversation(input) {
       mustOffer(input.app);
       mustOffer(input.agent_model);
       await mustSpend();
       await latency(200, 380);
-      return mock(createStoredConversation(input));
+      return mock(createStoredConversation(input, home));
     },
     async sendMessage(conversationId, input) {
       mustOffer(input.app);
       mustOffer(input.agent_model);
       await mustSpend();
       await latency(200, 380);
-      return mock(sendStoredMessage(conversationId, input));
+      return mock(sendStoredMessage(conversationId, input, home));
     },
     async deleteConversation(id) {
       await latency(80, 160);
-      return mock(deleteStoredConversation(id));
+      return mock(deleteStoredConversation(id, home));
     },
 
     async listMedia(filter) {
       await latency(120, 260);
-      return mock(listStoredMedia(filter));
+      return mock(listStoredMedia(filter, workspaceId));
     },
     async deleteMedia(id) {
       await latency(80, 160);
-      return mock(deleteStoredMedia(id));
+      return mock(deleteStoredMedia(id, workspaceId));
     },
     async requestUpload(request) {
       await latency(60, 140);
-      return mock(requestStoredUpload(request));
+      return mock(requestStoredUpload(request, owner));
     },
     async receiveUpload(id, bytes) {
       await latency(120, 260);
@@ -607,15 +622,15 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
     async listCharacters(filter) {
       await latency(120, 260);
-      return mock(listStoredCharacters(filter));
+      return mock(listStoredCharacters(filter, workspaceId));
     },
     async getCharacter(slug) {
       await latency(80, 160);
-      return mock(readStoredCharacter(slug));
+      return mock(readStoredCharacter(slug, workspaceId));
     },
     async createCharacter(input) {
       await latency(200, 380);
-      return mock(createStoredCharacter(input, user.name));
+      return mock(createStoredCharacter(input, user.name, workspaceId));
     },
 
     async getCreditBalance() {
@@ -681,24 +696,24 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     async listApiKeys() {
       await allow("manage_keys");
       await latency(100, 200);
-      return mock(listStoredKeys());
+      return mock(listStoredKeys(workspaceId));
     },
     async createApiKey(label) {
       await allow("manage_keys");
       await latency(250, 450);
-      return mock(createStoredKey(label));
+      return mock(createStoredKey(label, owner));
     },
     async revokeApiKey(id) {
       await allow("manage_keys");
       await latency(200, 350);
-      return mock(revokeStoredKey(id));
+      return mock(revokeStoredKey(id, workspaceId));
     },
 
     async verifyApiKey(secret) {
       // Mock-only instances accept one documented key, so tests, CI and development builds of the native
       // apps can call the API without a sign-in. It is refused whenever the instance isn't mock-only.
       if (isMockOnly(env) && secret === MOCK_ONLY_DEMO_KEY) {
-        return mock({ id: "key_mock_only_demo", label: "Mock-only demo key", prefix: MOCK_ONLY_DEMO_KEY.slice(0, 8), created_at: "2026-11-19T00:00:00Z", last_used_at: null, status: "active" });
+        return mock({ id: "key_mock_only_demo", label: "Mock-only demo key", prefix: MOCK_ONLY_DEMO_KEY.slice(0, 8), created_at: "2026-11-19T00:00:00Z", last_used_at: null, status: "active", created_by: null, workspace_id: null });
       }
       return mock(verifyStoredKey(secret));
     },
@@ -754,7 +769,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     async stopLiveSession(id) {
       await latency(300, 500);
       const stopped = stopStoredSession(id);
-      if (stopped?.recording) addMediaToLibrary(stopped.recording);
+      if (stopped?.recording) addMediaToLibrary(stopped.recording, owner);
       return mock(stopped?.session ?? null);
     },
 

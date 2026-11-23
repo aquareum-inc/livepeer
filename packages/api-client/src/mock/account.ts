@@ -1,37 +1,47 @@
-import type { ApiKey, CapabilityRun, CreatedApiKey, Preferences } from "../types";
+import type { ApiKey, CapabilityRun, CreatedApiKey, Preferences, VerifiedApiKey } from "../types";
+import type { Owner } from "./shared";
 
-const keys: ApiKey[] = [
-  { id: "key_studio_cli", label: "Studio CLI", prefix: "lpk_7Qm2", created_at: "2026-10-02T09:12:00Z", last_used_at: "2026-11-17T18:41:00Z", status: "active" },
-  { id: "key_render_agent", label: "Render agent", prefix: "lpk_c81F", created_at: "2026-10-20T14:30:00Z", last_used_at: "2026-11-16T07:05:00Z", status: "active" },
+/** A key and the workspace whose credit it spends; null is the personal account. */
+interface StoredKey extends ApiKey {
+  scope: string | null;
+}
+
+const keys: StoredKey[] = [
+  { id: "key_studio_cli", label: "Studio CLI", prefix: "lpk_7Qm2", created_at: "2026-10-02T09:12:00Z", last_used_at: "2026-11-17T18:41:00Z", status: "active", created_by: null, scope: null },
+  { id: "key_render_agent", label: "Render agent", prefix: "lpk_c81F", created_at: "2026-10-20T14:30:00Z", last_used_at: "2026-11-16T07:05:00Z", status: "active", created_by: null, scope: null },
+  { id: "key_northlight_render", label: "Render queue", prefix: "lpk_Nq4x", created_at: "2026-10-21T10:05:00Z", last_used_at: "2026-11-22T12:54:00Z", status: "active", created_by: "Inés Castellanos", scope: "wsp_northlight" },
 ];
 let sequence = 0;
 /** Full keys issued in this process, so the instance API can accept them. A real store keeps only a hash. */
 const secrets = new Map<string, string>();
 
-export function listStoredKeys(): ApiKey[] {
-  return keys.map((key) => ({ ...key }));
+const listed = ({ scope: _scope, ...key }: StoredKey): ApiKey => ({ ...key });
+
+/** The keys of one account: a workspace's (`scope`), or the personal ones. */
+export function listStoredKeys(scope: string | null = null): ApiKey[] {
+  return keys.filter((key) => key.scope === scope).map(listed);
 }
 
-export function createStoredKey(label: string): CreatedApiKey {
+export function createStoredKey(label: string, owner: Owner | null = null): CreatedApiKey {
   sequence += 1;
   const body = Array.from({ length: 32 }, (_, index) => "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"[(index * 17 + sequence * 31 + label.length * 7) % 55]).join("");
-  const key: ApiKey = { id: `key_${Date.now().toString(36)}${sequence}`, label, prefix: `lpk_${body.slice(0, 4)}`, created_at: new Date().toISOString(), last_used_at: null, status: "active" };
+  const key: StoredKey = { id: `key_${Date.now().toString(36)}${sequence}`, label, prefix: `lpk_${body.slice(0, 4)}`, created_at: new Date().toISOString(), last_used_at: null, status: "active", created_by: owner?.by ?? null, scope: owner?.scope ?? null };
   keys.unshift(key);
   secrets.set(`lpk_${body}`, key.id);
-  return { ...key, secret: `lpk_${body}` };
+  return { ...listed(key), secret: `lpk_${body}` };
 }
 
-/** The active key a bearer token belongs to, or null. */
-export function verifyStoredKey(secret: string): ApiKey | null {
+/** The active key a bearer token belongs to and the workspace it spends from, or null. */
+export function verifyStoredKey(secret: string): VerifiedApiKey | null {
   const key = keys.find((entry) => entry.id === secrets.get(secret));
-  return key && key.status === "active" ? { ...key } : null;
+  return key && key.status === "active" ? { ...listed(key), workspace_id: key.scope } : null;
 }
 
-export function revokeStoredKey(id: string): ApiKey | null {
-  const key = keys.find((entry) => entry.id === id);
+export function revokeStoredKey(id: string, scope: string | null = null): ApiKey | null {
+  const key = keys.find((entry) => entry.id === id && entry.scope === scope);
   if (!key) return null;
   key.status = "revoked";
-  return { ...key };
+  return listed(key);
 }
 
 const DEFAULTS: Preferences = {

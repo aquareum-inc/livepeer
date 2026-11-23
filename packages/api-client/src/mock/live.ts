@@ -106,6 +106,7 @@ export function stopStoredSession(sessionId: string): { session: LiveSession; re
       created_at: session.started_at,
       image: null,
       artwork: { hues: [38, 14, 60], seed: seconds % 97 },
+      made_by: null,
     };
     session.recording_media_id = recording.id;
   }

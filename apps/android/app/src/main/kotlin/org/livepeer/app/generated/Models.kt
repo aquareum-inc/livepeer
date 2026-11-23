@@ -926,6 +926,8 @@ data class MediaItem(
     /** A still of the media, when there is one. Tiles without one show `artwork`. */
     @SerialName("image") val image: String? = null,
     @SerialName("artwork") val artwork: MockArtwork,
+    /** In a workspace's library, the name of the member who made or added it. Null in a personal library. */
+    @SerialName("made_by") val madeBy: String? = null,
 )
 
 /** A capability on the network as the operator sees it: what it's called, whether this instance offers it, and who can run it now. */

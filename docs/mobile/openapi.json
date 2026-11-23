@@ -5072,6 +5072,13 @@
           },
           "artwork": {
             "$ref": "#/components/schemas/MockArtwork"
+          },
+          "made_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "In a workspace's library, the name of the member who made or added it. Null in a personal library."
           }
         },
         "required": [
@@ -5087,7 +5094,8 @@
           "duration_seconds",
           "created_at",
           "image",
-          "artwork"
+          "artwork",
+          "made_by"
         ],
         "additionalProperties": false,
         "description": "Something in the user's library: an upload or a generation, with what the product understood about it."

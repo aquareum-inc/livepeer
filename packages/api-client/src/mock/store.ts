@@ -1,4 +1,5 @@
 import type { Generation, GenerationRequest, MockArtwork } from "../types";
+import type { Owner } from "./shared";
 
 /** Realistic latency for mocked calls. */
 export function latency(min = 180, max = 420): Promise<void> {
@@ -12,6 +13,8 @@ const QUEUE_MS = 1200;
 interface StoredGeneration {
   generation: Generation;
   startedAt: number;
+  /** The workspace it was made in and by whom; null in a personal account. */
+  owner: Owner | null;
 }
 
 const generations = new Map<string, StoredGeneration>();
@@ -36,7 +39,7 @@ export function quoteCredits(request: GenerationRequest): number {
 }
 
 /** `startDelayMs` holds the job in the queue, for a generation an agent starts partway through a turn. */
-export function createStoredGeneration(request: GenerationRequest, startDelayMs = 0): Generation {
+export function createStoredGeneration(request: GenerationRequest, startDelayMs = 0, owner: Owner | null = null): Generation {
   sequence += 1;
   const generation: Generation = {
     id: `gen_${Date.now().toString(36)}${sequence.toString(36)}`,
@@ -47,8 +50,13 @@ export function createStoredGeneration(request: GenerationRequest, startDelayMs 
     created_at: new Date().toISOString(),
     artwork: artworkFor(request.prompt, sequence),
   };
-  generations.set(generation.id, { generation, startedAt: Date.now() + startDelayMs });
+  generations.set(generation.id, { generation, startedAt: Date.now() + startDelayMs, owner });
   return generation;
+}
+
+/** Whose a generation is, so its result is saved to the right library. Undefined when there is no such generation. */
+export function generationOwner(id: string): Owner | null | undefined {
+  return generations.get(id)?.owner;
 }
 
 export function readStoredGeneration(id: string): Generation | null {

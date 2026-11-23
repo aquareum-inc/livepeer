@@ -11,6 +11,7 @@ import type {
 import { readStoredCharacter } from "./characters";
 import { listStoredMedia } from "./library";
 import { analyseStoredVideo } from "./live";
+import type { Owner } from "./shared";
 import { createStoredGeneration } from "./store";
 
 interface ScriptedStep extends Omit<AgentStep, "state"> {
@@ -35,7 +36,16 @@ interface StoredConversation {
   turns: Map<string, StoredTurn>;
   /** The capability the agent last asked about, so the answer is read as the rest of that request. */
   asked: string | null;
+  /** Whose chat it is: null in a personal account, or a member's own inside a workspace. */
+  home: ConversationHome | null;
 }
+
+/** A chat in a workspace belongs to one member there, and what it makes goes to the workspace's library. */
+export interface ConversationHome extends Owner {
+  userId: string;
+}
+
+const sameHome = (a: ConversationHome | null, b: ConversationHome | null) => (a?.scope ?? null) === (b?.scope ?? null) && (a?.userId ?? null) === (b?.userId ?? null);
 
 const conversations = new Map<string, StoredConversation>();
 let sequence = 0;
@@ -79,16 +89,16 @@ function openerKind(input: SendMessageInput): string | null {
 }
 
 /** The character a request puts on screen, if it names one that exists. */
-function castFor(input: SendMessageInput): CharacterCast | null {
-  const character = input.character_slug ? readStoredCharacter(input.character_slug) : null;
+function castFor(input: SendMessageInput, scope: string | null): CharacterCast | null {
+  const character = input.character_slug ? readStoredCharacter(input.character_slug, scope) : null;
   return character ? { slug: character.slug, name: character.name, image: character.image } : null;
 }
 
 /** What the agent does for a request, as a timed script. The shape is what the real agent will report. */
-function plan(input: SendMessageInput, cast: CharacterCast | null): { script: ScriptedStep[]; reply: string; generate: number; analysis?: VideoAnalysis; asks?: string } {
+function plan(input: SendMessageInput, cast: CharacterCast | null, scope: string | null): { script: ScriptedStep[]; reply: string; generate: number; analysis?: VideoAnalysis; asks?: string } {
   const subject = input.text.length > 80 ? `${input.text.slice(0, 77)}…` : input.text;
   const spec = `${input.duration_seconds}s, ${input.aspect}`;
-  const attached = listStoredMedia().find((item) => input.attachment_ids?.includes(item.id));
+  const attached = listStoredMedia({}, scope).find((item) => input.attachment_ids?.includes(item.id));
   const link = /https?:\/\/\S+/.exec(input.text)?.[0];
 
   // A picture is something to start a shot from, not something to watch.
@@ -239,9 +249,9 @@ function append(stored: StoredConversation, sent: SendMessageInput): void {
   const now = new Date().toISOString();
   // An answer to "what should it show?" is the rest of the request the agent asked about.
   const input = sent.app === null && stored.asked ? { ...sent, app: stored.asked } : sent;
-  const cast = castFor(input);
+  const cast = castFor(input, stored.home?.scope ?? null);
   stored.messages.push({ id: id("msg"), role: "user", text: input.text, cast, agent_model: input.agent_model ?? null, created_at: now });
-  const planned = plan(input, cast);
+  const planned = plan(input, cast, stored.home?.scope ?? null);
   // Only a request to make something waits for its answer; a video to watch arrives as an attachment.
   stored.asked = planned.asks && /^(text|image)-to-video$/.test(planned.asks) ? planned.asks : null;
   const { reply, generate, analysis = null } = planned;
@@ -249,7 +259,7 @@ function append(stored: StoredConversation, sent: SendMessageInput): void {
   const script = input.agent_model ? planned.script.map((entry) => (entry.kind === "plan" ? { ...entry, app: input.agent_model ?? null } : entry)) : planned.script;
   const generateIndex = script.findIndex((entry) => entry.kind === "tool" && /-to-video$/.test(entry.app ?? ""));
   const generateAt = script.slice(0, Math.max(0, generateIndex)).reduce((total, entry) => total + entry.ms, 0);
-  const picture = listStoredMedia().find((item) => item.kind === "image" && input.attachment_ids?.includes(item.id));
+  const picture = listStoredMedia({}, stored.home?.scope ?? null).find((item) => item.kind === "image" && input.attachment_ids?.includes(item.id));
   const firstFrame = cast?.image ?? picture?.image ?? null;
   const generationIds = Array.from({ length: generate }, (_, index) =>
     createStoredGeneration({
@@ -260,7 +270,7 @@ function append(stored: StoredConversation, sent: SendMessageInput): void {
       aspect: input.aspect,
       duration_seconds: input.duration_seconds,
       resolution: "720p",
-    }, generateAt).id,
+    }, generateAt, stored.home).id,
   );
   const message: AgentMessage = {
     id: id("msg"),
@@ -278,7 +288,7 @@ function append(stored: StoredConversation, sent: SendMessageInput): void {
   stored.updatedAt = Date.now();
 }
 
-export function createStoredConversation(input: SendMessageInput): Conversation {
+export function createStoredConversation(input: SendMessageInput, home: ConversationHome | null = null): Conversation {
   const stored: StoredConversation = {
     id: id("cnv"),
     title: titleFor(input.text),
@@ -286,26 +296,34 @@ export function createStoredConversation(input: SendMessageInput): Conversation 
     messages: [],
     turns: new Map(),
     asked: null,
+    home,
   };
   conversations.set(stored.id, stored);
   append(stored, input);
   return snapshot(stored);
 }
 
-export function sendStoredMessage(conversationId: string, input: SendMessageInput): Conversation | null {
+/** A conversation only exists for the person it belongs to, in the account they made it in. */
+function owned(conversationId: string, home: ConversationHome | null): StoredConversation | undefined {
   const stored = conversations.get(conversationId);
+  return stored && sameHome(stored.home, home) ? stored : undefined;
+}
+
+export function sendStoredMessage(conversationId: string, input: SendMessageInput, home: ConversationHome | null = null): Conversation | null {
+  const stored = owned(conversationId, home);
   if (!stored) return null;
   append(stored, input);
   return snapshot(stored);
 }
 
-export function readStoredConversation(conversationId: string): Conversation | null {
-  const stored = conversations.get(conversationId);
+export function readStoredConversation(conversationId: string, home: ConversationHome | null = null): Conversation | null {
+  const stored = owned(conversationId, home);
   return stored ? snapshot(stored) : null;
 }
 
-export function listStoredConversations(): ConversationSummary[] {
+export function listStoredConversations(home: ConversationHome | null = null): ConversationSummary[] {
   return [...conversations.values()]
+    .filter((stored) => sameHome(stored.home, home))
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .map(({ id: conversationId, title, updatedAt }) => ({
       id: conversationId,
@@ -314,6 +332,6 @@ export function listStoredConversations(): ConversationSummary[] {
     }));
 }
 
-export function deleteStoredConversation(conversationId: string): boolean {
-  return conversations.delete(conversationId);
+export function deleteStoredConversation(conversationId: string, home: ConversationHome | null = null): boolean {
+  return owned(conversationId, home) ? conversations.delete(conversationId) : false;
 }

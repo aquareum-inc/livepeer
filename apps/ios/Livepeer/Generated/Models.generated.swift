@@ -1067,6 +1067,8 @@ struct MediaItem: Codable, Sendable, Hashable {
     /// A still of the media, when there is one. Tiles without one show `artwork`.
     var image: String?
     var artwork: MockArtwork
+    /// In a workspace's library, the name of the member who made or added it. Null in a personal library.
+    var madeBy: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -1082,6 +1084,7 @@ struct MediaItem: Codable, Sendable, Hashable {
         case createdAt = "created_at"
         case image
         case artwork
+        case madeBy = "made_by"
     }
 }
 

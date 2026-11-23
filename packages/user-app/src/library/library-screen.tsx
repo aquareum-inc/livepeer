@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { offeringLabel } from "../lib/offering";
 import { MediaStill } from "../media/media-still";
+import { useAccount } from "../shell/account";
 
 export interface LibraryScreenProps {
   initialItems: MediaItem[];
@@ -29,6 +30,9 @@ const KIND_ICON = { video: Play, image: ImageIcon, audio: AudioLines } as const;
 const ASPECT = { "16:9": "aspect-video", "9:16": "aspect-[9/16]", "1:1": "aspect-square" } as const;
 
 export function LibraryScreen({ initialItems, mediaActions, search, remove, onOpenInStudio, onUseInChat, onRunAction }: LibraryScreenProps) {
+  const account = useAccount();
+  // In a workspace the library is everyone's there, and the words say so.
+  const workspace = account?.kind === "workspace" ? account.name : null;
   const [items, setItems] = useState(initialItems);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<MediaKind | "all">("all");
@@ -101,7 +105,11 @@ export function LibraryScreen({ initialItems, mediaActions, search, remove, onOp
         filtered ? (
           <EmptyState icon={Search} title="Nothing matches" body="Try describing what's on screen: a place, an action, a colour, a time of day." />
         ) : (
-          <EmptyState icon={FolderOpen} title="Your library is empty" body="Shots you generate in chat or the studio are saved here, along with anything you upload." />
+          <EmptyState
+            icon={FolderOpen}
+            title={workspace ? `${workspace}'s library is empty` : "Your library is empty"}
+            body={workspace ? "Shots anyone here generates in chat or the studio are saved here for everyone in the workspace, along with anything uploaded." : "Shots you generate in chat or the studio are saved here, along with anything you upload."}
+          />
         )
       ) : (
         <ul className={cn("columns-2 gap-3 transition-opacity duration-200 md:columns-3 xl:columns-4 [&>li]:mb-3", loading && "opacity-60")}>
@@ -143,10 +151,11 @@ export function LibraryScreen({ initialItems, mediaActions, search, remove, onOp
                   ))}
                 </div>
               ) : null}
+              {selected.made_by ? <p className="mt-2.5 text-caption text-muted-foreground">{selected.source === "upload" ? "Added" : "Made"} by {selected.made_by}</p> : null}
             </div>
             {confirming ? (
               <div className="flex flex-col gap-3">
-                <p className="text-body text-foreground">Delete this from your library? It can't be brought back.</p>
+                <p className="text-body text-foreground">{workspace ? `Delete this from ${workspace}'s library? It goes for everyone, and can't be brought back.` : "Delete this from your library? It can't be brought back."}</p>
                 <div className="flex gap-2">
                   <Button className="flex-1" onClick={() => setConfirming(false)}>Keep it</Button>
                   <Button

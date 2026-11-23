@@ -149,3 +149,75 @@ describe("a suspended workspace", () => {
     expect((await as(provider, "adam", null).createGeneration(request)).data.id).toBeTruthy();
   });
 });
+
+describe("what belongs to the workspace", () => {
+  const shot = { kind: "image", app: "text-to-image", prompt: "A lighthouse at dusk", aspect: "16:9", duration_seconds: null, resolution: "720p" } as Parameters<ReturnType<typeof createApiClient>["createGeneration"]>[0];
+
+  it("the library is the workspace's: shared by its members, apart from their personal ones", async () => {
+    const provider = createMockProvider();
+    const shared = (await as(provider, "adam").listMedia()).data;
+    const personal = (await as(provider, "adam", null).listMedia()).data;
+    expect(shared.length).toBeGreaterThan(0);
+    expect(shared.every((item) => item.made_by !== null)).toBe(true);
+    expect(personal.every((item) => item.made_by === null)).toBe(true);
+    expect(shared.map((item) => item.id).filter((id) => personal.some((item) => item.id === id))).toEqual([]);
+    expect((await as(provider, "priya").listMedia()).data.map((item) => item.id)).toEqual(shared.map((item) => item.id));
+    // Deleting needs the item to be in the account you're in.
+    expect((await as(provider, "adam", null).deleteMedia(shared[0]!.id)).data).toBe(false);
+  });
+
+  it("a new workspace starts with an empty library and no keys", async () => {
+    const provider = createMockProvider();
+    const workspace = (await as(provider, "adam", null).createWorkspace("Tide Pool")).data;
+    expect((await as(provider, "adam", workspace.id).listMedia()).data).toEqual([]);
+    expect((await as(provider, "adam", workspace.id).listApiKeys()).data).toEqual([]);
+    expect((await as(provider, "adam", workspace.id).listConversations()).data).toEqual([]);
+  });
+
+  it("a generation is read only in the account it was made in", async () => {
+    const provider = createMockProvider();
+    const made = (await as(provider, "priya").createGeneration(shot)).data;
+    expect((await as(provider, "adam").getGeneration(made.id)).data?.id).toBe(made.id);
+    expect((await as(provider, "priya", null).getGeneration(made.id)).data).toBeNull();
+  });
+
+  it("chats in a workspace are each member's own", async () => {
+    const provider = createMockProvider();
+    const input = { text: "Why does this shot look flat?", app: null, aspect: "16:9", duration_seconds: 5 } as Parameters<ReturnType<typeof createApiClient>["createConversation"]>[0];
+    const chat = (await as(provider, "priya").createConversation(input)).data;
+    expect((await as(provider, "priya").listConversations()).data.map((entry) => entry.id)).toContain(chat.id);
+    expect((await as(provider, "adam").listConversations()).data.map((entry) => entry.id)).not.toContain(chat.id);
+    expect((await as(provider, "adam").getConversation(chat.id)).data).toBeNull();
+    expect((await as(provider, "priya", null).getConversation(chat.id)).data).toBeNull();
+    expect((await as(provider, "adam").deleteConversation(chat.id)).data).toBe(false);
+  });
+
+  it("a private character lives in the workspace it was made in; a public one is everyone's", async () => {
+    const provider = createMockProvider();
+    const input = { name: "Quay Foreman", tagline: "Runs the harbour set.", description: "Keeps a shoot on schedule.", greeting: "What's first up?", mature: false };
+    const kept = (await as(provider, "priya").createCharacter({ ...input, visibility: "private" } as Parameters<ReturnType<typeof createApiClient>["createCharacter"]>[0])).data;
+    expect((await as(provider, "adam").getCharacter(kept.slug)).data).toMatchObject({ mine: true, author: "Priya Raman" });
+    expect((await as(provider, "priya", null).getCharacter(kept.slug)).data).toBeNull();
+    expect((await as(provider, "priya", null).listCharacters({ scope: "mine" })).data.map((entry) => entry.slug)).not.toContain(kept.slug);
+
+    const open = (await as(provider, "priya").createCharacter({ ...input, name: "Open Quay", visibility: "public" } as Parameters<ReturnType<typeof createApiClient>["createCharacter"]>[0])).data;
+    expect((await as(provider, "sam", null).getCharacter(open.slug)).data).toMatchObject({ mine: false });
+  });
+
+  it("keys are the workspace's: they say who made them and spend its credit", async () => {
+    const provider = createMockProvider();
+    const admin = as(provider, "adam");
+    expect((await admin.listApiKeys()).data.map((key) => [key.label, key.created_by])).toEqual([["Render queue", "Inés Castellanos"]]);
+    const key = (await admin.createApiKey("Edit bay")).data;
+    expect(key.created_by).toBe("Adam Soffer");
+    expect((await as(provider, "adam", null).listApiKeys()).data.map((entry) => entry.id)).not.toContain(key.id);
+    expect((await as(provider, "adam", null).revokeApiKey(key.id)).data).toBeNull();
+    expect((await admin.verifyApiKey(key.secret)).data).toMatchObject({ id: key.id, workspace_id: NORTHLIGHT });
+
+    // The key itself works in the workspace with no person behind it, and only to make things.
+    const viaKey = createApiClient({ env: { MOCK_ONLY: "1" }, provider, workspaceId: NORTHLIGHT, viaApiKey: true });
+    expect((await viaKey.getCreditBalance()).data.credits).toBe(36660);
+    expect((await viaKey.createGeneration(shot)).data.id).toBeTruthy();
+    await expect(viaKey.createApiKey("Another")).rejects.toBeInstanceOf(NotAllowed);
+  });
+});
