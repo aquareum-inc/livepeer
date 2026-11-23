@@ -2141,3 +2141,52 @@ November 2026.**
 and team id, the Push Notifications capability on `org.livepeer.app` and `org.livepeer.app.dev`, and a
 Firebase project with both Android identifiers registered and a send-only service account; a real iPhone
 and a real Android phone with Google Play services.
+
+## 19. Workspaces on phones: switching accounts (23 November 2026)
+
+Workspaces are shared accounts with members and roles (`docs/workspaces.md`). The web has all of it. A phone
+gets one thing: working in a workspace you already belong to. Managing one stays on the web, as buying
+credit does.
+
+### 19.1 Server
+
+- `list_accounts` (`GET /accounts`, `AccountList`): the personal account, each workspace with the person's
+  role and its balance, which one is current, and invitations waiting. An invitation is sent without the
+  link that answers it.
+- `switch_account` (`POST /accounts/current`, `account_id`): checks the person belongs, then writes the
+  workspace's id on the device session record (`workspaceId`; null for personal). Only a device session may
+  call it: a browser keeps its place in its cookie, and a key belongs to one account. Left out of MCP.
+- `get_me` gains `account`: the account the app is working in. `balance` is that account's.
+- `authenticate()` builds a device session's client in the workspace its record names, asking the provider
+  on every request whether the person still belongs (`workspaceOf`, as for the web). Someone removed falls
+  back to their personal account, and `get_me` says so.
+- The record holds an opaque workspace id and nothing else: no names, roles or membership.
+
+### 19.2 Design
+
+- **The switcher is the top of the account tray.** The tray is the phone's account menu, so it follows the
+  web's (decisions 107 and 114): the person's own account first, carrying their name with "Personal"
+  beneath, then each workspace with their role, each with its balance in mono and a tick on the current one.
+  With one account (no workspaces) the tray is as it was.
+- **Marks.** A person is a circle, a workspace a rounded square with its initial (decision 108), on the same
+  fill as the avatar. The account button at the top right of each tab shows the current account's mark, so
+  the shape alone says whose credit a request will spend.
+- **Switching** is one tap: a selection haptic, the tray closes, and the app returns to Home with everything
+  read again for the new account: conversations, library, characters, studio, balance. A switch that fails
+  leaves the tray open and says so in one line.
+- **An invitation** is one quiet line under the accounts: "Sam Whitfield invited you to Harbour Films.
+  Answer it on the web." Nothing to tap: answering needs the link, which a phone isn't given.
+- **Settings.** The header stays the person. In a workspace a line under it says where they are working
+  and as what ("Working in Northlight Studio · Admin"). Plan and credits shows the workspace's balance and
+  plan under its name, with "Inés's to change" in words when the person isn't the owner; nothing is bought
+  on phones either way. Usage says whether it is everyone's or only theirs. Devices, Preferences, Privacy
+  and Delete account are the person's and don't change.
+- **Library.** In a workspace an item's detail says who made it.
+- **Not on phones:** creating a workspace, inviting, roles, removing, transferring, leaving, answering an
+  invitation, and usage by member. Each is on the web.
+
+### 19.3 Build order
+
+iOS, then Android from this spec with the iOS build as a behavioural reference. Each is built and run
+against a mock-only instance, where the development user is an admin of "Northlight Studio", and each
+changed screen is captured in dark and light into `docs/screenshots/mobile/`.
