@@ -105,6 +105,16 @@ export interface Operation {
   run: (context: Context, input: Record<string, unknown>) => Promise<unknown>;
 }
 
+/**
+ * A refused file as the API answers it: too large is 413, the wrong kind 415. The refusal is told by its
+ * name, not its class: this file is also read by the client generator, which imports only types.
+ */
+export function uploadError(cause: unknown): unknown {
+  if (!(cause instanceof Error) || cause.name !== "UploadRefused") return cause;
+  const code = (cause as Error & { code?: string }).code;
+  return new ApiError(code === "too_large" ? 413 : code === "unsupported_type" ? 415 : 400, cause.message, code);
+}
+
 const object = (properties: Schema, required: string[] = []): Schema => ({ type: "object", properties, required, additionalProperties: false });
 const text = (description: string): Schema => ({ type: "string", description });
 const str = (input: Record<string, unknown>, key: string): string => String(input[key] ?? "");
@@ -384,6 +394,34 @@ export const OPERATIONS: Operation[] = [
     } },
   { name: "search_library", description: "Search the user's media by what is in it: subjects, places, actions, tags.", method: "GET", path: "/library", output: ["MediaItem"], input: object({ query: text("What to look for"), kind: { enum: ["video", "image", "audio"] } }), run: async ({ client }, input) => (await client.listMedia({ ...(input.query ? { query: str(input, "query") } : {}), ...(input.kind ? { kind: input.kind as "video" | "image" | "audio" } : {}) })).data },
   { name: "delete_media", description: "Delete an item from the library. This can't be undone.", method: "DELETE", path: "/library/{id}", output: "Deleted", input: object({ id: text("Library item id") }, ["id"]), run: async ({ client }, input) => ({ deleted: (await client.deleteMedia(str(input, "id"))).data }) },
+  {
+    name: "request_upload",
+    description: "Ask to add a photo or video from the device to the library. Answers with where to send the file: PUT its bytes to `path` on this instance with the same sign-in, and the library item comes back.",
+    method: "POST",
+    path: "/uploads",
+    output: "UploadTicket",
+    // A file comes from a person's device; an agent attaches by library id or by link.
+    mcp: false,
+    input: object(
+      {
+        kind: { enum: ["image", "video"] },
+        name: text("The file's name, which becomes the item's title"),
+        content_type: text("The file's media type, such as image/jpeg or video/mp4"),
+        size_bytes: { type: "number", description: "The file's size in bytes" },
+        aspect: { enum: ["16:9", "9:16", "1:1"] },
+      },
+      ["kind", "name", "content_type", "size_bytes"],
+    ),
+    run: async ({ client }, input) => {
+      if (input.kind !== "image" && input.kind !== "video") throw new ApiError(400, "Send kind as image or video.");
+      const aspect = input.aspect === "16:9" || input.aspect === "9:16" || input.aspect === "1:1" ? input.aspect : undefined;
+      try {
+        return (await client.requestUpload({ kind: input.kind, name: str(input, "name"), content_type: str(input, "content_type"), size_bytes: Number(input.size_bytes), ...(aspect ? { aspect } : {}) })).data;
+      } catch (cause) {
+        throw uploadError(cause);
+      }
+    },
+  },
   { name: "understand_video", description: "Ask about a video: summarise it, find moments, answer a question.", method: "POST", path: "/understand", output: "VideoAnalysis", input: object({ source: text("A URL or a library item id"), question: text("What to find out") }, ["source", "question"]), run: async ({ client }, input) => (await client.analyseVideo({ source: str(input, "source"), question: str(input, "question") })).data },
   {
     name: "list_characters",

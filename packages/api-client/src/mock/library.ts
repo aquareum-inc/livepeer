@@ -1,4 +1,5 @@
 import type { Generation, MediaItem } from "../types";
+import { shared } from "./shared";
 import { MOCK_SHOWCASE } from "./showcase";
 
 const DESCRIPTIONS: Record<string, { description: string; tags: string[] }> = {
@@ -12,8 +13,8 @@ const DESCRIPTIONS: Record<string, { description: string; tags: string[] }> = {
   sc_score: { description: "Sparse piano with bowed strings, building once near the end.", tags: ["music", "piano", "strings", "slow build"] },
 };
 
-const removed = new Set<string>();
-const added: MediaItem[] = [];
+const removed = shared("library.removed", () => new Set<string>());
+const added = shared("library.added", (): MediaItem[] => []);
 
 function seeded(): MediaItem[] {
   return MOCK_SHOWCASE.map((item, index) => ({

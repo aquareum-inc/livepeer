@@ -105,6 +105,7 @@ import org.livepeer.app.design.Tray
 import org.livepeer.app.design.absolute
 import org.livepeer.app.home.Composer
 import org.livepeer.app.home.ComposerChoices
+import org.livepeer.app.home.ComposerInset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
@@ -154,7 +155,7 @@ fun ConversationScreen(model: ConversationViewModel, support: ComposerSupport, c
             }
         }
 
-        Column(Modifier.windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)).padding(horizontal = 12.dp).padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)).padding(horizontal = ComposerInset).padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             state.sendError?.let { BasicText(it, style = TypeSize.Caption.style().copy(color = palette.destructive)) }
             Composer(
                 state.draft,
@@ -169,7 +170,7 @@ fun ConversationScreen(model: ConversationViewModel, support: ComposerSupport, c
     }
 
     when (tray) {
-        ComposerTray.Attach -> Tray("Attach from your library", onDismiss = { tray = null }) { AttachTray(support, state.draft, model::setDraft) }
+        ComposerTray.Attach -> Tray("Attach a photo or video", onDismiss = { tray = null }) { close -> AttachTray(support, state.draft, model::setDraft, close) }
         ComposerTray.Cast -> Tray("Put a character in it", onDismiss = { tray = null }) { close -> CastTray(support, state.draft, model::setDraft, close) }
         null -> {}
     }

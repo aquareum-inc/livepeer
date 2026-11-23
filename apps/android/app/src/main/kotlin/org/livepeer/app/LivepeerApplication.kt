@@ -54,14 +54,15 @@ class AppContainer(context: Context) {
     private val vault = TokenVault(context)
     private lateinit var refusals: (Refusal) -> Unit
 
-    val api = Api(ApiTransport(BuildConfig.INSTANCE_URL, token = { vault.token }, client = http, refused = { refusals(it) }))
+    private val transport = ApiTransport(BuildConfig.INSTANCE_URL, token = { vault.token }, client = http, refused = { refusals(it) })
+    val api = Api(transport)
 
     // The instance's description is read without a session: a session that has ended must not keep the app from
     // learning what the instance now serves.
     val instance = InstanceStore(Api(ApiTransport(BuildConfig.INSTANCE_URL, token = { null }, client = http)), http, context)
     val account = Account(api, vault, instance, MainScope(), deviceName(context)).also { account -> refusals = account::refused }
     val theme = ThemePreference(context)
-    val composer = org.livepeer.app.composer.ComposerSupport(api)
+    val composer = org.livepeer.app.composer.ComposerSupport(api, transport)
     val studio = org.livepeer.app.studio.StudioModel(api)
     val characters = org.livepeer.app.characters.CharactersModel(api)
     val settings = org.livepeer.app.settings.SettingsModel(api)

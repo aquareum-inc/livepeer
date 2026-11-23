@@ -93,6 +93,27 @@ struct APITransport: Sendable {
         return try JSONDecoder().decode(Output.self, from: data)
     }
 
+    /// Sends a file to where an upload ticket said to, with the same sign-in, and reads what comes back.
+    /// `path` is the ticket's own, on this instance.
+    func put<Output: Decodable>(file: URL, contentType: String, to path: String) async throws -> Output {
+        guard path.hasPrefix("/api/v1/"), let url = URL(string: path, relativeTo: baseURL) else { throw APIError(status: 0, message: "The request failed.", code: nil) }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        let sent = token()
+        if let sent { request.setValue("Bearer \(sent)", forHTTPHeaderField: "Authorization") }
+        let (data, response) = try await session.upload(for: request, fromFile: file)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let envelope = (try? JSONDecoder().decode(Envelope.self, from: data))?.error
+            let error = APIError(status: status, message: envelope?.message ?? "The request failed.", code: envelope?.code)
+            if let sent, error.isSignedOut || error.isMobileOff { refused(Refusal(error: error, token: sent)) }
+            throw error
+        }
+        return try JSONDecoder().decode(Output.self, from: data)
+    }
+
     /// A value as one path segment.
     static func escape(_ segment: String) -> String {
         segment.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? segment

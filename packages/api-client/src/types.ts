@@ -218,6 +218,32 @@ export interface MediaItem {
   artwork: MockArtwork;
 }
 
+/** What a client says about a file from the device before it sends it. */
+export interface UploadRequest {
+  kind: "image" | "video";
+  /** The file's name, which becomes the library item's title. */
+  name: string;
+  content_type: string;
+  size_bytes: number;
+  /** The nearest of the three shapes, when the client knows it. */
+  aspect?: "16:9" | "9:16" | "1:1";
+}
+
+/** Leave to send one file: where to PUT its bytes, and until when. */
+export interface UploadTicket {
+  id: string;
+  /** Where to PUT the file, on this instance, with the same sign-in. The library item comes back. */
+  path: string;
+  max_bytes: number;
+  expires_at: string;
+}
+
+/** A stored file, as it is served. */
+export interface MediaFile {
+  content_type: string;
+  bytes: Uint8Array;
+}
+
 export interface Character {
   slug: string;
   name: string;

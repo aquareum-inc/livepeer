@@ -33,6 +33,8 @@ interface StoredConversation {
   updatedAt: number;
   messages: Message[];
   turns: Map<string, StoredTurn>;
+  /** The capability the agent last asked about, so the answer is read as the rest of that request. */
+  asked: string | null;
 }
 
 const conversations = new Map<string, StoredConversation>();
@@ -45,10 +47,35 @@ function id(prefix: string): string {
 
 const VIDEO = /video|shot|film|footage|clip|animate|scene|camera|drone|tracking|timelapse|macro/i;
 const PRODUCTION = /script|storyboard|\bfilm\b|trailer|advert|commercial|\d+[- ]second|scenes/i;
+/** A request that names the kind of thing and nothing about it, such as a starting point sent as it is. */
+const OPENER = /^(i'd like to |i want to |let's |help me )?(make|create|animate|understand|watch|restyle)\s+(a|an|my)\s+(video|image|photo|picture|live camera|camera)\.?$/i;
+/** What a client sends when a picture is attached with no words. */
+const PICTURE_ALONE = "Bring this picture to life.";
 const UNDERSTAND = /summari[sz]e|find (every|the|all)|moments|timestamps|what happens|describe this/i;
 
 function step(kind: AgentStep["kind"], title: string, detail: string, app: string | null, ms: number): ScriptedStep {
   return { id: id("stp"), kind, title, detail, app, ms };
+}
+
+/** What the agent asks before making anything, by capability. */
+const QUESTIONS: Record<string, string> = {
+  "text-to-video":
+    "Happy to. What should it show? Give me the subject, what happens and where, and I'll add the lens, light and movement. Say so if you want a particular length or shape.",
+  "image-to-video":
+    "Which picture, and what should move? Add one with the plus button, or put a character in it and I'll start from their portrait. You can also describe the picture and I'll draw the first frame before animating it.",
+  "video-understanding":
+    "Attach a video or paste a link and I'll go through it. I can summarise it, list the key moments with timestamps, and find every shot that matches a description.",
+  "live-video-to-video":
+    "What should your camera look like? Describe the look, such as a medium, a palette or an era, and I'll write the restyle for you to take live in the studio.",
+};
+
+/** The capability an opener is about: the one picked with it, or the one its words name. */
+function openerKind(input: SendMessageInput): string | null {
+  const text = input.text.trim();
+  if (!OPENER.test(text)) return null;
+  const named = /camera/i.test(text) ? "live-video-to-video" : /understand|watch/i.test(text) ? "video-understanding" : /image|photo|picture/i.test(text) ? "image-to-video" : "text-to-video";
+  const kind = input.app ?? named;
+  return kind in QUESTIONS ? kind : named;
 }
 
 /** The character a request puts on screen, if it names one that exists. */
@@ -58,11 +85,27 @@ function castFor(input: SendMessageInput): CharacterCast | null {
 }
 
 /** What the agent does for a request, as a timed script. The shape is what the real agent will report. */
-function plan(input: SendMessageInput, cast: CharacterCast | null): { script: ScriptedStep[]; reply: string; generate: number; analysis?: VideoAnalysis } {
+function plan(input: SendMessageInput, cast: CharacterCast | null): { script: ScriptedStep[]; reply: string; generate: number; analysis?: VideoAnalysis; asks?: string } {
   const subject = input.text.length > 80 ? `${input.text.slice(0, 77)}…` : input.text;
   const spec = `${input.duration_seconds}s, ${input.aspect}`;
   const attached = listStoredMedia().find((item) => input.attachment_ids?.includes(item.id));
   const link = /https?:\/\/\S+/.exec(input.text)?.[0];
+
+  // A picture is something to start a shot from, not something to watch.
+  const picture = attached?.kind === "image" ? attached : undefined;
+  if (picture) {
+    const moves = UNDERSTAND.test(input.text) || input.text === PICTURE_ALONE ? "a slow push in, with the light and anything loose in the frame moving a little" : subject;
+    return {
+      generate: 1,
+      script: [
+        step("plan", "Start from your picture", `“${picture.title}” is the first frame, so the shot opens exactly as the picture looks.`, null, 1000),
+        step("tool", "Write the shot prompt", `Described what moves: ${moves}.`, "chat", 1500),
+        step("tool", "Generate the shot", spec, "image-to-video", 10400),
+        step("review", "Check it against the picture", "Compared the first frame and the subject with your picture. They match.", "video-understanding", 1800),
+      ],
+      reply: `Here's “${picture.title}” in motion. It opens on your picture and I checked the subject held. Tell me what should move differently, or open it in the studio to extend it.`,
+    };
+  }
 
   if (attached || link) {
     const name = attached ? `“${attached.title}”` : "the linked video";
@@ -90,6 +133,16 @@ function plan(input: SendMessageInput, cast: CharacterCast | null): { script: Sc
         step("review", `Check it's still ${cast.name}`, "Compared face, hair and wardrobe with the portrait, frame by frame. They match.", "video-understanding", 1800),
       ],
       reply: `Here's ${cast.name}${shots > 1 ? " across three shots" : ""}. I checked ${shots > 1 ? "every shot" : "the shot"} against the portrait before showing it. Open it in the studio to refine it, or tell me what ${cast.name} should do next.`,
+    };
+  }
+
+  const opener = openerKind(input);
+  if (opener) {
+    return {
+      generate: 0,
+      asks: opener,
+      script: [step("plan", "Read the request", "It says what kind of thing to make and nothing about it, so I'll ask before spending anything.", null, 900)],
+      reply: QUESTIONS[opener] ?? "",
     };
   }
 
@@ -182,21 +235,27 @@ function snapshot(stored: StoredConversation): Conversation {
   };
 }
 
-function append(stored: StoredConversation, input: SendMessageInput): void {
+function append(stored: StoredConversation, sent: SendMessageInput): void {
   const now = new Date().toISOString();
+  // An answer to "what should it show?" is the rest of the request the agent asked about.
+  const input = sent.app === null && stored.asked ? { ...sent, app: stored.asked } : sent;
   const cast = castFor(input);
   stored.messages.push({ id: id("msg"), role: "user", text: input.text, cast, agent_model: input.agent_model ?? null, created_at: now });
   const planned = plan(input, cast);
+  // Only a request to make something waits for its answer; a video to watch arrives as an attachment.
+  stored.asked = planned.asks && /^(text|image)-to-video$/.test(planned.asks) ? planned.asks : null;
   const { reply, generate, analysis = null } = planned;
   // Planning is done by the language model the user picked, when they picked one.
   const script = input.agent_model ? planned.script.map((entry) => (entry.kind === "plan" ? { ...entry, app: input.agent_model ?? null } : entry)) : planned.script;
   const generateIndex = script.findIndex((entry) => entry.kind === "tool" && /-to-video$/.test(entry.app ?? ""));
   const generateAt = script.slice(0, Math.max(0, generateIndex)).reduce((total, entry) => total + entry.ms, 0);
+  const picture = listStoredMedia().find((item) => item.kind === "image" && input.attachment_ids?.includes(item.id));
+  const firstFrame = cast?.image ?? picture?.image ?? null;
   const generationIds = Array.from({ length: generate }, (_, index) =>
     createStoredGeneration({
       kind: "video",
-      app: cast ? "image-to-video" : (input.app ?? "text-to-video"),
-      ...(cast?.image ? { first_frame: cast.image } : {}),
+      app: cast || picture ? "image-to-video" : (input.app ?? "text-to-video"),
+      ...(firstFrame ? { first_frame: firstFrame } : {}),
       prompt: generate > 1 ? `${input.text} — shot ${index + 1}` : input.text,
       aspect: input.aspect,
       duration_seconds: input.duration_seconds,
@@ -226,6 +285,7 @@ export function createStoredConversation(input: SendMessageInput): Conversation 
     updatedAt: Date.now(),
     messages: [],
     turns: new Map(),
+    asked: null,
   };
   conversations.set(stored.id, stored);
   append(stored, input);

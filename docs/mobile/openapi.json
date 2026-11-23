@@ -1487,6 +1487,88 @@
         }
       }
     },
+    "/uploads": {
+      "post": {
+        "operationId": "request_upload",
+        "summary": "Ask to add a photo or video from the device to the library. Answers with where to send the file: PUT its bytes to `path` on this instance with the same sign-in, and the library item comes back.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "image",
+                      "video"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "The file's name, which becomes the item's title"
+                  },
+                  "content_type": {
+                    "type": "string",
+                    "description": "The file's media type, such as image/jpeg or video/mp4"
+                  },
+                  "size_bytes": {
+                    "type": "number",
+                    "description": "The file's size in bytes"
+                  },
+                  "aspect": {
+                    "enum": [
+                      "16:9",
+                      "9:16",
+                      "1:1"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name",
+                  "content_type",
+                  "size_bytes"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadTicket"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/understand": {
       "post": {
         "operationId": "understand_video",
@@ -6141,6 +6223,32 @@
         ],
         "additionalProperties": false,
         "description": "One way of working in a studio medium, resolved against what the network offers right now."
+      },
+      "UploadTicket": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string",
+            "description": "Where to PUT the file, on this instance, with the same sign-in. The library item comes back."
+          },
+          "max_bytes": {
+            "type": "number"
+          },
+          "expires_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "path",
+          "max_bytes",
+          "expires_at"
+        ],
+        "additionalProperties": false,
+        "description": "Leave to send one file: where to PUT its bytes, and until when."
       },
       "Usage": {
         "type": "object",

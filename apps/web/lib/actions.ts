@@ -26,8 +26,11 @@ import type {
   Preferences,
   ReportReason,
   SendMessageInput,
+  UploadRequest,
+  UploadTicket,
   VideoAnalysis,
 } from "@livepeer/api-client";
+import { UploadRefused } from "@livepeer/api-client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -49,6 +52,19 @@ export async function createGenerationAction(request: GenerationRequest): Promis
 
 export async function getGenerationAction(id: string): Promise<Generation | null> {
   return (await (await client()).getGeneration(id)).data;
+}
+
+/**
+ * Checks a file before the browser sends it. A refusal comes back as words to show, not as a thrown error,
+ * since a thrown error's message doesn't reach the browser in production.
+ */
+export async function requestUploadAction(request: UploadRequest): Promise<{ ticket: UploadTicket } | { refused: string }> {
+  try {
+    return { ticket: (await (await client()).requestUpload(request)).data };
+  } catch (cause) {
+    if (cause instanceof UploadRefused) return { refused: cause.message };
+    throw cause;
+  }
 }
 
 export async function createConversationAction(input: SendMessageInput): Promise<Conversation> {

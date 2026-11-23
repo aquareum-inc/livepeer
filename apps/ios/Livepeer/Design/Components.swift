@@ -13,19 +13,24 @@ struct PressStyle: ButtonStyle {
     }
 }
 
-/// Liquid glass for controls that sit over footage: a see-through fill, a blur and a bright edge.
+/// Liquid glass for controls that sit over footage. It is the system's own glass, the tab bar's, where
+/// the phone has it; before that, a see-through fill, a blur and a bright edge.
 private struct Glass<S: InsettableShape>: ViewModifier {
     let shape: S
     @Environment(\.palette) private var palette
 
     func body(content: Content) -> some View {
-        content
-            .background(.ultraThinMaterial, in: shape)
-            .background(palette.glassFill, in: shape)
-            .overlay(shape.strokeBorder(palette.glassEdge, lineWidth: 1))
-            // Depth, so glass holds its edge on a pale page; on a dark one the shadow is lost in it, as intended.
-            .overlay(shape.strokeBorder(palette.hairline, lineWidth: 1))
-            .shadow(color: .black.opacity(0.1), radius: 14, y: 8)
+        if #available(iOS 26, *) {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .background(palette.glassFill, in: shape)
+                .overlay(shape.strokeBorder(palette.glassEdge, lineWidth: 1))
+                // Depth, so glass holds its edge on a pale page; on a dark one the shadow is lost in it, as intended.
+                .overlay(shape.strokeBorder(palette.hairline, lineWidth: 1))
+                .shadow(color: .black.opacity(0.1), radius: 14, y: 8)
+        }
     }
 }
 

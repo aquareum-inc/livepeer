@@ -18,9 +18,8 @@ export default async function HomePage({ searchParams }: Props) {
   const characters = charactersEnabled();
   // `?with=<slug>` arrives from a character's page and puts them in the composer.
   const slug = (await searchParams).with;
-  const [starters, showcase, offerings, agentModels, character] = await Promise.all([
+  const [starters, offerings, agentModels, character] = await Promise.all([
     client.listPromptStarters(),
-    client.listShowcase(),
     client.listOfferings(),
     client.listAgentModels(),
     characters && typeof slug === "string" ? client.getCharacter(slug) : null,
@@ -30,13 +29,12 @@ export default async function HomePage({ searchParams }: Props) {
   const cast = found && (!found.mature || (await adultContent(client)).shown) && moderation().visible(session?.userId ?? null)(found) ? { slug: found.slug, name: found.name, image: found.image } : null;
   return (
     <>
-      <Home starters={starters.data} showcase={showcase.data} offerings={offered} agentModels={agentModels.data} signedIn={session !== null} characters={characters} cast={cast} backdrop={{ video: home?.backgroundVideo ?? null, poster: home?.backgroundPoster ?? null, image: home?.backgroundImage ?? null, aurora: home?.aurora ?? false }} />
+      <Home starters={starters.data} offerings={offered} agentModels={agentModels.data} signedIn={session !== null} characters={characters} cast={cast} backdrop={{ video: home?.backgroundVideo ?? null, poster: home?.backgroundPoster ?? null, image: home?.backgroundImage ?? null, aurora: home?.aurora ?? false }} />
       {isDev ? (
         <DataSourceBadge
           sources={[
             { name: "listOfferings", source: offerings.source },
             { name: "listAgentModels", source: agentModels.source },
-            { name: "listShowcase", source: showcase.source },
             { name: "listPromptStarters", source: starters.source },
             ...(character ? [{ name: "getCharacter", source: character.source }] : []),
           ]}

@@ -73,7 +73,7 @@ fun Modifier.breathing(active: Boolean = true): Modifier = composed {
 
 /** A pill that selects something. Never the primary action. */
 @Composable
-fun Chip(label: String, icon: ImageVector? = null, selected: Boolean = false, hint: String? = null, onClick: () -> Unit) {
+fun Chip(label: String, icon: ImageVector? = null, selected: Boolean = false, enabled: Boolean = true, hint: String? = null, onClick: () -> Unit) {
     val palette = LocalPalette.current
     Row(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -81,7 +81,7 @@ fun Chip(label: String, icon: ImageVector? = null, selected: Boolean = false, hi
         modifier = Modifier
             .glass(CircleShape)
             .then(if (selected) Modifier.border(1.dp, palette.foreground.copy(alpha = 0.45f), CircleShape) else Modifier)
-            .pressable(label = hint, onClick = onClick)
+            .pressable(enabled = enabled, label = hint, onClick = onClick)
             .semantics { this.selected = selected }
             .heightIn(min = 36.dp)
             .padding(horizontal = 14.dp),

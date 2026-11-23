@@ -1463,6 +1463,16 @@ data class StudioMode(
     @SerialName("needs_input") val needsInput: Boolean,
 )
 
+/** Leave to send one file: where to PUT its bytes, and until when. */
+@Serializable
+data class UploadTicket(
+    @SerialName("id") val id: String,
+    /** Where to PUT the file, on this instance, with the same sign-in. The library item comes back. */
+    @SerialName("path") val path: String,
+    @SerialName("max_bytes") val maxBytes: Double,
+    @SerialName("expires_at") val expiresAt: String,
+)
+
 /** What a user has spent: totals by capability, and their recent jobs. */
 @Serializable
 data class Usage(

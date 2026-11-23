@@ -107,8 +107,9 @@ decided by rules in `packages/user-app/src/lib/capability-menu.ts`. The apps don
 Swift and Kotlin: `list_capability_labels` returns the result, and slice 2 adds the same for the agent's
 model menu.
 
-Not added, and why: `uploadMedia` and `getMediaUrl` don't exist in the API client yet (the web marks
-them "not wired"), so attaching from Photos and saving a result to Photos are planned for when the media
+Attaching from Photos was added later (decision 106 in `docs/design-proposals.md`): `request_upload`, then
+the file itself to the address it answers with. Still not added, and why: `getMediaUrl` doesn't exist in
+the API client yet, so saving a result to Photos is planned for when the media
 store and real outputs exist. Until then mobile attaches from the library, as the web does.
 
 ### 4.2 Response schemas and the OpenAPI document
@@ -679,8 +680,9 @@ Not done in slice 5, and why:
 Not done in slice 4, and why:
 
 - **Convert or export** opens the Developers pages, which stay on the web.
-- **Adding to the library from the phone** (camera roll, files) needs uploads (`uploadMedia`), as the
-  studio's References and Edit do.
+- **Adding to the library from the phone** is built for the composer's attach tray (decision 106), from
+  the photo picker. The Library tab has no upload button of its own yet, and the studio's References and
+  Edit still wait.
 
 ### Slice 3: Studio (20 November 2026)
 
@@ -702,8 +704,8 @@ Not done in slice 4, and why:
 
 Not done in slice 3, and why:
 
-- **References, Edit and first and last frames** need uploads, which the API client doesn't have yet
-  (`uploadMedia`).
+- **References, Edit and first and last frames** can now be built on `request_upload` (decision 106); they
+  aren't yet.
 - **The live aurora** stays a still photograph. It's a design port (Metal and AGSL) with no flow behind it;
   it moves to a polish pass after the slices rather than holding up Library.
 

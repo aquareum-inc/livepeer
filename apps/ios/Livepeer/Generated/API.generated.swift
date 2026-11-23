@@ -142,6 +142,11 @@ struct API: Sendable {
         try await transport.send("DELETE", "/library/\(APITransport.escape(id))", query: [:], body: nil)
     }
 
+    /// Ask to add a photo or video from the device to the library. Answers with where to send the file: PUT its bytes to `path` on this instance with the same sign-in, and the library item comes back.
+    func requestUpload(kind: String, name: String, contentType: String, sizeBytes: Double, aspect: String? = nil) async throws -> UploadTicket {
+        try await transport.send("POST", "/uploads", query: [:], body: ["kind": .string(kind), "name": .string(name), "content_type": .string(contentType), "size_bytes": .number(sizeBytes), "aspect": aspect.map { .string($0) }])
+    }
+
     /// Ask about a video: summarise it, find moments, answer a question.
     func understandVideo(source: String, question: String) async throws -> VideoAnalysis {
         try await transport.send("POST", "/understand", query: [:], body: ["source": .string(source), "question": .string(question)])
