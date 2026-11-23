@@ -1730,7 +1730,8 @@ the app showed them, the first one sent after pressing Home never appeared. The 
 only while the app is in front (`ConsoleSession.away`). iOS never had this: it asks the app only when the app
 is in front.
 
-Still as it was: the title repeats the app's name, and a phone the instance can't send to is tried every time.
+The title repeating the app's name and a phone the instance can't send to being tried every time were
+mended later the same day (below).
 
 **22 November 2026, night: a real alert on iOS, through Apple.** The owner's Apple Developer membership came
 through. An App ID for `org.livepeer.app.dev` with Push Notifications and one APNs key (sandbox and
@@ -1772,11 +1773,21 @@ push token from Apple's sandbox.
 Still not seen on iOS: time-sensitive delivery for the engine's alert, a tap with the console already open,
 Apple's production service, and what the hardware key does when a face is added.
 
-Found in passing, in stage 1's code, and left alone:
+**22 November 2026, late: four small things mended.** Each was found while running the above.
 
-- On a phone with no Face ID set up, the console's cover says "The console needs Face ID or Touch ID…" twice,
-  once in grey and once in red.
-- If the composer's keyboard is up when the console is opened, it stays up over the console's cover.
+- **An Android notification no longer says the app's name twice.** The title is shown only when it differs
+  from the app's own name, which the system already puts at the head. Seen in the emulator with a real test
+  alert: "Livepeer · now", then "Alerts reach this phone." (`android-console-alert-shade-dark.jpg`).
+- **A phone the instance can't send to is left out**, not tried and logged at every alert. With no APNs key,
+  each alert had written "failed (not set up)" for each iPhone with alerts on. System and the phone's own
+  Alerts page already say the platform isn't set up. Covered by a test.
+- **The cover says why it can't open once.** On a phone with no face or fingerprint set up, the sentence was
+  there in grey and again in red, on both platforms. Seen in the simulator with Face ID switched off.
+- **The keyboard goes when the console covers the app**, on both platforms. On Android the account tray
+  already took it down, so the fault was iOS's. Not seen on iOS: the simulator shows no keyboard while the
+  Mac's is attached. It wants one look on a real iPhone.
+
+197 web tests, 84 Android and 65 iOS unit tests pass.
 
 ### 18.9 Stage 3: push alerts (specified and accepted 21 November 2026; server half built)
 

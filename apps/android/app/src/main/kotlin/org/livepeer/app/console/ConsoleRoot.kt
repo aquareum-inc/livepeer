@@ -242,7 +242,8 @@ private fun ConsoleGate(container: AppContainer, back: (() -> Unit)?, openBrowse
             } else if (signedOut) {
                 BasicText("For the people who run this service. It opens with your fingerprint or face on this phone.", style = TypeSize.Body.style().copy(color = palette.mutedForeground, textAlign = TextAlign.Center))
             }
-            failure?.takeIf { !signingIn }?.let {
+            // Without a fingerprint or face the grey sentence above already says why; the same words in red add nothing.
+            failure?.takeIf { !signingIn && (biometrics || it != ConsoleSession.NEEDS_BIOMETRICS) }?.let {
                 BasicText(it, style = TypeSize.Body.style().copy(color = palette.destructive, textAlign = TextAlign.Center), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             }
         }

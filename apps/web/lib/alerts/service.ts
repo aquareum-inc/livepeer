@@ -79,7 +79,11 @@ export function alertsService({ store, sessions, audit, sender, enabled, name, n
 
   /** Sends to several phones at once and answers with the sessions that were reached. */
   const sendAll = async (targets: AlertTarget[], notification: (target: AlertTarget) => PushNotification, what: string): Promise<string[]> => {
-    const reached = (await Promise.all(targets.map(async (target) => ((await send(target, notification(target), what)) ? target.sessionId : null)))).filter((id): id is string => id !== null);
+    // A phone on a platform the instance holds no credentials for is left out: there is nothing to try, and a
+    // line in the audit log for each alert would bury the ones that matter. System and the phone's own Alerts
+    // page already say that platform isn't set up.
+    const offered = targets.filter((target) => sender().offers(target.platform));
+    const reached = (await Promise.all(offered.map(async (target) => ((await send(target, notification(target), what)) ? target.sessionId : null)))).filter((id): id is string => id !== null);
     sessions().alerted(reached);
     return reached;
   };

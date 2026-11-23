@@ -16,6 +16,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,7 +62,16 @@ class MainActivity : ComponentActivity() {
                 onDispose {}
             }
             val consoleUp by container.console.session.presented.collectAsStateWithLifecycle()
-            LaunchedEffect(consoleUp) { hideFromRecents(consoleUp) }
+            val keyboard = LocalSoftwareKeyboardController.current
+            val focus = LocalFocusManager.current
+            LaunchedEffect(consoleUp) {
+                hideFromRecents(consoleUp)
+                // Whatever was being typed under the console keeps its text, and loses the keyboard.
+                if (consoleUp) {
+                    focus.clearFocus(force = true)
+                    keyboard?.hide()
+                }
+            }
             // The description and the account are read again each time the app comes to the front.
             LifecycleResumeEffect(Unit) {
                 lifecycleScope.launch {

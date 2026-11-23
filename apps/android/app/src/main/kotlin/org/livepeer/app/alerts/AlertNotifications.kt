@@ -22,9 +22,11 @@ object AlertNotifications {
         val manager = NotificationManagerCompat.from(context)
         if (!manager.areNotificationsEnabled()) return
         AlertChannels.create(context)
+        // The system heads every notification with the app's name. The instance's name under it would say it twice.
+        val title = alert.title.takeIf { it.isNotBlank() && it != context.applicationInfo.loadLabel(context.packageManager).toString() }
         val line = NotificationCompat.Builder(context, alert.channel)
             .setSmallIcon(R.drawable.ic_alert)
-            .setContentTitle(alert.title)
+            .setContentTitle(title)
             .setContentText(alert.body)
             .setAutoCancel(true)
             .setGroup(STACK_KEY)
@@ -33,7 +35,7 @@ object AlertNotifications {
         // Only the lines make themselves heard. The summary is there to hold them and to be tapped.
         val stack = NotificationCompat.Builder(context, alert.channel)
             .setSmallIcon(R.drawable.ic_alert)
-            .setContentTitle(alert.title)
+            .setContentTitle(title)
             .setAutoCancel(true)
             .setGroup(STACK_KEY)
             .setGroupSummary(true)

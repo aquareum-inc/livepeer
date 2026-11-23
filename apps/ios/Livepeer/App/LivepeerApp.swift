@@ -85,6 +85,10 @@ struct RootView: View {
         .environment(\.palette, palette)
         .tint(palette.foreground)
         .preferredColorScheme(theme == "dark" ? .dark : theme == "light" ? .light : nil)
+        // Whatever was being typed under the console keeps its text, and loses the keyboard.
+        .onChange(of: console.presented) { _, presented in
+            if presented { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+        }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task {
