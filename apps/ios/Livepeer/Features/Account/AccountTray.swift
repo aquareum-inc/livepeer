@@ -14,11 +14,16 @@ struct AccountTray: View {
     @AppStorage("theme") private var theme = "system"
     @State private var confirmingSignOut = false
     @State private var signingOut = false
+    @State private var switchFailed = false
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if account.signedIn {
+            if account.signedIn, account.hasWorkspaces, let list = account.accounts {
+                switcher(list)
+            } else if account.signedIn {
                 identity
+                invitations
             } else {
                 Text("Sign in to generate and save your work.")
                     .text(.body)
@@ -87,7 +92,67 @@ struct AccountTray: View {
                 .sensoryFeedback(.warning, trigger: confirmingSignOut) { _, showing in showing }
             }
         }
-        .task { await account.refresh() }
+        .task {
+            await account.refresh()
+            await account.loadAccounts()
+        }
+        .sensoryFeedback(.selection, trigger: account.accountEpoch)
+    }
+
+    /// The accounts the person can work in, the current one ticked. One tap works in another.
+    private func switcher(_ list: AccountList) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(spacing: 0) {
+                ForEach(list.accounts, id: \.id) { entry in
+                    let current = entry.id == (account.me?.account.id ?? list.current)
+                    Button {
+                        Task {
+                            switchFailed = false
+                            if await account.switchAccount(to: entry.id) { dismiss() } else { switchFailed = true }
+                        }
+                    } label: {
+                        HStack(spacing: 12) {
+                            AccountMark(account: entry, size: 36)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(entry.name).text(.body, weight: .medium).foregroundStyle(palette.foreground).lineLimit(1)
+                                Text(AccountWords.kind(of: entry)).text(.caption).foregroundStyle(palette.subtleForeground)
+                            }
+                            Spacer(minLength: 8)
+                            // The current account's balance is the live one; the others are as last read.
+                            Text(Int(current ? account.me?.balance.credits ?? entry.credits : entry.credits).formatted())
+                                .text(.caption, mono: true).foregroundStyle(palette.mutedForeground)
+                            if account.switchingTo == entry.id {
+                                ProgressView().controlSize(.small).frame(width: 18)
+                            } else {
+                                Image(systemName: "checkmark").font(.system(size: 13, weight: .semibold)).foregroundStyle(palette.foreground).opacity(current ? 1 : 0).frame(width: 18)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressStyle())
+                    .disabled(account.switchingTo != nil)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(AccountWords.spoken(entry, current: current))
+                    .accessibilityAddTraits(current ? [.isButton, .isSelected] : .isButton)
+                    .accessibilityHint(current ? "" : "Works in this account")
+                }
+            }
+            if switchFailed {
+                Text("That didn't switch. Check your connection and try again.").text(.caption).foregroundStyle(palette.destructive)
+            }
+            invitations
+        }
+    }
+
+    /// Invitations waiting, said and not offered: answering one needs its link, which a phone isn't given.
+    @ViewBuilder private var invitations: some View {
+        ForEach(account.accounts?.invitations ?? [], id: \.id) { invitation in
+            Label("\(invitation.invitedByName) invited you to \(invitation.workspaceName). Answer it on the web.", systemImage: "envelope")
+                .text(.caption)
+                .foregroundStyle(palette.mutedForeground)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private var offersConsole: Bool {
@@ -135,19 +200,87 @@ struct Avatar: View {
     }
 }
 
-/// The account button at the top right of each tab. Opens the account tray.
+/// An account's mark: the person's initials in a circle for their own, and a workspace's initial in a rounded
+/// square, so the two never read as each other.
+struct AccountMark: View {
+    let account: AccountSummary
+    var size: CGFloat = 32
+    @Environment(\.palette) private var palette
+
+    var body: some View {
+        if account.kind == .workspace {
+            let shape = RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+            Text(AccountWords.initial(of: account.name))
+                .font(.system(size: size * 0.4, weight: .semibold))
+                .foregroundStyle(palette.foreground)
+                .frame(width: size, height: size)
+                .background(palette.secondary, in: shape)
+                .overlay(shape.strokeBorder(palette.hairline, lineWidth: 1))
+        } else {
+            Avatar(initials: AccountWords.initials(of: account.name), size: size)
+        }
+    }
+}
+
+/// The words and letters an account is shown with.
+enum AccountWords {
+    static func initials(of name: String) -> String {
+        name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
+    }
+
+    static func initial(of name: String) -> String {
+        name.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased() } ?? "?"
+    }
+
+    static func role(_ role: WorkspaceRole) -> String {
+        switch role {
+        case .owner: "Owner"
+        case .admin: "Admin"
+        case .member, .unknown: "Member"
+        }
+    }
+
+    /// The line under an account's name: "Personal", or the person's role in a workspace.
+    static func kind(of account: AccountSummary) -> String {
+        guard account.kind == .workspace else { return "Personal" }
+        return role(account.role) + (account.status == .paused ? " · Suspended" : "")
+    }
+
+    /// Where the person is working and as what, for Settings: "Working in Northlight Studio · Admin".
+    static func workingIn(_ account: AccountSummary) -> String { "Working in \(account.name) · \(role(account.role))" }
+
+    static func spoken(_ account: AccountSummary, current: Bool) -> String {
+        let what = account.kind == .workspace ? "\(account.name), workspace, \(role(account.role).lowercased())" : "\(account.name), personal account"
+        return "\(what), \(Int(account.credits)) credits" + (current ? ", current" : "")
+    }
+}
+
+/// The account button at the top right of each tab. Opens the account tray. In a workspace it is the
+/// workspace's mark, so the shape says whose credit a request will spend.
 struct AccountButton: View {
     let open: () -> Void
     @Environment(Account.self) private var account
 
     var body: some View {
         Button(action: open) {
-            Avatar(initials: account.signedIn ? account.initials : "", size: 34)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
+            Group {
+                if let workspace = account.workspace {
+                    AccountMark(account: workspace, size: 34)
+                } else {
+                    Avatar(initials: account.signedIn ? account.initials : "", size: 34)
+                }
+            }
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle(round: true))
-        .accessibilityLabel(account.signedIn ? "Account, \(account.me?.name ?? "signed in")" : "Account, not signed in")
+        .accessibilityLabel(label)
+    }
+
+    private var label: String {
+        guard account.signedIn else { return "Account, not signed in" }
+        if let workspace = account.workspace { return "Account, \(account.me?.name ?? "signed in"), working in \(workspace.name)" }
+        return "Account, \(account.me?.name ?? "signed in")"
     }
 }
 

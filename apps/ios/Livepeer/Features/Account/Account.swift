@@ -25,6 +25,12 @@ final class Account {
 
     private(set) var signedIn: Bool
     private(set) var me: Me?
+    /// The accounts the person can work in: their own and the workspaces they belong to. Nil until read.
+    private(set) var accounts: AccountList?
+    /// The account being switched to, while the instance is asked.
+    private(set) var switchingTo: String?
+    /// Goes up each time the app starts working in a different account, so everything on screen is read again.
+    private(set) var accountEpoch = 0
     /// Something to tell the person once, such as "You've been signed out."
     var notice: String?
     /// The sign-in tray, when it's open.
@@ -50,9 +56,35 @@ final class Account {
         return words.compactMap(\.first).map(String.init).joined().uppercased()
     }
 
+    /// The workspace the app is working in, or nil in the person's own account.
+    var workspace: AccountSummary? { me.flatMap { $0.account.kind == .workspace ? $0.account : nil } }
+
+    /// Whether there is anything to switch between.
+    var hasWorkspaces: Bool { (accounts?.accounts.count ?? 0) > 1 }
+
     func refresh() async {
         guard signedIn else { return }
-        if let fresh = try? await api.getMe() { me = fresh }
+        guard let fresh = try? await api.getMe() else { return }
+        // The account can change under the app: a switch here, or being removed from a workspace elsewhere.
+        if let before = me?.account.id, before != fresh.account.id { accountEpoch += 1 }
+        me = fresh
+    }
+
+    /// Reads the accounts the person can work in. What was known stays if the instance can't be reached.
+    func loadAccounts() async {
+        guard signedIn else { return }
+        if let fresh = try? await api.listAccounts() { accounts = fresh }
+    }
+
+    /// Starts working in another account. False when the instance refused or couldn't be reached.
+    func switchAccount(to id: String) async -> Bool {
+        guard signedIn, switchingTo == nil, id != me?.account.id else { return id == me?.account.id }
+        switchingTo = id
+        defer { switchingTo = nil }
+        guard let fresh = try? await api.switchAccount(accountId: id) else { return false }
+        accounts = fresh
+        await refresh()
+        return me?.account.id == id
     }
 
     /// Opens the sign-in tray and waits for it. True once signed in, false if the person closed it. Whatever
@@ -145,6 +177,7 @@ final class Account {
         vault.set(nil)
         signedIn = false
         me = nil
+        accounts = nil
     }
 
     private func handle(_ refusal: Refusal) async {

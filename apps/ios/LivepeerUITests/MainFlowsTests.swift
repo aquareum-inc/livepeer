@@ -69,4 +69,30 @@ final class MainFlowsTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: patience))
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "credits")).firstMatch.waitForExistence(timeout: patience))
     }
+
+    func testSwitchingToAWorkspaceAndBack() throws {
+        try launch(signedIn: true)
+        let labelled = { (format: String, text: String) in self.app.buttons.matching(NSPredicate(format: format, text)).firstMatch }
+        let accountButton = labelled("label BEGINSWITH %@", "Account, ")
+        XCTAssertTrue(accountButton.waitForExistence(timeout: patience))
+        accountButton.tap()
+
+        // The development user is an admin of the seeded workspace.
+        let workspace = labelled("label BEGINSWITH %@", "Northlight Studio, workspace")
+        XCTAssertTrue(workspace.waitForExistence(timeout: patience))
+        workspace.tap()
+
+        // The tray closes, and the account button says where the app is working now.
+        let inWorkspace = labelled("label CONTAINS %@", "working in Northlight Studio")
+        XCTAssertTrue(inWorkspace.waitForExistence(timeout: patience))
+        tab("Library").tap()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: patience))
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", ", video")).firstMatch.waitForExistence(timeout: patience))
+
+        labelled("label CONTAINS %@", "working in Northlight Studio").tap()
+        let personal = labelled("label CONTAINS %@", "personal account")
+        XCTAssertTrue(personal.waitForExistence(timeout: patience))
+        personal.tap()
+        XCTAssertTrue(inWorkspace.waitForNonExistence(timeout: patience))
+    }
 }

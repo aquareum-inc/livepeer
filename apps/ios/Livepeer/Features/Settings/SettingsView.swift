@@ -28,6 +28,15 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 4)
                     .redacted(reason: account.me == nil ? .placeholder : [])
+                    if let workspace = account.workspace {
+                        HStack(spacing: 12) {
+                            AccountMark(account: workspace, size: 28).frame(width: 48)
+                            Text(AccountWords.workingIn(workspace)).text(.body).foregroundStyle(palette.foreground)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                } footer: {
+                    if account.workspace != nil { Text("Plan, credits and usage below are the workspace's. Members, roles and invitations are on the web.") }
                 }
                 Section {
                     row(.plan, "Plan and credits", symbol: "creditcard", detail: account.me.map { "\(Int($0.balance.credits).formatted()) credits" })
@@ -125,7 +134,7 @@ private struct PlanSettingsView: View {
     var body: some View {
         SettingsPage(title: "Plan and credits", state: model.plan, failure: "Your plan didn't load. Check your connection and try again.", load: model.loadPlan) { details in
             List {
-                Section("Balance") {
+                Section(account.workspace.map { "\($0.name)'s balance" } ?? "Balance") {
                     VStack(alignment: .leading, spacing: 4) {
                         if let credits = account.me?.balance.credits {
                             Text(Int(credits).formatted()).font(.custom(Typeface.monoMedium, size: TypeSize.title.size, relativeTo: .title)).foregroundStyle(palette.foreground)
@@ -135,7 +144,7 @@ private struct PlanSettingsView: View {
                     }
                     .padding(.vertical, 4)
                 }
-                Section("Plan") {
+                Section {
                     if let plan = details.plan {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(alignment: .firstTextBaseline) {
@@ -150,8 +159,16 @@ private struct PlanSettingsView: View {
                         ForEach(plan.features, id: \.self) { feature in
                             Label(feature, systemImage: "checkmark").text(.body).foregroundStyle(palette.foreground)
                         }
+                    } else if let workspace = account.workspace {
+                        Text("\(workspace.name) isn't on a plan. Work here uses the credits on the workspace.").text(.body).foregroundStyle(palette.mutedForeground)
                     } else {
                         Text("You're not on a plan. Your work uses the credits on your account.").text(.body).foregroundStyle(palette.mutedForeground)
+                    }
+                } header: {
+                    Text("Plan")
+                } footer: {
+                    if let workspace = account.workspace {
+                        Text(workspace.role == .owner ? "You own this workspace. Add credit or change its plan on the web." : "The workspace's owner adds credit and chooses its plan.")
                     }
                 }
             }
@@ -164,12 +181,13 @@ private struct PlanSettingsView: View {
 /// What has been spent, by capability, and the most recent jobs.
 private struct UsageSettingsView: View {
     @Environment(SettingsModel.self) private var model
+    @Environment(Account.self) private var account
     @Environment(\.palette) private var palette
 
     var body: some View {
         SettingsPage(title: "Usage", state: model.usage, failure: "Usage didn't load. Check your connection and try again.", load: model.loadUsage) { usage in
             if usage.entries.isEmpty {
-                EmptyState(symbol: "chart.bar", title: "No usage yet", message: "Each generation, analysis and session you run is listed here with what it cost.")
+                EmptyState(symbol: "chart.bar", title: "No usage yet", message: account.workspace.map { "Nothing has been charged to \($0.name) yet. Each generation, analysis and session made here is listed with what it cost." } ?? "Each generation, analysis and session you run is listed here with what it cost.")
             } else {
                 List {
                     Section {
@@ -179,6 +197,10 @@ private struct UsageSettingsView: View {
                         }
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets())
+                    } footer: {
+                        if let workspace = account.workspace {
+                            Text(workspace.role == .member ? "What you've used in \(workspace.name). Its owner and admins see everyone's." : "Everything made in \(workspace.name), by everyone and every API key. Usage by member is on the web.")
+                        }
                     }
                     Section("By capability") {
                         let top = usage.summary.byApp.first?.credits ?? 1

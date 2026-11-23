@@ -80,7 +80,11 @@ struct LibraryView: View {
             if model.filtered {
                 EmptyState(symbol: "magnifyingglass", title: "Nothing matches", message: "Try describing what's on screen: a place, an action, a colour, a time of day.")
             } else {
-                EmptyState(symbol: "sparkles.rectangle.stack", title: "Your library is empty", message: "Shots you make on Home or in the studio are saved here.")
+                EmptyState(
+                    symbol: "sparkles.rectangle.stack",
+                    title: account.workspace.map { "\($0.name)'s library is empty" } ?? "Your library is empty",
+                    message: account.workspace == nil ? "Shots you make on Home or in the studio are saved here." : "Shots anyone here makes on Home or in the studio are saved here, for everyone in the workspace."
+                )
             }
         case .loaded:
             LibraryGrid(items: model.items) { selected = $0 }
@@ -174,6 +178,10 @@ private struct ItemTray: View {
                 Text(item.description).text(.body).foregroundStyle(palette.foreground).fixedSize(horizontal: false, vertical: true)
                 if !item.tags.isEmpty {
                     FlowTags(tags: item.tags).padding(.top, 4)
+                }
+                // In a workspace's library, who made it.
+                if let maker = item.madeBy {
+                    Text("\(item.source == .upload ? "Added" : "Made") by \(maker)").text(.caption).foregroundStyle(palette.mutedForeground).padding(.top, 4)
                 }
             }
 
