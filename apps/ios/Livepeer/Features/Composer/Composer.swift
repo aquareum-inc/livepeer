@@ -49,6 +49,11 @@ struct Composer: View {
     let send: () -> Void
     @Environment(\.palette) private var palette
     @Environment(\.motion) private var motion
+    /// The tools' icons grow with the reader's text size, all by the same amount so they stay one size,
+    /// and stop at 1.3 times so the row still fits.
+    @ScaledMetric(relativeTo: .body) private var scaledIcon: CGFloat = 17
+    private var iconScale: CGFloat { min(scaledIcon / 17, 1.3) }
+
     /// How far the composer sits from the screen's edges: the system tab bar's own inset, so the two line up.
     static let inset: CGFloat = 21
 
@@ -149,7 +154,7 @@ struct Composer: View {
     private func tool(_ symbol: String, label: String, on: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 17, weight: .medium))
+                .font(.system(size: 17 * iconScale, weight: .medium))
                 .foregroundStyle(on ? palette.foreground : palette.mutedForeground)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
@@ -175,8 +180,8 @@ struct Composer: View {
             HStack(spacing: 5) {
                 RobotMark()
                     // Sized and weighted to sit level with the system icons beside it.
-                    .stroke(style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
-                    .frame(width: 20, height: 20)
+                    .stroke(style: StrokeStyle(lineWidth: 1.8 * iconScale, lineCap: .round, lineJoin: .round))
+                    .frame(width: 20 * iconScale, height: 20 * iconScale)
                     .accessibilityHidden(true)
                 if named {
                     Text(chosenModel?.name ?? "Auto").text(.caption, weight: .medium).lineLimit(1).fixedSize()
