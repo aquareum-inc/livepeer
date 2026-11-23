@@ -29,6 +29,8 @@ Status: **built** = exists today, otherwise the slice that builds it.
 | `/developers/examples` | Example apps on the real-time API | — (ours) | Live avatar, interactive world; description + starter code. | e |
 | `/settings/*` | Profile, General, Privacy, Plan and credits, Usage, Chat, Image, Video, Storage | Settings modal | Routes rather than a modal, so they are linkable; same groups. **Privacy** adds the "who can see what" table. Plan and balance come from the provider. Adult content is behind an age confirmation and off by default. | d |
 | (sheet) | Add credits; change plan | dialogs | Packs and plans come from the provider interface. | d |
+| `/settings/workspace` | The workspace you are working in: name, members, roles, invitations, leaving | — | Shown as a Settings tab only in a workspace; a personal account is sent to `/settings`. `docs/workspaces.md`. | workspaces |
+| `/join/[token]` | An invitation: who invited you to which workspace, join or decline | — | Needs a session; a guest signs in and comes back. | workspaces |
 | (menu) | Account menu at the foot of the sidebar, signed in or as a guest | Account menu | Guests can look around, as on Venice: Home, the studio (composer works; Generate waits for sign-in), public characters, an empty library and the developer docs. Running anything asks them to sign in, because every job is charged to an allocation. Chats, settings, API keys and creating or calling a character need an account (`lib/auth/guard.ts`). | built |
 | `/sign-in`, `/auth/start`, `/auth/callback` | Sign-in with Apple, Coinbase, Discord, Google, wallet, email or passkey, or continue as a guest | Sign in | Methods are instance config. With the development provider every method signs in a test user; with an OIDC provider the chosen method is passed to it as a hint. Wallet sign-in is a login method only: no token features. | built |
 
@@ -62,6 +64,7 @@ Uses builder-core-console's names: actors, allocations, grants, offerings, orche
 | `/operator/capabilities` | Capabilities | Network (offerings) | Enable/disable, retail price, defaults, routing, surface override | live (discovery) + config |
 | `/operator/compute` | Compute | Network (orchestrators, runners) | Performance, allow/block lists, own GPUs | live (runners) + mock |
 | `/operator/grants` | Grants | Operator actions (grants) | Funding, allocations, spend per grant | live (needs a real admin key) |
+| `/operator/workspaces`, `/[id]` | Workspaces | — | Shared accounts: members with role and usage, invitations, plan, budget, keys, usage, suspend | mock (provider) |
 | `/operator/settings` | Instance settings | — | Name, logo, colours, domain, sign-up, privacy defaults, surfaces, content policy | config |
 | `/operator/keys` | API and admin keys | Operator actions (keys) | — | live |
 | `/operator/system` | System | Health, Sources & gaps | Versions, `doctor` results, data-source table | live |

@@ -29,13 +29,16 @@ import type {
   UploadRequest,
   UploadTicket,
   VideoAnalysis,
+  WorkspaceInvitation,
+  WorkspaceRole,
 } from "@livepeer/api-client";
 import { UploadRefused } from "@livepeer/api-client";
+import type { Outcome } from "@livepeer/user-app";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { api } from "./api";
-import { clearSession, getSession } from "./auth/session";
+import { clearSession, getSession, writeSession } from "./auth/session";
 import { adultContent, charactersEnabled } from "./content";
 import { devices } from "./devices";
 import { moderation } from "./moderation";
@@ -224,4 +227,102 @@ export async function startCallAction(slug: string, mode: CharacterCall["mode"])
 
 export async function endCallAction(id: string): Promise<CharacterCall | null> {
   return (await (await client()).endCall(id)).data;
+}
+
+/**
+ * Workspace actions answer with an `Outcome`: a refusal comes back as words to show, not as a thrown error,
+ * since a thrown error's message doesn't reach the browser in production.
+ */
+async function outcome<T>(run: (api: Awaited<ReturnType<typeof client>>) => Promise<T>): Promise<Outcome<T>> {
+  const api = await client();
+  try {
+    return { ok: true, data: await run(api) };
+  } catch (cause) {
+    // The API client and the provider refuse in sentences written for the person.
+    return { ok: false, error: cause instanceof Error && cause.message ? cause.message : "That didn't work. Try again." };
+  }
+}
+
+/** Points the session at an account the person belongs to. Null is their personal account. */
+async function enter(workspaceId: string | null): Promise<void> {
+  const session = await getSession();
+  if (!session) redirect("/sign-in");
+  await writeSession({ ...session, workspaceId });
+  revalidatePath("/", "layout");
+}
+
+/** Switches the account the person is working in: their own, or a workspace they belong to (`listAccounts`). */
+export async function switchAccountAction(accountId: string): Promise<void> {
+  const api = await client();
+  const { accounts } = (await api.listAccounts()).data;
+  const target = accounts.find((entry) => entry.id === accountId);
+  if (!target) throw new Error("You don't belong to that account.");
+  await enter(target.kind === "workspace" ? target.id : null);
+  redirect("/");
+}
+
+/** Creates a workspace and starts working in it. */
+export async function createWorkspaceAction(name: string): Promise<Outcome> {
+  const created = await outcome(async (api) => (await api.createWorkspace(name)).data);
+  if (!created.ok) return created;
+  await enter(created.data.id);
+  redirect("/settings/workspace");
+}
+
+export async function renameWorkspaceAction(name: string): Promise<Outcome<string>> {
+  const result = await outcome(async (api) => (await api.renameWorkspace(name)).data.name);
+  if (result.ok) revalidatePath("/", "layout");
+  return result;
+}
+
+export async function inviteMemberAction(input: { email: string; role: Exclude<WorkspaceRole, "owner"> }): Promise<Outcome<WorkspaceInvitation>> {
+  const result = await outcome(async (api) => (await api.inviteMember(input)).data);
+  if (result.ok) revalidatePath("/settings/workspace");
+  return result;
+}
+
+export async function revokeInvitationAction(invitationId: string): Promise<Outcome<boolean>> {
+  const result = await outcome(async (api) => (await api.revokeInvitation(invitationId)).data);
+  if (result.ok) revalidatePath("/settings/workspace");
+  return result;
+}
+
+/** Joins the workspace an invitation is for and starts working in it. */
+export async function acceptInvitationAction(token: string): Promise<Outcome> {
+  const joined = await outcome(async (api) => (await api.acceptInvitation(token)).data);
+  if (!joined.ok) return joined;
+  await enter(joined.data.id);
+  redirect("/settings/workspace");
+}
+
+export async function declineInvitationAction(token: string): Promise<Outcome<boolean>> {
+  const result = await outcome(async (api) => (await api.declineInvitation(token)).data);
+  if (result.ok) revalidatePath("/", "layout");
+  return result;
+}
+
+export async function setMemberRoleAction(userId: string, role: Exclude<WorkspaceRole, "owner">): Promise<Outcome<WorkspaceRole>> {
+  const result = await outcome(async (api) => (await api.setMemberRole(userId, role)).data.role);
+  if (result.ok) revalidatePath("/settings/workspace");
+  return result;
+}
+
+export async function removeMemberAction(userId: string): Promise<Outcome<boolean>> {
+  const result = await outcome(async (api) => (await api.removeMember(userId)).data);
+  if (result.ok) revalidatePath("/settings/workspace");
+  return result;
+}
+
+/** Leaves the current workspace and goes back to the personal account. */
+export async function leaveWorkspaceAction(): Promise<Outcome> {
+  const left = await outcome(async (api) => (await api.leaveWorkspace()).data);
+  if (!left.ok) return left;
+  await enter(null);
+  redirect("/");
+}
+
+export async function transferOwnershipAction(toUserId: string): Promise<Outcome<string>> {
+  const result = await outcome(async (api) => (await api.transferOwnership(toUserId)).data.owner_id);
+  if (result.ok) revalidatePath("/", "layout");
+  return result;
 }

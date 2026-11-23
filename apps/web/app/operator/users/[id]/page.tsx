@@ -16,7 +16,10 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
   const [{ people, unlinked, sources }, keys, plans] = await Promise.all([userRows(client), client.listAccessKeys(), provider.plans.listPlans()]);
   const user = [...people, ...unlinked].find((row) => row.id === id);
   if (!user) notFound();
-  const usage = await provider.usage.listUsage({ userId: id, limit: 20 }).catch(() => []);
+  const [usage, memberships] = await Promise.all([
+    provider.usage.listUsage({ userId: id, limit: 20 }).catch(() => []),
+    provider.features.workspaces ? provider.workspaces.listForUser(id) : [],
+  ]);
   return (
     <UserDetailView
       user={user}
@@ -24,6 +27,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
       plansSupported={provider.features.plans}
       usage={usage}
       keys={keys.data.filter((key) => key.actor_id === id).map((key) => ({ id: key.key_id, label: key.label, created: key.created_at, revoked: key.revoked_at !== null }))}
+      workspaces={memberships.map(({ workspace, role }) => ({ id: workspace.id, name: workspace.name, role, status: workspace.status }))}
       Link={ConsoleLink}
       setStatus={setUserStatusAction.bind(null, user.applicationId, id)}
       setRole={setUserRoleAction.bind(null, id)}
@@ -33,6 +37,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
         ...sources,
         { name: "listAccessKeys", source: keys.source },
         { name: "usage.listUsage", source: "mock" },
+        ...(provider.features.workspaces ? [{ name: "workspaces.listForUser", source: "mock" as const }] : []),
       ]}
     />
   );

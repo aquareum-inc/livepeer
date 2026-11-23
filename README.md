@@ -60,6 +60,10 @@ corepack pnpm typecheck
 In development a small badge on each screen says whether its data is live or mocked, and a role switch flips
 between the user and operator roles. Neither is ever shown to end users.
 
+Workspaces (shared team accounts) run on mocked data until the payment provider has them. The development
+user belongs to one, "Northlight Studio", and switches to it from the account menu; `docs/workspaces.md` has
+the plan and what is built.
+
 ## Folder structure
 
 ```

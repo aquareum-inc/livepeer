@@ -4220,8 +4220,7 @@
           "succeeded",
           "failed",
           "uncertain"
-        ],
-        "description": "Operator-side types. The engine shapes are as documented in docs/research/engine.md §4."
+        ]
       },
       "JobAttempt": {
         "type": "object",
@@ -5072,6 +5071,13 @@
           },
           "artwork": {
             "$ref": "#/components/schemas/MockArtwork"
+          },
+          "made_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "In a workspace's library, the name of the member who made or added it. Null in a personal library."
           }
         },
         "required": [
@@ -5087,7 +5093,8 @@
           "duration_seconds",
           "created_at",
           "image",
-          "artwork"
+          "artwork",
+          "made_by"
         ],
         "additionalProperties": false,
         "description": "Something in the user's library: an upload or a generation, with what the product understood about it."
@@ -5862,6 +5869,10 @@
           },
           "oidc": {
             "type": "boolean"
+          },
+          "workspaces": {
+            "type": "boolean",
+            "description": "Shared accounts with members and roles."
           }
         },
         "required": [
@@ -5872,7 +5883,8 @@
           "credit_packs",
           "custom_top_up",
           "invoices",
-          "oidc"
+          "oidc",
+          "workspaces"
         ],
         "additionalProperties": false,
         "description": "What the connected provider can do, so the UI can say so instead of failing."
@@ -6321,7 +6333,22 @@
             "type": "string"
           },
           "user_id": {
-            "type": "string"
+            "type": "string",
+            "description": "The account that was charged: a person, or a workspace."
+          },
+          "member_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The person who ran it. On a personal account that is the account's own id; null when an API key ran it."
+          },
+          "key_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The API key that ran it, or null when a person did."
           },
           "app": {
             "type": "string"
@@ -6349,6 +6376,8 @@
         "required": [
           "id",
           "user_id",
+          "member_id",
+          "key_id",
           "app",
           "wholesale",
           "credits",

@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import { DevRoleSwitch } from "@/components/dev-role-switch";
 import { Shell } from "@/components/shell";
-import { api } from "@/lib/api";
+import { accounts, api } from "@/lib/api";
 import { checkAccess } from "@/lib/auth/guard";
 import { getSession } from "@/lib/auth/session";
 import { developerTabs } from "@/lib/developers";
@@ -20,16 +20,18 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // Guests can look around; account pages need a session (lib/auth/guard.ts). The proxy enforces it too.
   if (!session && checkAccess(pathname || "/unknown", null) !== "allow") redirect("/sign-in");
   const client = await api();
-  const [credits, recents] = session
-    ? await Promise.all([client.getCreditBalance().then((result) => result.data.credits), client.listConversations().then((result) => result.data.slice(0, 12))])
-    : [0, []];
+  const [credits, recents, list] = session
+    ? await Promise.all([client.getCreditBalance().then((result) => result.data.credits), client.listConversations().then((result) => result.data.slice(0, 12)), accounts()])
+    : [0, [], null];
   return (
-    <CreditsProvider initial={credits}>
+    // Keyed by account, so switching starts the balance again from the new account's.
+    <CreditsProvider key={list?.current ?? "guest"} initial={credits}>
       <Shell
         brand={brandOf(config)}
         characters={config.content?.characters ?? true}
         recents={recents}
         account={session ? { name: session.name, email: session.email, role: session.role } : null}
+        accounts={list?.workspaces_supported ? list : null}
         consoleAvailable={config.surfaces.console}
         developersAvailable={developerTabs(config.surfaces).length > 0}
         sidebarOpen={sidebarOpenFrom((await cookies()).get(SIDEBAR_COOKIE)?.value)}

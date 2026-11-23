@@ -16,6 +16,11 @@ export interface PlanSettingsProps {
   /** A top-up of the user's own amount; offered when the account has a top-up range. */
   buyCredits: (amount: Money) => Promise<CreditBalance>;
   changePlan: (planId: string | null) => Promise<PlanAndCredits["plan"]>;
+  /**
+   * In a workspace where the reader isn't the owner: the workspace and its owner. The plan and balance are
+   * shown, and nothing can be bought or changed.
+   */
+  readOnly?: { workspace: string; owner: string } | null;
 }
 
 const money = (amount: string, currency: string) => new Intl.NumberFormat("en", { style: "currency", currency, maximumFractionDigits: Number(amount) % 1 === 0 ? 0 : 2 }).format(Number(amount));
@@ -161,7 +166,7 @@ function BudgetMeter({ allowance }: { allowance: CreditBalance["allowance"] }) {
   );
 }
 
-export function PlanSettings({ account, balance: initialBalance, buyPack, buyCredits, changePlan }: PlanSettingsProps) {
+export function PlanSettings({ account, balance: initialBalance, buyPack, buyCredits, changePlan, readOnly = null }: PlanSettingsProps) {
   const { credits, add } = useCredits();
   const [plan, setPlan] = useState(account.plan);
   const [allowance, setAllowance] = useState(initialBalance.allowance);
@@ -224,7 +229,11 @@ export function PlanSettings({ account, balance: initialBalance, buyPack, buyCre
           </p>
           <BudgetMeter allowance={allowance} />
         </div>
-        {features.credit_packs && account.packs.length > 0 ? (
+        {readOnly ? (
+          <p className="max-w-[260px] text-caption text-muted-foreground">
+            This is {readOnly.workspace}'s credit. {readOnly.owner}, its owner, adds credit and chooses the plan.
+          </p>
+        ) : features.credit_packs && account.packs.length > 0 ? (
           <Button variant="primary" onClick={() => setBuying(true)}>Add credits</Button>
         ) : (
           <p className="max-w-[260px] text-caption text-muted-foreground">Credits on this instance are granted by its operator.</p>
@@ -252,7 +261,7 @@ export function PlanSettings({ account, balance: initialBalance, buyPack, buyCre
                   <TierLight step={tier / tiers} strong={current} />
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-lead font-semibold">{entry.name}</h3>
-                    {current ? <Badge tone="live">Your plan</Badge> : null}
+                    {current ? <Badge tone="live">{readOnly ? "Current plan" : "Your plan"}</Badge> : null}
                   </div>
                   <p className="mt-2 flex flex-wrap items-baseline gap-x-1.5 text-title font-semibold">
                     <span className="whitespace-nowrap tabular-nums">{money(entry.price.amount, entry.price.currency)}</span>
@@ -269,9 +278,11 @@ export function PlanSettings({ account, balance: initialBalance, buyPack, buyCre
                       </li>
                     ))}
                   </ul>
-                  <Button variant={current ? "outline" : "secondary"} disabled={busy !== null} onClick={() => choose(current ? null : entry.id)}>
-                    {busy === entry.id || (current && busy === "cancel") ? "Updating…" : current ? "Cancel plan" : plan ? "Switch" : "Choose"}
-                  </Button>
+                  {readOnly ? null : (
+                    <Button variant={current ? "outline" : "secondary"} disabled={busy !== null} onClick={() => choose(current ? null : entry.id)}>
+                      {busy === entry.id || (current && busy === "cancel") ? "Updating…" : current ? "Cancel plan" : plan ? "Switch" : "Choose"}
+                    </Button>
+                  )}
                 </Card>
               );
             })}

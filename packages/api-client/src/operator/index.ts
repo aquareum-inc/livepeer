@@ -3,7 +3,7 @@ import { listOfferingsLive } from "../live/engine";
 import { MOCK_OFFERINGS } from "../mock/offerings";
 import { latency } from "../mock/store";
 import type { Sourced } from "../index";
-import type { PaymentProvider } from "../provider/types";
+import type { PaymentProvider, Workspace } from "../provider/types";
 import type { Offering } from "../types";
 import { read, write, type OperatorEngine } from "./live";
 import {
@@ -33,6 +33,8 @@ import type {
   EngineHealth,
   EngineJob,
   KnownActor,
+  OperatorWorkspace,
+  OperatorWorkspaceDetail,
   OverviewStats,
   Payment,
   Runner,
@@ -66,6 +68,10 @@ export const OPERATOR_DATA_SOURCES = {
   updateBillingSettings: "mock",
   getCapabilitySetting: "live",
   updateCapabilitySetting: "live",
+  // Workspaces are the payment provider's; mocked until it has them (docs/workspaces.md).
+  listWorkspaces: "mock",
+  getWorkspace: "mock",
+  setWorkspaceStatus: "mock",
 } as const;
 
 export interface OperatorClient {
@@ -90,6 +96,11 @@ export interface OperatorClient {
   updateBillingSettings(patch: Partial<BillingSettings>): Promise<Sourced<BillingSettings>>;
   getCapabilitySetting(app: string): Promise<Sourced<CapabilitySetting>>;
   updateCapabilitySetting(app: string, patch: Partial<Omit<CapabilitySetting, "app">>): Promise<Sourced<CapabilitySetting>>;
+  /** Every workspace with its owner, plan and budget. Empty when the provider has no workspaces. */
+  listWorkspaces(): Promise<Sourced<OperatorWorkspace[]>>;
+  getWorkspace(id: string): Promise<Sourced<OperatorWorkspaceDetail | null>>;
+  /** Suspends or resumes a workspace. Its members' own accounts are untouched. */
+  setWorkspaceStatus(id: string, status: Workspace["status"]): Promise<Sourced<OperatorWorkspace>>;
 }
 
 /**
@@ -144,8 +155,66 @@ export function createOperatorClient(options: OperatorClientOptions): OperatorCl
 
   const jobs = (limit: number) => fromEngine((e) => read.jobs(e, limit), () => mockJobs(limit));
 
+  /** A workspace joined with its owner's name, plan and budget. */
+  const describeWorkspace = async (workspace: Workspace): Promise<OperatorWorkspace & { plan_id: string | null }> => {
+    const [owner, plan, allocation] = await Promise.all([
+      provider.identity.getUser(workspace.owner_id).catch(() => null),
+      provider.plans.getUserPlan(workspace.id).catch(() => null),
+      provider.budgets.getAllocation(workspace.id).catch(() => null),
+    ]);
+    return {
+      id: workspace.id,
+      name: workspace.name,
+      status: workspace.status,
+      owner_id: workspace.owner_id,
+      owner_name: owner?.name ?? workspace.owner_id,
+      member_count: workspace.member_count,
+      plan: plan?.name ?? null,
+      plan_id: plan?.id ?? null,
+      budget: allocation ? Number(allocation.granted.amount) : null,
+      spent: allocation ? Number(allocation.spent.amount) : null,
+      remaining: allocation ? Number(allocation.available.amount) : null,
+      created_at: workspace.created_at,
+    };
+  };
+
   const client: OperatorClient = {
     provider,
+    async listWorkspaces() {
+      if (!provider.features.workspaces) return mock([]);
+      await latency(120, 260);
+      const rows = await Promise.all((await provider.workspaces.list()).map(describeWorkspace));
+      return mock(rows.map(({ plan_id: _planId, ...row }) => row).sort((a, b) => a.name.localeCompare(b.name)));
+    },
+    async getWorkspace(id) {
+      if (!provider.features.workspaces) return mock(null);
+      await latency(120, 260);
+      const workspace = await provider.workspaces.get(id);
+      if (!workspace) return mock(null);
+      const [row, members, invitations, usage] = await Promise.all([
+        describeWorkspace(workspace),
+        provider.workspaces.listMembers(id),
+        provider.workspaces.listInvitations(id),
+        provider.usage.getUsageByMember(id),
+      ]);
+      const belongs = new Set(members.map((member) => member.user_id));
+      return mock({
+        ...row,
+        members: members.map((member) => {
+          const used = usage.find((entry) => entry.member_id === member.user_id);
+          return { ...member, credits: used?.credits ?? 0, jobs: used?.jobs ?? 0, last_used_at: used?.last_used_at ?? null };
+        }),
+        invitations: invitations.map(({ token: _token, ...invitation }) => invitation),
+        other_usage: usage
+          .filter((entry) => entry.key_id !== null || !belongs.has(entry.member_id ?? ""))
+          .map((entry) => ({ kind: entry.key_id ? ("key" as const) : ("former_member" as const), id: entry.key_id ?? entry.member_id ?? "", credits: entry.credits, jobs: entry.jobs, last_used_at: entry.last_used_at })),
+      });
+    },
+    async setWorkspaceStatus(id, status) {
+      await latency(200, 400);
+      const { plan_id: _planId, ...row } = await describeWorkspace(await provider.workspaces.setStatus(id, status));
+      return mock(row);
+    },
     getEngineHealth: () => fromEngine(read.health, mockHealth),
     async listOfferings() {
       if (live && engine) return { data: await listOfferingsLive({ url: engine.url }), source: "live" };

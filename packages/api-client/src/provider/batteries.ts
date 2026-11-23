@@ -76,7 +76,7 @@ export function createBatteriesProvider(engine: { url: string; reader?: string; 
   return {
     id: "batteries",
     name: "Clearinghouse Batteries",
-    features: { users: false, grants: true, plans: false, allowances: false, credit_packs: false, custom_top_up: false, invoices: false, oidc: false },
+    features: { users: false, grants: true, plans: false, allowances: false, credit_packs: false, custom_top_up: false, invoices: false, oidc: false, workspaces: false },
 
     identity: {
       listUsers: unsupported("listing users"),
@@ -131,6 +131,42 @@ export function createBatteriesProvider(engine: { url: string; reader?: string; 
     usage: {
       listUsage: unsupported("per-user usage (read job costs from the engine instead)"),
       getUsageSummary: unsupported("usage summaries (read /v1/costs/summary from the engine instead)"),
+      getUsageByMember: unsupported("usage by member"),
+    },
+
+    // Batteries has no users, so nobody to belong to anything. Reads answer "none" so a screen can ask.
+    workspaces: {
+      async list() {
+        return [];
+      },
+      async listForUser() {
+        return [];
+      },
+      async get() {
+        return null;
+      },
+      create: unsupported("workspaces"),
+      rename: unsupported("workspaces"),
+      setStatus: unsupported("workspaces"),
+      async listMembers() {
+        return [];
+      },
+      setMemberRole: unsupported("workspaces"),
+      removeMember: unsupported("workspaces"),
+      transferOwnership: unsupported("workspaces"),
+      async listInvitations() {
+        return [];
+      },
+      async listInvitationsForUser() {
+        return [];
+      },
+      async getInvitation() {
+        return null;
+      },
+      invite: unsupported("workspaces"),
+      revokeInvitation: unsupported("workspaces"),
+      acceptInvitation: unsupported("workspaces"),
+      declineInvitation: unsupported("workspaces"),
     },
   };
 }

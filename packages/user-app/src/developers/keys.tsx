@@ -64,7 +64,7 @@ export function KeysScreen({ initialKeys, create, revoke }: KeysScreenProps) {
                   {key.status === "revoked" ? <Badge tone="warn">Revoked</Badge> : null}
                 </p>
                 <p className="mt-0.5 font-mono text-[11px] text-subtle-foreground">
-                  {key.prefix}… · created {date(key.created_at)} · last used {date(key.last_used_at)}
+                  {key.prefix}… · created {date(key.created_at)}{key.created_by ? ` by ${key.created_by}` : ""} · last used {date(key.last_used_at)}
                 </p>
               </div>
               {key.status === "active" ? <Button variant="ghost" size="sm" onClick={() => setRevoking(key)}>Revoke</Button> : null}
@@ -117,4 +117,9 @@ export function KeysScreen({ initialKeys, create, revoke }: KeysScreenProps) {
       </Sheet>
     </>
   );
+}
+
+/** In a workspace, for a member: keys spend shared credit, so its owner and admins make them. */
+export function KeysUnavailable({ workspace }: { workspace: string }) {
+  return <EmptyState icon={KeyRound} title="Keys are made by owners and admins" body={`An API key spends ${workspace}'s credit, so only its owner and admins can make or see them. Ask one of them for a key, or switch to your personal account to make your own.`} />;
 }

@@ -28,6 +28,22 @@ const characters: Character[] = [
   base("vesper", "Vesper", "A late-night companion with a dry sense of humour.", "Vesper keeps you company, remembers what you said earlier in the conversation, and doesn't take either of you too seriously.", "You're up late. Good. So am I.", "after-hours", ["companion"], [270, 330, 240], { mature: true, rating: 4.4, chats: 31000 }),
 ];
 
+/** The workspace a made character belongs to. Characters with no entry are personal, or the seeded public cast. */
+const homes = new Map<string, string>();
+
+/**
+ * A character as one account sees it. A private one exists only in the account it was made in; a public one is
+ * everyone's, and "mine" only where it was made.
+ */
+function seenFrom(scope: string | null) {
+  return (entry: Character): Character | null => {
+    const home = homes.get(entry.slug) ?? null;
+    const here = home === scope;
+    if (entry.mine && !here) return entry.visibility === "public" ? { ...entry, mine: false } : null;
+    return entry;
+  };
+}
+
 function slugify(name: string): string {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   let candidate = slug || "character";
@@ -42,9 +58,10 @@ export interface CharacterFilter {
   includeMature?: boolean;
 }
 
-export function listStoredCharacters(filter: CharacterFilter = {}): Character[] {
+export function listStoredCharacters(filter: CharacterFilter = {}, scope: string | null = null): Character[] {
   const query = filter.query?.trim().toLowerCase();
-  return characters.filter((entry) => {
+  const see = seenFrom(scope);
+  return characters.flatMap((entry) => see(entry) ?? []).filter((entry) => {
     if (filter.scope === "mine" && !entry.mine) return false;
     if (filter.scope === "public" && entry.visibility !== "public") return false;
     if (entry.mature && !filter.includeMature) return false;
@@ -53,11 +70,12 @@ export function listStoredCharacters(filter: CharacterFilter = {}): Character[] 
   });
 }
 
-export function readStoredCharacter(slug: string): Character | null {
-  return characters.find((entry) => entry.slug === slug) ?? null;
+export function readStoredCharacter(slug: string, scope: string | null = null): Character | null {
+  const entry = characters.find((candidate) => candidate.slug === slug);
+  return entry ? seenFrom(scope)(entry) : null;
 }
 
-export function createStoredCharacter(input: CharacterInput, author: string): Character {
+export function createStoredCharacter(input: CharacterInput, author: string, scope: string | null = null): Character {
   let hash = 0;
   for (const char of input.name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   const character: Character = {
@@ -73,5 +91,6 @@ export function createStoredCharacter(input: CharacterInput, author: string): Ch
     artwork: { hues: [hash % 360, (hash + 60) % 360, (hash + 210) % 360], seed: hash % 97 },
   };
   characters.unshift(character);
+  if (scope) homes.set(character.slug, scope);
   return character;
 }

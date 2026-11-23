@@ -111,4 +111,28 @@ describe("operator client, mock data", () => {
     expect(capabilities.read("chat").markup).toBeNull();
     await expect(client.updateCapabilitySetting("chat", { markup: 0.5 })).rejects.toThrow();
   });
+
+  it("lists workspaces with their owner, plan and budget", async () => {
+    const { data } = await mockClient().listWorkspaces();
+    expect(data.map((workspace) => workspace.name)).toEqual(["Harbour Films", "Northlight Studio"]);
+    expect(data[1]).toMatchObject({ owner_name: "Inés Castellanos", member_count: 4, plan: "Studio", budget: 600, remaining: 366.6, status: "active" });
+  });
+
+  it("shows a workspace's members with their usage, and never an invitation's link", async () => {
+    const { data } = await mockClient().getWorkspace("wsp_northlight");
+    expect(data?.members.map((member) => member.role)).toEqual(["owner", "admin", "member", "member"]);
+    expect(data?.members.every((member) => member.jobs > 0)).toBe(true);
+    expect(data?.invitations.map((invitation) => invitation.email)).toEqual(["lena@example.test"]);
+    expect(data?.invitations.some((invitation) => "token" in invitation)).toBe(false);
+    expect(data?.other_usage).toMatchObject([{ kind: "key", id: "key_northlight_render" }]);
+    expect((await mockClient().getWorkspace("wsp_nope")).data).toBeNull();
+  });
+
+  it("suspending a workspace pauses its allocation and leaves its members alone", async () => {
+    const client = mockClient();
+    expect((await client.setWorkspaceStatus("wsp_northlight", "paused")).data.status).toBe("paused");
+    expect((await client.provider.budgets.getAllocation("wsp_northlight"))?.status).toBe("paused");
+    expect((await client.provider.identity.getUser("usr_demo_ines"))?.status).toBe("active");
+    expect((await client.setWorkspaceStatus("wsp_northlight", "active")).data.status).toBe("active");
+  });
 });

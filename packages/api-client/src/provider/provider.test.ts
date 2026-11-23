@@ -97,11 +97,126 @@ describe("mock provider", () => {
   });
 });
 
+describe("workspaces in the mock provider", () => {
+  const NORTHLIGHT = "wsp_northlight";
+
+  it("a workspace is an account: it has its own allocation, plan and usage", async () => {
+    const provider = createMockProvider();
+    expect((await provider.budgets.getAllocation(NORTHLIGHT))?.user_id).toBe(NORTHLIGHT);
+    expect((await provider.plans.getUserPlan(NORTHLIGHT))?.name).toBe("Studio");
+    expect((await provider.usage.getUsageSummary({ userId: NORTHLIGHT })).jobs).toBeGreaterThan(0);
+  });
+
+  it("lists a person's memberships and a workspace's members, owner first", async () => {
+    const provider = createMockProvider();
+    expect((await provider.workspaces.listForUser("usr_demo_adam")).map((entry) => [entry.workspace.id, entry.role])).toEqual([[NORTHLIGHT, "admin"]]);
+    const members = await provider.workspaces.listMembers(NORTHLIGHT);
+    expect(members[0]).toMatchObject({ user_id: "usr_demo_ines", role: "owner", email: "ines@example.test" });
+    expect((await provider.workspaces.get(NORTHLIGHT))?.member_count).toBe(members.length);
+  });
+
+  it("a new workspace has its owner as the only member and an empty budget", async () => {
+    const provider = createMockProvider();
+    const workspace = await provider.workspaces.create({ name: "  Tide   Pool ", ownerId: "usr_demo_adam" });
+    expect(workspace).toMatchObject({ name: "Tide Pool", owner_id: "usr_demo_adam", member_count: 1, status: "active" });
+    expect(await provider.budgets.getAllocation(workspace.id)).toMatchObject({ available: usd("0.00"), status: "active" });
+    expect(await provider.plans.getUserPlan(workspace.id)).toBeNull();
+    await expect(provider.workspaces.create({ name: "x", ownerId: "usr_demo_adam" })).rejects.toThrow();
+  });
+
+  it("invites by email, renews a waiting invitation, and joins with the invited role", async () => {
+    const provider = createMockProvider();
+    const first = await provider.workspaces.invite(NORTHLIGHT, { email: " Sam@Example.test ", role: "member", invitedBy: "usr_demo_adam" });
+    expect(first).toMatchObject({ email: "sam@example.test", status: "pending", invited_by_name: "Adam Soffer", workspace_name: "Northlight Studio" });
+    const again = await provider.workspaces.invite(NORTHLIGHT, { email: "sam@example.test", role: "admin", invitedBy: "usr_demo_ines" });
+    expect(again).toMatchObject({ id: first.id, token: first.token, role: "admin" });
+    expect((await provider.workspaces.listInvitationsForUser("usr_demo_sam")).map((entry) => entry.id)).toEqual([first.id]);
+
+    expect(await provider.workspaces.acceptInvitation(first.token, "usr_demo_sam")).toMatchObject({ role: "admin", workspace: { id: NORTHLIGHT } });
+    expect((await provider.workspaces.listMembers(NORTHLIGHT)).find((entry) => entry.user_id === "usr_demo_sam")?.role).toBe("admin");
+    expect((await provider.workspaces.listInvitations(NORTHLIGHT)).some((entry) => entry.id === first.id)).toBe(false);
+    await expect(provider.workspaces.acceptInvitation(first.token, "usr_demo_sam")).rejects.toThrow();
+  });
+
+  it("refuses an invitation to a member, a bad address, and an invitation as owner", async () => {
+    const { workspaces } = createMockProvider();
+    await expect(workspaces.invite(NORTHLIGHT, { email: "priya@example.test", role: "member", invitedBy: "usr_demo_adam" })).rejects.toThrow("already a member");
+    await expect(workspaces.invite(NORTHLIGHT, { email: "not an address", role: "member", invitedBy: "usr_demo_adam" })).rejects.toThrow();
+    await expect(workspaces.invite(NORTHLIGHT, { email: "new@example.test", role: "owner" as "admin", invitedBy: "usr_demo_adam" })).rejects.toThrow();
+  });
+
+  it("a cancelled, declined or expired invitation can't be accepted", async () => {
+    vi.useFakeTimers({ now: new Date("2026-11-23T12:00:00Z") });
+    try {
+      const { workspaces } = createMockProvider();
+      const cancelled = await workspaces.invite(NORTHLIGHT, { email: "a@example.test", role: "member", invitedBy: "usr_demo_adam" });
+      await workspaces.revokeInvitation(cancelled.id);
+      await expect(workspaces.acceptInvitation(cancelled.token, "usr_demo_sam")).rejects.toThrow();
+      const declined = await workspaces.invite(NORTHLIGHT, { email: "b@example.test", role: "member", invitedBy: "usr_demo_adam" });
+      await workspaces.declineInvitation(declined.token);
+      expect((await workspaces.getInvitation(declined.token))?.status).toBe("declined");
+      const old = await workspaces.invite(NORTHLIGHT, { email: "c@example.test", role: "member", invitedBy: "usr_demo_adam" });
+      vi.setSystemTime(new Date("2026-12-01T12:00:00Z"));
+      expect((await workspaces.getInvitation(old.token))?.status).toBe("expired");
+      await expect(workspaces.acceptInvitation(old.token, "usr_demo_sam")).rejects.toThrow();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps exactly one owner: no demoting, no removing, only transferring", async () => {
+    const { workspaces } = createMockProvider();
+    await expect(workspaces.setMemberRole(NORTHLIGHT, "usr_demo_ines", "member")).rejects.toThrow();
+    await expect(workspaces.removeMember(NORTHLIGHT, "usr_demo_ines")).rejects.toThrow();
+    await expect(workspaces.transferOwnership(NORTHLIGHT, "usr_demo_sam")).rejects.toThrow();
+    expect(await workspaces.transferOwnership(NORTHLIGHT, "usr_demo_adam")).toMatchObject({ owner_id: "usr_demo_adam" });
+    const roles = Object.fromEntries((await workspaces.listMembers(NORTHLIGHT)).map((entry) => [entry.user_id, entry.role]));
+    expect(roles).toMatchObject({ usr_demo_adam: "owner", usr_demo_ines: "admin" });
+    expect(Object.values(roles).filter((role) => role === "owner")).toHaveLength(1);
+  });
+
+  it("changes a role and removes a member", async () => {
+    const { workspaces } = createMockProvider();
+    expect(await workspaces.setMemberRole(NORTHLIGHT, "usr_demo_priya", "admin")).toMatchObject({ role: "admin" });
+    await workspaces.removeMember(NORTHLIGHT, "usr_demo_priya");
+    expect((await workspaces.listForUser("usr_demo_priya")).map((entry) => entry.workspace.id)).toEqual(["wsp_harbour"]);
+  });
+
+  it("pausing a workspace pauses its allocation and leaves its members' own accounts alone", async () => {
+    const provider = createMockProvider();
+    expect(await provider.workspaces.setStatus(NORTHLIGHT, "paused")).toMatchObject({ status: "paused" });
+    expect((await provider.budgets.getAllocation(NORTHLIGHT))?.status).toBe("paused");
+    expect((await provider.budgets.getAllocation("usr_demo_ines"))?.status).toBe("active");
+    expect((await provider.identity.getUser("usr_demo_ines"))?.status).toBe("active");
+  });
+
+  it("breaks usage down by member and by key, and the rows add up", async () => {
+    const { usage } = createMockProvider();
+    const rows = await usage.getUsageByMember(NORTHLIGHT);
+    const summary = await usage.getUsageSummary({ userId: NORTHLIGHT });
+    expect(rows.reduce((total, row) => total + row.credits, 0)).toBe(summary.credits);
+    expect(rows.reduce((total, row) => total + row.jobs, 0)).toBe(summary.jobs);
+    expect(rows.every((row) => (row.member_id === null) !== (row.key_id === null))).toBe(true);
+    expect(rows.some((row) => row.key_id === "key_northlight_render")).toBe(true);
+    const adam = await usage.getUsageSummary({ userId: NORTHLIGHT, memberId: "usr_demo_adam" });
+    expect(adam.credits).toBe(rows.find((row) => row.member_id === "usr_demo_adam")?.credits);
+  });
+
+  it("an owner's account can't be deleted until the workspace is handed on", async () => {
+    const provider = createMockProvider();
+    await expect(provider.identity.deleteUser("usr_demo_ines")).rejects.toThrow();
+    await provider.identity.deleteUser("usr_demo_priya");
+    expect((await provider.workspaces.listMembers(NORTHLIGHT)).some((entry) => entry.user_id === "usr_demo_priya")).toBe(false);
+  });
+});
+
 describe("batteries provider", () => {
   const provider = () => createBatteriesProvider({ url: "http://engine.test", reader: "reader", admin: "admin" });
 
   it("says what it cannot do", async () => {
-    expect(provider().features).toMatchObject({ grants: true, plans: false, users: false });
+    expect(provider().features).toMatchObject({ grants: true, plans: false, users: false, workspaces: false });
+    expect(await provider().workspaces.listForUser("actor-1")).toEqual([]);
+    await expect(provider().workspaces.create({ name: "Team", ownerId: "actor-1" })).rejects.toBeInstanceOf(UnsupportedByProvider);
     await expect(provider().identity.listUsers()).rejects.toBeInstanceOf(UnsupportedByProvider);
     expect(await provider().plans.listPlans()).toEqual([]);
     await expect(provider().plans.createCreditPack({ credits: 1000, price: usd("10.00"), popular: false, active: true })).rejects.toBeInstanceOf(UnsupportedByProvider);

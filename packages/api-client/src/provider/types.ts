@@ -31,6 +31,7 @@ export interface Grant {
 export interface Allocation {
   id: string;
   grant_id: string;
+  /** The account the budget belongs to: a person, or a workspace. */
   user_id: string;
   status: "active" | "paused" | "revoked";
   granted: Money;
@@ -82,7 +83,12 @@ export interface TopUpRange {
 
 export interface UsageEntry {
   id: string;
+  /** The account that was charged: a person, or a workspace. */
   user_id: string;
+  /** The person who ran it. On a personal account that is the account's own id; null when an API key ran it. */
+  member_id: string | null;
+  /** The API key that ran it, or null when a person did. */
+  key_id: string | null;
   app: string;
   /** What the network charged. */
   wholesale: Money;
@@ -99,6 +105,63 @@ export interface UsageSummary {
   by_app: Array<{ app: string; credits: number; jobs: number }>;
 }
 
+export type WorkspaceRole = "owner" | "admin" | "member";
+
+/**
+ * A shared account several people belong to. Its id is an account id: it has an allocation, a plan and
+ * usage exactly as a person's id does, so `budgets`, `plans` and `usage` take it unchanged.
+ */
+export interface Workspace {
+  id: string;
+  name: string;
+  /** Paused by the operator: nobody can spend from it. Its members' own accounts are untouched. */
+  status: "active" | "paused";
+  owner_id: string;
+  member_count: number;
+  created_at: string;
+}
+
+export interface WorkspaceMember {
+  workspace_id: string;
+  user_id: string;
+  name: string;
+  email: string | null;
+  role: WorkspaceRole;
+  joined_at: string;
+}
+
+/** One of a person's memberships. */
+export interface WorkspaceMembership {
+  workspace: Workspace;
+  role: WorkspaceRole;
+}
+
+export interface WorkspaceInvitation {
+  id: string;
+  workspace_id: string;
+  workspace_name: string;
+  email: string;
+  /** The role the person joins with. Ownership is transferred, never invited. */
+  role: Exclude<WorkspaceRole, "owner">;
+  /** The inviting member's id and name. */
+  invited_by: string;
+  invited_by_name: string;
+  /** What the invitation link carries. Whoever holds it can answer the invitation. */
+  token: string;
+  created_at: string;
+  expires_at: string;
+  status: "pending" | "accepted" | "declined" | "revoked" | "expired";
+}
+
+/** What one member, or one API key, has used of a workspace's credit. Exactly one of the two ids is set. */
+export interface MemberUsage {
+  member_id: string | null;
+  key_id: string | null;
+  credits: number;
+  jobs: number;
+  last_used_at: string | null;
+}
+
 /** What the connected provider can do, so the UI can say so instead of failing. */
 export interface ProviderFeatures {
   users: boolean;
@@ -110,6 +173,8 @@ export interface ProviderFeatures {
   custom_top_up: boolean;
   invoices: boolean;
   oidc: boolean;
+  /** Shared accounts with members and roles. */
+  workspaces: boolean;
 }
 
 export class UnsupportedByProvider extends Error {
@@ -137,18 +202,20 @@ export interface PaymentProvider {
     listGrants(): Promise<Grant[]>;
     createGrant(input: { label: string; amount: Money }): Promise<Grant>;
     fundGrant(id: string, amount: Money): Promise<Grant>;
-    getAllocation(userId: string): Promise<Allocation | null>;
+    /** `accountId` here and below is a person's id or a workspace's: whichever account owns the budget. */
+    getAllocation(accountId: string): Promise<Allocation | null>;
     provisionAllocation(input: { userId: string; grantId: string; amount: Money }): Promise<Allocation>;
-    /** A one-off addition to a user's allocation. A credit pack is this. */
-    topUpAllocation(userId: string, amount: Money): Promise<Allocation>;
+    /** A one-off addition to an account's allocation. A credit pack is this. */
+    topUpAllocation(accountId: string, amount: Money): Promise<Allocation>;
   };
 
   plans: {
     listPlans(): Promise<Plan[]>;
     createPlan(input: Omit<Plan, "id">): Promise<Plan>;
     updatePlan(id: string, patch: Partial<Omit<Plan, "id">>): Promise<Plan>;
-    getUserPlan(userId: string): Promise<Plan | null>;
-    assignPlan(userId: string, planId: string | null): Promise<Plan | null>;
+    /** The plan of an account: a person's, or a workspace's. */
+    getUserPlan(accountId: string): Promise<Plan | null>;
+    assignPlan(accountId: string, planId: string | null): Promise<Plan | null>;
     /** Every pack, offered or not, cheapest first. */
     listCreditPacks(): Promise<CreditPack[]>;
     createCreditPack(input: Omit<CreditPack, "id">): Promise<CreditPack>;
@@ -158,8 +225,44 @@ export interface PaymentProvider {
   };
 
   usage: {
-    listUsage(filter: { userId?: string; limit?: number }): Promise<UsageEntry[]>;
-    getUsageSummary(filter: { userId?: string }): Promise<UsageSummary>;
+    /** `userId` is the account charged; `memberId` narrows a workspace's usage to one person's. */
+    listUsage(filter: { userId?: string; memberId?: string; limit?: number }): Promise<UsageEntry[]>;
+    getUsageSummary(filter: { userId?: string; memberId?: string }): Promise<UsageSummary>;
+    /** A workspace's usage by who caused it: one row per member and per API key, most used first. */
+    getUsageByMember(accountId: string): Promise<MemberUsage[]>;
+  };
+
+  /**
+   * Shared accounts, in the shape PymtHouse is expected to expose (docs/workspaces.md; questions Q18 to Q24).
+   * The provider holds membership and invitations, so the app stores neither. It keeps the invariants: one
+   * owner, who can't be removed or demoted; who may ask for what is the app's rule (`can` in workspaces.ts).
+   */
+  workspaces: {
+    /** Every workspace, for the operator. */
+    list(): Promise<Workspace[]>;
+    listForUser(userId: string): Promise<WorkspaceMembership[]>;
+    get(id: string): Promise<Workspace | null>;
+    /** Opens a workspace with the owner as its only member and an empty allocation. */
+    create(input: { name: string; ownerId: string }): Promise<Workspace>;
+    rename(id: string, name: string): Promise<Workspace>;
+    /** Pausing a workspace pauses its allocation. */
+    setStatus(id: string, status: Workspace["status"]): Promise<Workspace>;
+    listMembers(id: string): Promise<WorkspaceMember[]>;
+    setMemberRole(id: string, userId: string, role: Exclude<WorkspaceRole, "owner">): Promise<WorkspaceMember>;
+    /** Also how a member leaves. */
+    removeMember(id: string, userId: string): Promise<void>;
+    /** The new owner must already be a member; the old owner becomes an admin. */
+    transferOwnership(id: string, toUserId: string): Promise<Workspace>;
+    /** Invitations still waiting for an answer. */
+    listInvitations(id: string): Promise<WorkspaceInvitation[]>;
+    /** Invitations waiting for the person, matched on their email. */
+    listInvitationsForUser(userId: string): Promise<WorkspaceInvitation[]>;
+    getInvitation(token: string): Promise<WorkspaceInvitation | null>;
+    /** Inviting an address that already has an invitation waiting renews it: this is also "resend". */
+    invite(id: string, input: { email: string; role: Exclude<WorkspaceRole, "owner">; invitedBy: string }): Promise<WorkspaceInvitation>;
+    revokeInvitation(invitationId: string): Promise<void>;
+    acceptInvitation(token: string, userId: string): Promise<WorkspaceMembership>;
+    declineInvitation(token: string): Promise<void>;
   };
 }
 

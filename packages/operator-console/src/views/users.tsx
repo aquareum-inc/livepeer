@@ -70,6 +70,8 @@ export interface UserDetailProps {
   plansSupported: boolean;
   usage: UsageEntry[];
   keys: Array<{ id: string; label: string; created: string; revoked: boolean }>;
+  /** The workspaces the person belongs to, with their role in each. */
+  workspaces: Array<{ id: string; name: string; role: string; status: string }>;
   Link: LinkType;
   setStatus: (status: "active" | "paused") => Promise<void>;
   setRole: (role: "user" | "operator") => Promise<void>;
@@ -80,7 +82,7 @@ export interface UserDetailProps {
 
 const TOP_UPS = [10, 25, 50, 100];
 
-export function UserDetailView({ user, plans, plansSupported, usage, keys, Link, setStatus, setRole, assignPlan, topUp, sources }: UserDetailProps) {
+export function UserDetailView({ user, plans, plansSupported, usage, keys, workspaces, Link, setStatus, setRole, assignPlan, topUp, sources }: UserDetailProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [suspending, setSuspending] = useState(false);
@@ -151,6 +153,22 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, Link,
           </div>
         </Panel>
       </div>
+
+      {workspaces.length > 0 ? (
+        <Panel title="Workspaces" description="Shared accounts this person belongs to. Suspending the person stops them in all of them.">
+          <Table
+            caption="Workspaces"
+            rows={workspaces}
+            rowKey={(workspace) => workspace.id}
+            empty="This person belongs to no workspace."
+            columns={[
+              { key: "name", header: "Workspace", cell: (workspace) => <Link href={`/operator/workspaces/${encodeURIComponent(workspace.id)}`} className="font-medium text-foreground underline-offset-2 hover:underline">{workspace.name}</Link> },
+              { key: "role", header: "Role", cell: (workspace) => <span className="capitalize">{workspace.role}</span> },
+              { key: "status", header: "Status", cell: (workspace) => <Status value={workspace.status} /> },
+            ]}
+          />
+        </Panel>
+      ) : null}
 
       <Panel title="API keys">
         <Table

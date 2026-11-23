@@ -488,7 +488,6 @@ data class EngineJob(
     @SerialName("completed_at") val completedAt: String? = null,
 )
 
-/** Operator-side types. The engine shapes are as documented in docs/research/engine.md §4. */
 @Serializable(with = JobState.Serializer::class)
 enum class JobState(val value: String) {
     Queued("queued"),
@@ -926,6 +925,8 @@ data class MediaItem(
     /** A still of the media, when there is one. Tiles without one show `artwork`. */
     @SerialName("image") val image: String? = null,
     @SerialName("artwork") val artwork: MockArtwork,
+    /** In a workspace's library, the name of the member who made or added it. Null in a personal library. */
+    @SerialName("made_by") val madeBy: String? = null,
 )
 
 /** A capability on the network as the operator sees it: what it's called, whether this instance offers it, and who can run it now. */
@@ -1298,6 +1299,8 @@ data class ProviderFeatures(
     @SerialName("custom_top_up") val customTopUp: Boolean,
     @SerialName("invoices") val invoices: Boolean,
     @SerialName("oidc") val oidc: Boolean,
+    /** Shared accounts with members and roles. */
+    @SerialName("workspaces") val workspaces: Boolean,
 )
 
 @Serializable(with = PreferencesDefaultAspect.Serializer::class)
@@ -1514,7 +1517,12 @@ enum class UsageEntryStatus(val value: String) {
 @Serializable
 data class UsageEntry(
     @SerialName("id") val id: String,
+    /** The account that was charged: a person, or a workspace. */
     @SerialName("user_id") val userId: String,
+    /** The person who ran it. On a personal account that is the account's own id; null when an API key ran it. */
+    @SerialName("member_id") val memberId: String? = null,
+    /** The API key that ran it, or null when a person did. */
+    @SerialName("key_id") val keyId: String? = null,
     @SerialName("app") val app: String,
     /** What the network charged. */
     @SerialName("wholesale") val wholesale: Money,

@@ -1,5 +1,5 @@
 import type { Generation, MediaItem } from "../types";
-import { shared } from "./shared";
+import { shared, type Owner } from "./shared";
 import { MOCK_SHOWCASE } from "./showcase";
 
 const DESCRIPTIONS: Record<string, { description: string; tags: string[] }> = {
@@ -15,8 +15,22 @@ const DESCRIPTIONS: Record<string, { description: string; tags: string[] }> = {
 
 const removed = shared("library.removed", () => new Set<string>());
 const added = shared("library.added", (): MediaItem[] => []);
+/** The workspace an added item belongs to. Items with no entry are in the personal library. */
+const homes = shared("library.homes", () => new Map<string, string>());
 
-function seeded(): MediaItem[] {
+/** What the seeded workspace's people have already made, so its library isn't empty. */
+const WORKSPACE_SEED: Record<string, Array<[showcase: string, by: string]>> = {
+  wsp_northlight: [["sc_runner", "Inés Castellanos"], ["sc_poster", "Priya Raman"], ["sc_kitchen", "Adam Soffer"], ["sc_score", "Inés Castellanos"], ["sc_orchard", "Tomás Lindqvist"]],
+};
+
+function seeded(scope: string | null): MediaItem[] {
+  if (scope) {
+    const all = seeded(null);
+    return (WORKSPACE_SEED[scope] ?? []).flatMap(([showcase, by]) => {
+      const item = all.find((entry) => entry.id === `med_${showcase.slice(3)}`);
+      return item ? [{ ...item, id: `${item.id}_${scope.slice(4)}`, made_by: by }] : [];
+    });
+  }
   return MOCK_SHOWCASE.map((item, index) => ({
     id: `med_${item.id.slice(3)}`,
     kind: item.kind,
@@ -31,14 +45,20 @@ function seeded(): MediaItem[] {
     created_at: new Date(Date.UTC(2026, 10, 17, 18) - index * 26 * 3600_000).toISOString(),
     image: item.image,
     artwork: item.artwork,
+    made_by: null,
   }));
 }
 
+function keep(item: MediaItem, owner: Owner | null): void {
+  if (owner) homes.set(item.id, owner.scope);
+  added.unshift({ ...item, made_by: owner?.by ?? null });
+}
+
 /** Finished generations are saved to the library. */
-export function addGenerationToLibrary(generation: Generation): void {
+export function addGenerationToLibrary(generation: Generation, owner: Owner | null = null): void {
   if (added.some((item) => item.id === `med_${generation.id}`)) return;
   const words = generation.request.prompt.split(/\s+/).slice(0, 6).join(" ");
-  added.unshift({
+  keep({
     id: `med_${generation.id}`,
     kind: generation.request.kind,
     source: "generation",
@@ -52,12 +72,13 @@ export function addGenerationToLibrary(generation: Generation): void {
     created_at: generation.created_at,
     image: generation.request.first_frame ?? null,
     artwork: generation.artwork,
-  });
+    made_by: null,
+  }, owner);
 }
 
 /** Adds an item made elsewhere, such as a recorded live session. */
-export function addMediaToLibrary(item: MediaItem): void {
-  added.unshift(item);
+export function addMediaToLibrary(item: MediaItem, owner: Owner | null = null): void {
+  keep(item, owner);
 }
 
 export interface MediaFilter {
@@ -67,9 +88,10 @@ export interface MediaFilter {
   query?: string;
 }
 
-export function listStoredMedia(filter: MediaFilter = {}): MediaItem[] {
+/** The library of one account: a workspace's (`scope`), or the personal one. */
+export function listStoredMedia(filter: MediaFilter = {}, scope: string | null = null): MediaItem[] {
   const query = filter.query?.trim().toLowerCase();
-  return [...added, ...seeded()].filter((item) => {
+  return [...added.filter((item) => (homes.get(item.id) ?? null) === scope), ...seeded(scope)].filter((item) => {
     if (removed.has(item.id)) return false;
     if (filter.kind && item.kind !== filter.kind) return false;
     if (filter.source && item.source !== filter.source) return false;
@@ -78,8 +100,8 @@ export function listStoredMedia(filter: MediaFilter = {}): MediaItem[] {
   });
 }
 
-export function deleteStoredMedia(id: string): boolean {
-  if (removed.has(id)) return false;
+export function deleteStoredMedia(id: string, scope: string | null = null): boolean {
+  if (removed.has(id) || !listStoredMedia({}, scope).some((item) => item.id === id)) return false;
   removed.add(id);
   return true;
 }

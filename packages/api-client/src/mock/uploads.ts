@@ -1,6 +1,6 @@
 import type { MediaFile, MediaItem, UploadRequest, UploadTicket } from "../types";
 import { addMediaToLibrary } from "./library";
-import { shared } from "./shared";
+import { shared, type Owner } from "./shared";
 
 /** Why a file was turned away, in words for the person who chose it. */
 export class UploadRefused extends Error {
@@ -26,7 +26,7 @@ const TICKET_MS = 15 * 60_000;
 /** How many pictures the mock keeps to show. Older ones stay in the library and fall back to their artwork. */
 const KEPT_FILES = 24;
 
-const tickets = shared("uploads.tickets", () => new Map<string, { request: UploadRequest; expiresAt: number }>());
+const tickets = shared("uploads.tickets", () => new Map<string, { request: UploadRequest; expiresAt: number; owner: Owner | null }>());
 const files = shared("uploads.files", () => new Map<string, MediaFile>());
 
 function token(): string {
@@ -47,7 +47,7 @@ function titleFor(name: string, kind: UploadRequest["kind"]): string {
 }
 
 /** Checks a file before it is sent and answers with where to send it. */
-export function requestStoredUpload(request: UploadRequest): UploadTicket {
+export function requestStoredUpload(request: UploadRequest, owner: Owner | null = null): UploadTicket {
   const rules = UPLOAD_RULES[request.kind];
   const type = request.content_type.toLowerCase().split(";")[0]?.trim() ?? "";
   if (!(rules.types as readonly string[]).includes(type)) throw new UploadRefused("unsupported_type", rules.say);
@@ -56,7 +56,7 @@ export function requestStoredUpload(request: UploadRequest): UploadTicket {
   const now = Date.now();
   for (const [id, ticket] of tickets) if (ticket.expiresAt < now) tickets.delete(id);
   const id = `upl_${token()}`;
-  tickets.set(id, { request: { ...request, content_type: type }, expiresAt: now + TICKET_MS });
+  tickets.set(id, { request: { ...request, content_type: type }, expiresAt: now + TICKET_MS, owner });
   return { id, path: `/api/v1/uploads/${id}`, max_bytes: rules.maxBytes, expires_at: new Date(now + TICKET_MS).toISOString() };
 }
 
@@ -94,8 +94,10 @@ export function receiveStoredUpload(id: string, bytes: Uint8Array): MediaItem | 
     created_at: new Date().toISOString(),
     image: request.kind === "image" ? `/api/media/${mediaId}` : null,
     artwork: artworkFor(request.name),
+    made_by: ticket.owner?.by ?? null,
   };
-  addMediaToLibrary(item);
+  // The file goes to the library of the account that asked to send it.
+  addMediaToLibrary(item, ticket.owner);
   return item;
 }
 

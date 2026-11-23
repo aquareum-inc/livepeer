@@ -61,6 +61,31 @@ export async function topUpUserAction(userId: string, amountUsd: number): Promis
   revalidatePath("/operator/users", "layout");
 }
 
+/** Suspends or resumes a workspace. Its members stay signed in and keep their own accounts. */
+export async function setWorkspaceStatusAction(workspaceId: string, status: "active" | "paused"): Promise<void> {
+  try {
+    await (await operatorApi()).setWorkspaceStatus(workspaceId, status);
+  } catch (error) {
+    throw new Error(explain(error));
+  }
+  revalidatePath("/operator/workspaces", "layout");
+}
+
+/** A workspace is an account like a person's: its plan is assigned the same way. */
+export async function assignWorkspacePlanAction(workspaceId: string, planId: string | null): Promise<void> {
+  await (await operatorApi()).provider.plans.assignPlan(workspaceId, planId);
+  revalidatePath("/operator/workspaces", "layout");
+}
+
+export async function topUpWorkspaceAction(workspaceId: string, amountUsd: number): Promise<void> {
+  try {
+    await (await operatorApi()).provider.budgets.topUpAllocation(workspaceId, usd(amountUsd));
+  } catch (error) {
+    throw new Error(explain(error));
+  }
+  revalidatePath("/operator/workspaces", "layout");
+}
+
 export async function savePlanAction(id: string | null, input: Omit<Plan, "id">): Promise<Plan> {
   const { plans } = (await operatorApi()).provider;
   return id ? plans.updatePlan(id, input) : plans.createPlan(input);

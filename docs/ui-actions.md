@@ -52,6 +52,23 @@ in `apps/web/lib/public-api/operations.ts`.
 | Settings | Add credits (an amount of their own, within the operator's limits) | `buyCredits` | Not yet: purchasing is undecided |
 | Settings | Choose, switch or cancel a plan | `changePlan` | Not yet: purchasing is undecided |
 | Settings | See usage | `getUsage` | Built (slice 6) |
+| Account menu | See the accounts you can work in, with each balance, and invitations waiting | `listAccounts` | Not on mobile: a phone works in the Personal account only (`docs/workspaces.md` §8) |
+| Account menu | Switch between your personal account and a workspace | `listAccounts` (membership is checked, then the session is repointed: `switchAccountAction`) | Not on mobile |
+| Account menu | Create a workspace | `createWorkspace` | Not on mobile |
+| Settings · Workspace | See the workspace, its members with role and usage, and waiting invitations | `getWorkspace` | Not on mobile |
+| Settings · Workspace | Rename the workspace (owner, admin) | `renameWorkspace` | Not on mobile |
+| Settings · Workspace | Invite by email with a role; resend an invitation (owner, admin) | `inviteMember` | Not on mobile |
+| Settings · Workspace | Cancel an invitation (owner, admin) | `revokeInvitation` | Not on mobile |
+| Settings · Workspace | Copy an invitation's link | Client only: the link is built from the invitation `getWorkspace` returned | Not on mobile |
+| Settings · Workspace | Change a member between admin and member (owner, admin) | `setMemberRole` | Not on mobile |
+| Settings · Workspace | Remove a member (owner, admin; never the owner) | `removeMember` | Not on mobile |
+| Settings · Workspace | Make another member the owner (owner) | `transferOwnership` | Not on mobile |
+| Settings · Workspace | Leave the workspace (admin, member) | `leaveWorkspace` | Not on mobile |
+| Join | Read an invitation from its link | `getInvitation` | Not on mobile |
+| Join | Join, or decline | `acceptInvitation`, `declineInvitation` | Not on mobile |
+| Settings · Usage | In a workspace: see usage by member and API key (owner, admin) | `getMemberUsage`; `getUsage` answers a member with their own entries only | Not on mobile |
+| Settings · Plan | In a workspace: see the plan and balance; only the owner buys credit or changes the plan | `getAccount`, `getCreditBalance`; `buyCreditPack`, `buyCredits`, `changePlan` refuse anyone else | Not on mobile |
+| Developers | In a workspace: keys are listed, made and revoked by its owner and admins | `listApiKeys`, `createApiKey`, `revokeApiKey` refuse a member | Not on mobile |
 | Settings | Read who can see a job | `get_privacy` (`describePrivacy`, the instance's `privacy.retainChats`) | Built (slice 6) |
 | Settings | Delete the account | `deleteAccount` (`delete_account`: also signs out every device and forgets the person's blocks); on the web `deleteAccountAction` | Built (slice 6) |
 | Settings | Sign out | `POST /auth/sign-out`; on phones `end_device_session` from the account tray | Built (slice 1) |
@@ -79,6 +96,12 @@ in `apps/web/lib/public-api/operations.ts`.
 | Operator · User | Assign or remove a plan | `provider.plans.assignPlan` | Not on mobile |
 | Operator · User | Add credit (manual adjustment) | `provider.budgets.topUpAllocation` | Not on mobile |
 | Operator · User | See keys and usage | `listAccessKeys`, `provider.usage.listUsage` | Not on mobile |
+| Operator · Workspaces | List workspaces with owner, members, plan, budget, spent, remaining | `listWorkspaces` | Not on mobile |
+| Operator · Workspace | See members with role and usage, invitations, keys and recent usage | `getWorkspace`, `listAccessKeys`, `provider.usage.listUsage` | Not on mobile |
+| Operator · Workspace | Suspend or resume | `setWorkspaceStatus` | Not on mobile |
+| Operator · Workspace | Assign or remove a plan | `provider.plans.assignPlan` (the workspace's id) | Not on mobile |
+| Operator · Workspace | Add credit (manual adjustment) | `provider.budgets.topUpAllocation` (the workspace's id) | Not on mobile |
+| Operator · User | See the workspaces a person belongs to | `provider.workspaces.listForUser` | Not on mobile |
 | Operator · Pricing | See provider and features, plans, packs, markup | `provider.features`, `provider.plans.listPlans`, `provider.plans.listCreditPacks` | Not on mobile |
 | Operator · Pricing | Create or edit a plan | `provider.plans.createPlan`, `provider.plans.updatePlan` | Not on mobile |
 | Operator · Pricing | Add a credit pack; change its credits or price, highlight it, stop offering it | `provider.plans.createCreditPack`, `provider.plans.updateCreditPack` | Not on mobile |

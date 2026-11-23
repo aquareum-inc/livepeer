@@ -1,11 +1,13 @@
 "use client";
 
-import type { ConversationSummary } from "@livepeer/api-client";
+import type { Accounts, ConversationSummary } from "@livepeer/api-client";
 import type { Brand } from "@livepeer/ui";
 import { AppShell, type Account, type LinkProps } from "@livepeer/user-app";
 import NextLink from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+
+import { createWorkspaceAction, switchAccountAction } from "@/lib/actions";
 
 const AVAILABLE_ROUTES = ["/", "/studio", "/characters", "/library", "/developers"];
 
@@ -18,6 +20,7 @@ export function Shell({
   characters,
   recents,
   account,
+  accounts,
   consoleAvailable,
   developersAvailable,
   sidebarOpen,
@@ -27,6 +30,8 @@ export function Shell({
   characters: boolean;
   recents: ConversationSummary[];
   account: Account | null;
+  /** The accounts the person can work in; null for a guest or where the provider has no workspaces. */
+  accounts: Accounts | null;
   consoleAvailable: boolean;
   /** Whether the instance serves the API or the MCP server, which the Developers section documents. */
   developersAvailable: boolean;
@@ -43,6 +48,7 @@ export function Shell({
       availableRoutes={AVAILABLE_ROUTES}
       features={{ characters, developers: developersAvailable }}
       account={account}
+      switching={accounts ? { accounts, switchAccount: switchAccountAction, createWorkspace: createWorkspaceAction } : null}
       consoleAvailable={consoleAvailable}
       initialOpen={sidebarOpen}
       signOutAction="/auth/sign-out"
