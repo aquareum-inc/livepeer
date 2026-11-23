@@ -89,6 +89,7 @@ export { EngineError, type EngineConfig } from "./live/engine";
 export { quoteCredits } from "./mock/store";
 export { agentModelsFrom, appModel, runnerModel } from "./runner-model";
 export * from "./operator";
+export * from "./workspaces";
 export type { CharacterFilter } from "./mock/characters";
 export type { MediaFilter } from "./mock/library";
 export { UPLOAD_RULES, UploadRefused } from "./mock/uploads";
