@@ -38,7 +38,7 @@ struct ComposerChoices {
     var castCharacter: () -> Void = {}
 }
 
-/// The one composer. It sits in the centre of Home and at the foot of a conversation, and holds the
+/// The one composer. It sits at the foot of Home and at the foot of a conversation, and holds the
 /// view's one ink action: send.
 struct Composer: View {
     @Binding var draft: Draft
@@ -49,51 +49,56 @@ struct Composer: View {
     let send: () -> Void
     @Environment(\.palette) private var palette
     @Environment(\.motion) private var motion
-    @Namespace private var glide
+    /// How far the composer sits from the screen's edges: the system tab bar's own inset, so the two line up.
+    static let inset: CGFloat = 21
 
     private static let aspects = ["16:9", "9:16", "1:1"]
     private static let durations: [Double] = [5, 10]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if draft.cast != nil || !draft.attachments.isEmpty || chosenModel != nil { chosen }
-            HStack(alignment: .bottom, spacing: 8) {
-                more
-                // The field's own placeholder cuts off at one line; this one wraps, at any text size,
-                // and the field grows to fit it.
-                ZStack(alignment: .topLeading) {
-                    if draft.prompt.isEmpty {
-                        Text(placeholderText)
-                            .text(.lead)
-                            .foregroundStyle(palette.subtleForeground)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityHidden(true)
-                    }
-                    TextField("", text: $draft.prompt, axis: .vertical)
-                        .lineLimit(1...6)
+        VStack(alignment: .leading, spacing: 4) {
+            if draft.cast != nil || !draft.attachments.isEmpty { chosen }
+            // The field's own placeholder cuts off at one line; this one wraps, at any text size,
+            // and the field grows to fit it.
+            ZStack(alignment: .topLeading) {
+                if draft.prompt.isEmpty {
+                    Text(placeholderText)
                         .text(.lead)
-                        .foregroundStyle(palette.foreground)
-                        .focused(focused)
-                        .accessibilityLabel("Describe what you want to make")
+                        .foregroundStyle(palette.subtleForeground)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityHidden(true)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 10)
-                // The placeholder can wrap past the field's one line; a tap anywhere on it starts typing.
-                .contentShape(Rectangle())
-                .onTapGesture { focused.wrappedValue = true }
-                // With nothing else to set, send sits beside the words and the composer is one line tall.
-                if !draft.isVideo { sendButton }
+                TextField("", text: $draft.prompt, axis: .vertical)
+                    .lineLimit(1...6)
+                    .text(.lead)
+                    .foregroundStyle(palette.foreground)
+                    .focused(focused)
+                    .accessibilityLabel("Describe what you want to make")
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+            // The placeholder can wrap past the field's one line; a tap anywhere on it starts typing.
+            .contentShape(Rectangle())
+            .onTapGesture { focused.wrappedValue = true }
 
-            // Parameters appear with intent: only once the request is a video.
-            if draft.isVideo {
-                HStack(spacing: 8) {
+            // Everything besides words sits under them, as on the web: what to add on the left, send on the right.
+            HStack(spacing: 4) {
+                tool("plus", label: "Attach from your library", action: choices.attach)
+                if choices.casting {
+                    // A portrait in a frame: the character's portrait becomes the first frame of the shot.
+                    tool(draft.cast == nil ? "person.crop.square" : "person.crop.square.fill", label: "Put a character in it", on: draft.cast != nil, action: choices.castCharacter)
+                }
+                if choices.models.count >= 2 { modelMenu }
+                // Parameters appear with intent: only once the request is a video.
+                if draft.isVideo {
                     Menu {
                         Picker("Shape", selection: $draft.aspect) {
                             ForEach(Self.aspects, id: \.self) { Text($0).tag($0) }
                         }
                     } label: {
-                        parameter(draft.aspect, symbol: "aspectratio")
+                        parameter(draft.aspect)
                     }
                     .accessibilityLabel("Shape, \(draft.aspect)")
                     Menu {
@@ -101,20 +106,17 @@ struct Composer: View {
                             ForEach(Self.durations, id: \.self) { Text("\(Int($0)) seconds").tag($0) }
                         }
                     } label: {
-                        parameter("\(Int(draft.durationSeconds))s", symbol: "timer")
+                        parameter("\(Int(draft.durationSeconds))s")
                     }
                     .accessibilityLabel("Length, \(Int(draft.durationSeconds)) seconds")
-                    Spacer(minLength: 0)
-                    sendButton
                 }
-                .transition(.opacity.combined(with: .offset(y: 6)))
+                Spacer(minLength: 0)
+                sendButton
             }
         }
         .animation(motion(.morph), value: draft.isVideo)
-        .animation(motion(.morph), value: draft.attachments.count + (draft.cast == nil ? 0 : 1) + (draft.model == nil ? 0 : 1))
-        .padding(.leading, 8)
-        .padding(.trailing, 8)
-        .padding(.vertical, 8)
+        .animation(motion(.morph), value: draft.attachments.count + (draft.cast == nil ? 0 : 1))
+        .padding(8)
         .glass(in: RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous))
     }
 
@@ -130,39 +132,50 @@ struct Composer: View {
         return choices.models.first { $0.app == model || $0.also.contains(model) }
     }
 
-    /// Everything besides words: attach, cast and the agent's model. One button, so the composer stays one line.
-    private var more: some View {
-        Menu {
-            Button("Attach from your library", systemImage: "photo.on.rectangle.angled", action: choices.attach)
-            if choices.casting {
-                Button("Put a character in it", systemImage: "person.crop.rectangle", action: choices.castCharacter)
-            }
-            if choices.models.count >= 2 {
-                Picker(selection: $draft.model) {
-                    Text("Auto").tag(String?.none)
-                    ForEach(choices.models, id: \.app) { entry in
-                        Button {} label: {
-                            Text(entry.name)
-                            Text(entry.busy ? "Busy · \(entry.description)" : entry.description)
-                        }
-                        .tag(String?.some(entry.app))
-                    }
-                } label: {
-                    Label("Model: \(chosenModel?.name ?? "Auto")", systemImage: "cpu")
-                }
-                .pickerStyle(.menu)
-            }
-        } label: {
-            Image(systemName: "plus")
+    private func tool(_ symbol: String, label: String, on: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
                 .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(palette.mutedForeground)
-                .frame(width: 44, height: 44)
-                .contentShape(Circle())
+                .foregroundStyle(on ? palette.foreground : palette.mutedForeground)
+                .frame(width: 38, height: 44)
+                .contentShape(Rectangle())
         }
-        .accessibilityLabel("Add to the request")
+        .buttonStyle(PressStyle(round: true))
+        .accessibilityLabel(label)
     }
 
-    /// What has been added, each removable: who is cast, what is attached, which model runs the agent.
+    /// Which language model runs the agent. It names the one chosen, so nothing else has to.
+    private var modelMenu: some View {
+        Menu {
+            Picker("Model", selection: $draft.model) {
+                Text("Auto").tag(String?.none)
+                ForEach(choices.models, id: \.app) { entry in
+                    Button {} label: {
+                        Text(entry.name)
+                        Text(entry.busy ? "Busy · \(entry.description)" : entry.description)
+                    }
+                    .tag(String?.some(entry.app))
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                RobotMark()
+                    // Sized and weighted to sit level with the system icons beside it.
+                    .stroke(style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+                    .frame(width: 20, height: 20)
+                    .accessibilityHidden(true)
+                Text(chosenModel?.name ?? "Auto").text(.caption, weight: .medium).lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(chosenModel == nil ? palette.mutedForeground : palette.foreground)
+            .padding(.horizontal, 6)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Model, \(chosenModel?.name ?? "Auto")")
+    }
+
+    /// What has been added, each removable: who is cast and what is attached.
     private var chosen: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 6) {
@@ -177,31 +190,24 @@ struct Composer: View {
                         draft.attachments.removeAll { $0.id == item.id }
                     }
                 }
-                if let model = chosenModel {
-                    token(nil, symbol: "cpu", label: model.name, remove: "Back to Auto") { draft.model = nil }
-                }
             }
-            .padding(.leading, 10)
+            .padding(.leading, 4)
         }
         .scrollIndicators(.hidden)
         .transition(.opacity.combined(with: .offset(y: -4)))
     }
 
-    private func token(_ initial: String?, image: String? = nil, symbol: String? = nil, label: String, remove: String, action: @escaping () -> Void) -> some View {
+    private func token(_ initial: String?, image: String? = nil, label: String, remove: String, action: @escaping () -> Void) -> some View {
         HStack(spacing: 6) {
-            if let symbol {
-                Image(systemName: symbol).imageScale(.small).foregroundStyle(palette.mutedForeground)
-            } else {
-                ZStack {
-                    Circle().fill(palette.secondary)
-                    if let initial { Text(initial).font(.system(size: 10, weight: .semibold)).foregroundStyle(palette.foreground) }
-                    if let image, let url = URL(string: image, relativeTo: BuildConfig.instanceURL) {
-                        AsyncImage(url: url) { phase in phase.image?.resizable().scaledToFill() }
-                    }
+            ZStack {
+                Circle().fill(palette.secondary)
+                if let initial { Text(initial).font(.system(size: 10, weight: .semibold)).foregroundStyle(palette.foreground) }
+                if let image, let url = URL(string: image, relativeTo: BuildConfig.instanceURL) {
+                    AsyncImage(url: url) { phase in phase.image?.resizable().scaledToFill() }
                 }
-                .frame(width: 20, height: 20)
-                .clipShape(Circle())
             }
+            .frame(width: 20, height: 20)
+            .clipShape(Circle())
             Text(label).text(.caption, weight: .medium).foregroundStyle(palette.foreground).lineLimit(1)
             Button(action: action) {
                 Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(palette.mutedForeground).frame(width: 28, height: 28).contentShape(Circle())
@@ -215,33 +221,65 @@ struct Composer: View {
         .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
     }
 
-    /// The view's one ink action. It is one button that glides between its two places.
+    /// The view's one ink action.
     private var sendButton: some View {
         Button(action: send) {
-            Image(systemName: sending ? "stop.fill" : "arrow.up")
-                .font(.system(size: 17, weight: .semibold))
-                .contentTransition(.symbolEffect(.replace))
-                .foregroundStyle(palette.primaryForeground)
-                .frame(width: 44, height: 44)
-                .background(palette.primary, in: Circle())
-                .opacity(draft.canSend || sending ? 1 : 0.35)
+            ZStack {
+                if sending {
+                    // Sending can't be stopped from here, so it shows as work under way, not as a stop button.
+                    ProgressView().tint(palette.primaryForeground)
+                } else {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(ready ? palette.primaryForeground : palette.subtleForeground)
+                }
+            }
+            .frame(width: 44, height: 44)
+            // With nothing to send it is a quiet well, not a faded ink button: ink arrives with the words.
+            .background(ready || sending ? palette.primary : palette.active, in: Circle())
+            .animation(motion(.morph), value: ready)
         }
         .buttonStyle(PressStyle(round: true))
-        .disabled(!draft.canSend || sending)
+        .disabled(!ready)
+        .sensoryFeedback(.impact(weight: .light), trigger: sending) { _, now in now }
         .accessibilityLabel(sending ? "Sending" : "Send")
-        .matchedGeometryEffect(id: "send", in: glide)
     }
 
-    private func parameter(_ label: String, symbol: String) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: symbol).imageScale(.small)
-            Text(label).text(.caption, mono: true)
-        }
-        .foregroundStyle(palette.mutedForeground)
-        .padding(.horizontal, 10)
-        .frame(minHeight: 32)
-        .background(palette.hover, in: Capsule())
-        .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
-        .transition(.scale(scale: 0.9).combined(with: .opacity))
+    private var ready: Bool { draft.canSend && !sending }
+
+    private func parameter(_ label: String) -> some View {
+        Text(label)
+            .text(.caption, mono: true)
+            .foregroundStyle(palette.mutedForeground)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 32)
+            .background(palette.hover, in: Capsule())
+            .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
+            .transition(.scale(scale: 0.9).combined(with: .opacity))
+    }
+}
+
+/// The agent's mark on the model menu: a small robot, as on the web. The system's icon set has none,
+/// so this one is drawn, on a 24-point grid like the rest of the web's icons.
+private struct RobotMark: Shape {
+    nonisolated func path(in rect: CGRect) -> Path {
+        var path = Path()
+        // Antenna.
+        path.move(to: CGPoint(x: 12, y: 4))
+        path.addLine(to: CGPoint(x: 12, y: 8))
+        // Head.
+        path.addRoundedRect(in: CGRect(x: 4, y: 8, width: 16, height: 12), cornerSize: CGSize(width: 2.5, height: 2.5))
+        // Ears.
+        path.move(to: CGPoint(x: 2, y: 14))
+        path.addLine(to: CGPoint(x: 4, y: 14))
+        path.move(to: CGPoint(x: 20, y: 14))
+        path.addLine(to: CGPoint(x: 22, y: 14))
+        // Eyes.
+        path.move(to: CGPoint(x: 9, y: 13))
+        path.addLine(to: CGPoint(x: 9, y: 15))
+        path.move(to: CGPoint(x: 15, y: 13))
+        path.addLine(to: CGPoint(x: 15, y: 15))
+        let scale = min(rect.width, rect.height) / 24
+        return path.applying(CGAffineTransform(scaleX: scale, y: scale))
     }
 }

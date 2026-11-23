@@ -53,7 +53,7 @@ struct ConversationView: View {
                     Task { await model.send() }
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, Composer.inset)
             .padding(.bottom, 8)
         }
         .background(palette.background)

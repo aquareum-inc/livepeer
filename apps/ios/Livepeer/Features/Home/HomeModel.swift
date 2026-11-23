@@ -6,7 +6,6 @@ final class HomeModel {
 
     private(set) var phase: Phase = .loading
     private(set) var starters: [PromptStarter] = []
-    private(set) var showcase: [ShowcaseItem] = []
     private(set) var sending = false
     /// Why the last send didn't go through, in words for the user.
     var sendError: String?
@@ -19,12 +18,10 @@ final class HomeModel {
     func load() async {
         if phase == .failed { phase = .loading }
         do {
-            async let starters = api.listPromptStarters()
-            async let showcase = api.listShowcase()
-            (self.starters, self.showcase) = try await (starters, showcase)
+            starters = try await api.listPromptStarters()
             phase = .loaded
         } catch {
-            if starters.isEmpty && showcase.isEmpty { phase = .failed }
+            if starters.isEmpty { phase = .failed }
         }
     }
 
