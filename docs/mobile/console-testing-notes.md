@@ -49,6 +49,13 @@ rule: `CLAUDE.md` and the plan hold those.
   a `lastUsedAt` more than 7 days old shows "Signed out · alerts until …"; `"pushSealed": null` shows "not
   reaching".
 
+- **A photo to pick in the Android emulator.** `adb push <file>.jpg /sdcard/Download/`, then
+  `adb shell "mkdir -p /sdcard/DCIM/Camera && cp /sdcard/Download/<file>.jpg /sdcard/DCIM/Camera/"` and
+  `adb shell "content call --uri content://media --method scan_volume --arg external_primary"`; the photo
+  picker shows it a few seconds later. The iOS simulator comes with sample photos.
+- **A PIN on the emulator locks it at the next boot** (the fingerprint notes below set one). A locked
+  emulator can't install or open the app. Clear the PIN when done, or keep a second emulator without one:
+  copy the first one's `config.ini` into a new `~/.android/avd/<name>.avd` and write a matching `<name>.ini`.
 - **Chrome's first-run screen** in a fresh Android emulator asks to agree to its terms before a sign-in can
   open. A mock sign-in can be finished without it: the address the app handed the browser is in `adb logcat`
   (`…/auth/start?…`); follow its redirects from the Mac with cookies kept, and hand the final

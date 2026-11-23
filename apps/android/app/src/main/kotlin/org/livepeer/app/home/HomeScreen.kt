@@ -116,8 +116,8 @@ fun HomeScreen(model: HomeViewModel, account: Account, support: ComposerSupport,
                 if (state.phase == Phase.Failed) LoadFailure("The starting points didn't load. Check your connection and try again.") { model.load() }
             }
 
-            // Starting points are for a blank page: once there are words they step aside for them.
-            AnimatedVisibility(state.draft.prompt.isEmpty() && state.starters.isNotEmpty(), enter = fadeIn(motion.morph()), exit = fadeOut(motion.exit())) {
+            // Starting points are for a blank page: once there are words or something attached they step aside.
+            AnimatedVisibility(state.draft.prompt.isEmpty() && state.draft.attachments.isEmpty() && state.starters.isNotEmpty(), enter = fadeIn(motion.morph()), exit = fadeOut(motion.exit())) {
                 LazyRow(Modifier.padding(bottom = 10.dp), contentPadding = PaddingValues(horizontal = ComposerInset), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(state.starters, key = { it.id }) { starter ->
                         // A starting point is sent as it is, and the agent asks for the rest in the conversation it opens.
@@ -155,7 +155,7 @@ fun HomeScreen(model: HomeViewModel, account: Account, support: ComposerSupport,
     }
 
     when (tray) {
-        ComposerTray.Attach -> Tray("Attach from your library", onDismiss = { tray = null }) { AttachTray(support, state.draft, model::setDraft) }
+        ComposerTray.Attach -> Tray("Attach a photo or video", onDismiss = { tray = null }) { close -> AttachTray(support, state.draft, model::setDraft, close) }
         ComposerTray.Cast -> Tray("Put a character in it", onDismiss = { tray = null }) { close -> CastTray(support, state.draft, model::setDraft, close) }
         null -> {}
     }

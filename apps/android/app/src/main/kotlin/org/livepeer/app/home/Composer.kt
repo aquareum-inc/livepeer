@@ -77,6 +77,7 @@ import org.livepeer.app.design.absolute
 import org.livepeer.app.generated.AgentModelEntry
 import org.livepeer.app.generated.CharacterCast
 import org.livepeer.app.generated.MediaItem
+import org.livepeer.app.generated.MediaKind
 import coil3.compose.AsyncImage
 import org.livepeer.app.design.LocalPalette
 import org.livepeer.app.design.glass
@@ -103,8 +104,8 @@ data class Draft(
     val isVideo: Boolean get() = app?.contains("video") == true && app?.startsWith("live") == false
     val canSend: Boolean get() = prompt.isNotBlank() || attachments.isNotEmpty()
 
-    /** What is sent. With only attachments, it asks for the videos to be understood, as the web does. */
-    val text: String get() = prompt.trim().ifEmpty { "Summarise this and list the key moments." }
+    /** What is sent. With only attachments, it asks for a video to be understood or a picture to be brought to life, as the web does. */
+    val text: String get() = prompt.trim().ifEmpty { if (attachments.any { it.kind == MediaKind.Video }) "Summarise this and list the key moments." else "Bring this picture to life." }
 
     /** What carries on to the next message in a conversation: the same model, and the same cast. */
     val carriedOn: Draft get() = Draft(app = if (cast == null) null else app, cast = cast, model = model)
@@ -190,7 +191,7 @@ fun Composer(
         Row(verticalAlignment = Alignment.CenterVertically) {
             // The tools take what send leaves; a long model name gives way before anything is pushed off the row.
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                Tool(Icons.Rounded.Add, "Attach from your library", iconScale, on = false, onClick = choices.attach)
+                Tool(Icons.Rounded.Add, "Attach a photo or video", iconScale, on = false, onClick = choices.attach)
                 if (choices.casting) {
                     // A framed portrait: theirs becomes the first frame. It fills in once someone is cast.
                     Tool(if (draft.cast == null) Icons.Outlined.AccountBox else Icons.Rounded.AccountBox, "Put a character in it", iconScale, on = draft.cast != null, onClick = choices.castCharacter)
@@ -212,7 +213,8 @@ fun Composer(
 /** What to write, given what has been added: a cast asks for a scene, an attachment for a question. */
 private fun placeholderFor(draft: Draft, fallback: String): String = when {
     draft.cast != null -> "Put ${draft.cast.name} in a scene: where, doing what, in what light…"
-    draft.attachments.isNotEmpty() -> "Ask about it, or send as it is for a summary and the key moments"
+    draft.attachments.any { it.kind == MediaKind.Video } -> "Ask about it, or send as it is for a summary and the key moments"
+    draft.attachments.isNotEmpty() -> "Say what should move, or send it as it is"
     else -> fallback
 }
 

@@ -170,7 +170,7 @@ fun ConversationScreen(model: ConversationViewModel, support: ComposerSupport, c
     }
 
     when (tray) {
-        ComposerTray.Attach -> Tray("Attach from your library", onDismiss = { tray = null }) { AttachTray(support, state.draft, model::setDraft) }
+        ComposerTray.Attach -> Tray("Attach a photo or video", onDismiss = { tray = null }) { close -> AttachTray(support, state.draft, model::setDraft, close) }
         ComposerTray.Cast -> Tray("Put a character in it", onDismiss = { tray = null }) { close -> CastTray(support, state.draft, model::setDraft, close) }
         null -> {}
     }

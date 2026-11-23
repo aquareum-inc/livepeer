@@ -15,8 +15,10 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import java.io.File
 import java.io.IOException
 import java.net.URLEncoder
 import kotlin.coroutines.resume
@@ -102,6 +104,26 @@ class ApiTransport(
         if (status == 304 && text != null) return json.decodeFromString(output, text)
         if (status !in 200..299 || text == null) {
             val body = text?.let { runCatching { json.decodeFromString(Envelope.serializer(), it).error }.getOrNull() }
+            val error = ApiError(status, body?.message ?: "The request failed.", body?.code)
+            if (sent != null && (error.isSignedOut || error.isMobileOff)) refused(Refusal(error, sent))
+            throw error
+        }
+        return json.decodeFromString(output, text)
+    }
+
+    /**
+     * Sends a file to where an upload ticket said to, with the same sign-in, and reads what comes back.
+     * [path] is the ticket's own, on this instance.
+     */
+    suspend fun <T> put(output: DeserializationStrategy<T>, file: File, contentType: String, path: String): T {
+        if (!path.startsWith("/api/v1/")) throw ApiError(0, "The request failed.", null)
+        val sent = token()
+        val request = Request.Builder().url(root.removeSuffix("/api/v1") + path).header("Accept", "application/json").put(file.asRequestBody(contentType.toMediaType())).apply {
+            sent?.let { header("Authorization", "Bearer $it") }
+        }.build()
+        val (status, text) = withContext(Dispatchers.IO) { client.newCall(request).await().use { response -> response.code to response.body.string() } }
+        if (status !in 200..299) {
+            val body = runCatching { json.decodeFromString(Envelope.serializer(), text).error }.getOrNull()
             val error = ApiError(status, body?.message ?: "The request failed.", body?.code)
             if (sent != null && (error.isSignedOut || error.isMobileOff)) refused(Refusal(error, sent))
             throw error
