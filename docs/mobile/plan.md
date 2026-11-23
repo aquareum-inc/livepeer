@@ -1750,6 +1750,28 @@ Still not seen on iOS: opening the console from a tapped alert (a tap on the ban
 did nothing, as before), time-sensitive delivery for the engine's alert, Apple's production service, a second
 alert of a kind replacing the first through Apple, and anything on a real iPhone.
 
+**22 November 2026, night: on a real iPhone, and a crash mended.** The development build, signed with the
+owner's team and carrying the push entitlement, was installed on the owner's iPhone (iOS 27.2) and pointed at
+an instance on the same network. The owner did what only a hand can: signed in as the mock operator, opened
+the console with Face ID, dismissed a report, and turned alerts on. The instance held the phone with a sealed
+push token from Apple's sandbox.
+
+- **A real alert arrived on the phone** through Apple: "Livepeer · 1 report is waiting".
+- **Tapping it crashed the app.** Nothing opened. The crash report from the phone showed UIKit aborting inside
+  `SystemPush.userNotificationCenter(_:didReceive:)`: the system is told a notification has been dealt with
+  when that function returns, it must be told on the main thread, and the function was `nonisolated`, so it
+  returned on a background one. Every tapped alert on iOS would have done this. It was never seen before
+  because a tap on an alert could not be made to land in the simulator.
+- **Mended**: both of the notification delegate's functions now run on the main actor. With the mended build
+  installed and the app not running, the owner tapped a new alert: the app opened, the console's cover asked
+  for Face ID, and the console landed on Reports. This is the step listed as not seen on iOS since stage 3
+  was built.
+- **No unit test covers it**: the system's response to a tap can't be made in a test. The note in
+  `SystemPush` says why the functions must stay on the main actor.
+
+Still not seen on iOS: time-sensitive delivery for the engine's alert, a tap with the console already open,
+Apple's production service, and what the hardware key does when a face is added.
+
 Found in passing, in stage 1's code, and left alone:
 
 - On a phone with no Face ID set up, the console's cover says "The console needs Face ID or Touch ID…" twice,

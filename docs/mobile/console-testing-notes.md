@@ -79,6 +79,14 @@ rule: `CLAUDE.md` and the plan hold those.
 - **On iOS the simulator gives a push token** with no paid team, so alerts can be turned on end to end there.
   With `APNS_KEY`, `APNS_KEY_ID` and `APNS_TEAM_ID` set and an instance that isn't mock-only, Apple's sandbox
   delivers a real alert to that simulator; the App ID must exist in the key's team.
+- **On a real iPhone**: pair it (`xcrun devicectl manage pair --device <udid>`), turn on Developer Mode, keep
+  it unlocked, and build with `-destination 'id=<udid>' -allowProvisioningUpdates DEVELOPMENT_TEAM=<team>
+  INSTANCE_URL='http://<this Mac>.local:<port>'`; settings given on the command line need no file changed.
+  Install with `xcrun devicectl device install app`. The mock operator signs in with the email method as
+  `sam@example.test`. A crash report comes off the phone with `xcrun devicectl device copy from
+  --domain-type systemCrashLogs`.
+- **Tapping an alert has to be done by hand on a real iPhone.** It is the one step the simulator would not
+  take from a driving tool, and it hid a crash until a phone was used.
   Taps on the system's own notification list from a driving tool are unreliable; opening an alert may need a hand.
 
 ## iOS simulator
