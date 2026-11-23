@@ -46,6 +46,8 @@ struct AccountTests {
         #expect(AccountWords.initials(of: personal.name) == "AS" && AccountWords.initial(of: workspace.name) == "N")
         #expect(AccountWords.spoken(workspace, current: true) == "Northlight Studio, workspace, admin, 36660 credits, current")
         #expect(AccountWords.spoken(personal, current: false) == "Adam Soffer, personal account, 2480 credits")
+        #expect(AccountWords.youWillBe(.member) == "You'll be a member" && AccountWords.youWillBe(.admin) == "You'll be an admin")
+        #expect(AccountWords.forYou(.member) != AccountWords.forYou(.admin))
         workspace.status = .paused
         workspace.role = .member
         #expect(AccountWords.kind(of: workspace) == "Member · Suspended")

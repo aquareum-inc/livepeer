@@ -89,7 +89,7 @@ enum AccountInvitationRole: String, Codable, Sendable, Hashable, CaseIterable {
     }
 }
 
-/// An invitation to a workspace, as a phone is told of it: enough to say it exists. It is answered on the web.
+/// An invitation to a workspace, as an app is told of it: what it is for and who sent it, never the link that answers it.
 struct AccountInvitation: Codable, Sendable, Hashable {
     var id: String
     var workspaceName: String

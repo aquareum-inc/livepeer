@@ -202,9 +202,9 @@ Screenshots (dark, light, mobile width), design decisions logged and docs kept c
 **Native apps (built 23 November 2026, `docs/mobile/plan.md` §19).** A phone switches between the person's
 own account and the workspaces they belong to, from the top of the account tray, and everything it then shows
 and makes is that account's. Three operations carry it: `list_accounts`, `switch_account` (the device session
-record holds the current workspace's id and nothing else) and the current account in `get_me`. Managing a
-workspace (creating one, inviting, roles, transfer, leaving, answering an invitation) stays on the web, as
-buying credit does.
+record holds the current workspace's id and nothing else) and the current account in `get_me`. An invitation
+is answered from the same tray (`accept_invitation`, `decline_invitation`). Managing a workspace (creating
+one, inviting, roles, transfer, leaving) stays on the web, as buying credit does.
 
 ## 9. What was built (23 November 2026)
 

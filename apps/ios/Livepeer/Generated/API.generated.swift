@@ -34,9 +34,19 @@ struct API: Sendable {
         try await transport.send("DELETE", "/me", query: [:], body: nil)
     }
 
-    /// The accounts the person can work in (their own, and the workspaces they belong to, each with their role and its balance), which one is current, and invitations waiting. Invitations are answered on the web.
+    /// The accounts the person can work in (their own, and the workspaces they belong to, each with their role and its balance), which one is current, and invitations waiting, to answer with accept_invitation or decline_invitation.
     func listAccounts() async throws -> AccountList {
         try await transport.send("GET", "/accounts", query: [:], body: nil)
+    }
+
+    /// Join the workspace an invitation waiting for the person is for. A native app starts working in it at once. Answers with their accounts as they now stand.
+    func acceptInvitation(id: String) async throws -> AccountList {
+        try await transport.send("POST", "/invitations/\(APITransport.escape(id))/accept", query: [:], body: nil)
+    }
+
+    /// Decline an invitation waiting for the person. Answers with their accounts, the invitation gone.
+    func declineInvitation(id: String) async throws -> AccountList {
+        try await transport.send("POST", "/invitations/\(APITransport.escape(id))/decline", query: [:], body: nil)
     }
 
     /// From a native app: work in another of the person's accounts, their own or a workspace they belong to. Everything the app then reads and makes is that account's.

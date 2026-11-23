@@ -2156,6 +2156,10 @@ credit does.
 - `switch_account` (`POST /accounts/current`, `account_id`): checks the person belongs, then writes the
   workspace's id on the device session record (`workspaceId`; null for personal). Only a device session may
   call it: a browser keeps its place in its cookie, and a key belongs to one account. Left out of MCP.
+- `accept_invitation` and `decline_invitation` (`POST /invitations/{id}/accept`, `…/decline`): answer an
+  invitation waiting for the signed-in person, by its id. The id is looked up in their own waiting
+  invitations, so it can't answer anyone else's, and the link stays on the instance. Accepting from a device
+  session points it at the workspace joined.
 - `get_me` gains `account`: the account the app is working in. `balance` is that account's.
 - `authenticate()` builds a device session's client in the workspace its record names, asking the provider
   on every request whether the person still belongs (`workspaceOf`, as for the web). Someone removed falls
@@ -2174,16 +2178,21 @@ credit does.
 - **Switching** is one tap: a selection haptic, the tray closes, and the app returns to Home with everything
   read again for the new account: conversations, library, characters, studio, balance. A switch that fails
   leaves the tray open and says so in one line.
-- **An invitation** is one quiet line under the accounts: "Sam Whitfield invited you to Harbour Films.
-  Answer it on the web." Nothing to tap: answering needs the link, which a phone isn't given.
+- **An invitation** is a row under the accounts in the same shape as them: a dashed rounded square with the
+  workspace's initial (a workspace you aren't in yet), its name, "Invited by Sam Whitfield" and a "Join"
+  pill. Tapping it closes the account tray and opens an Invitation tray: the workspace and who asked, three
+  short facts (your role and what it lets you do, one balance and one library, your own account stays as it
+  is), then "Join Harbour Films" as the one ink action and a quiet "Decline". Joining starts working in the
+  workspace at once, as a switch does; declining takes the row away. (First built as a line of text that
+  sent the person to the web; changed the same day on the owner's review.)
 - **Settings.** The header stays the person. In a workspace a line under it says where they are working
   and as what ("Working in Northlight Studio · Admin"). Plan and credits shows the workspace's balance and
   plan under its name, with "Inés's to change" in words when the person isn't the owner; nothing is bought
   on phones either way. Usage says whether it is everyone's or only theirs. Devices, Preferences, Privacy
   and Delete account are the person's and don't change.
 - **Library.** In a workspace an item's detail says who made it.
-- **Not on phones:** creating a workspace, inviting, roles, removing, transferring, leaving, answering an
-  invitation, and usage by member. Each is on the web.
+- **Not on phones:** creating a workspace, inviting, roles, removing, transferring, leaving, and usage by
+  member. Each is on the web.
 
 ### 19.3 Build order
 
@@ -2216,4 +2225,8 @@ changed screen is captured in dark and light into `docs/screenshots/mobile/`.
 - **Two things for whoever tests next.** `xcodebuild` output for this checkout is one of several
   `DerivedData/Livepeer-*` folders, one per checkout: install from the one whose `info.plist` names this
   path. The emulator `Medium_Phone_API_37.0` has a PIN and boots locked; `Livepeer_Home_Check` has none.
-
+- **Invitations (added the same day).** Both apps answer an invitation from the account tray. iOS has a UI
+  test and Android an instrumented test that open the invitation and read it; neither joins or declines,
+  since the mock has one invitation and the next run needs it. Joining and declining were run by hand on
+  both. Screenshots: `{ios,android}-account-invitation-dark.jpg`, `{ios,android}-invitation-{dark,light}.jpg`
+  and `ios-invitation-joined-dark.jpg`.

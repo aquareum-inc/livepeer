@@ -69,6 +69,8 @@ class AccountTest {
         assertEquals("N", AccountWords.initial(workspace.name))
         assertEquals("Northlight Studio, workspace, admin, 36660 credits, current", AccountWords.spoken(workspace, current = true))
         assertEquals("Adam Soffer, personal account, 2480 credits", AccountWords.spoken(personal, current = false))
+        assertEquals("You'll be a member", AccountWords.youWillBe(list.invitations.first().role))
+        assertTrue(AccountWords.forYou(list.invitations.first().role).startsWith("Make things"))
         assertEquals("Member · Suspended", AccountWords.kind(workspace.copy(status = AccountSummaryStatus.Paused, role = WorkspaceRole.Member)))
     }
 

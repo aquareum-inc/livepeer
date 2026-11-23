@@ -173,6 +173,21 @@ final class Account {
         return true
     }
 
+    /// Joins the workspace an invitation is for and starts working in it. False when the instance refused.
+    func acceptInvitation(_ invitation: AccountInvitation) async -> Bool {
+        guard signedIn, let fresh = try? await api.acceptInvitation(id: invitation.id) else { return false }
+        accounts = fresh
+        await refresh()
+        return true
+    }
+
+    /// Declines an invitation. It leaves the list. False when the instance refused.
+    func declineInvitation(_ invitation: AccountInvitation) async -> Bool {
+        guard signedIn, let fresh = try? await api.declineInvitation(id: invitation.id) else { return false }
+        accounts = fresh
+        return true
+    }
+
     private func forget() {
         vault.set(nil)
         signedIn = false

@@ -8,6 +8,8 @@ struct AccountTray: View {
     let openSettings: () -> Void
     /// Closes this tray and opens the operator console over the app.
     let openConsole: () -> Void
+    /// Closes this tray and opens an invitation in its place.
+    let openInvitation: (AccountInvitation) -> Void
     @Environment(Account.self) private var account
     @Environment(InstanceStore.self) private var instance
     @Environment(\.palette) private var palette
@@ -145,13 +147,29 @@ struct AccountTray: View {
         }
     }
 
-    /// Invitations waiting, said and not offered: answering one needs its link, which a phone isn't given.
+    /// Invitations waiting: each a row like an account, with a dashed mark for a workspace you aren't in yet.
     @ViewBuilder private var invitations: some View {
         ForEach(account.accounts?.invitations ?? [], id: \.id) { invitation in
-            Label("\(invitation.invitedByName) invited you to \(invitation.workspaceName). Answer it on the web.", systemImage: "envelope")
-                .text(.caption)
-                .foregroundStyle(palette.mutedForeground)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Button { openInvitation(invitation) } label: {
+                HStack(spacing: 12) {
+                    InvitationMark(name: invitation.workspaceName, size: 36)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(invitation.workspaceName).text(.body, weight: .medium).foregroundStyle(palette.foreground).lineLimit(1)
+                        Text("Invited by \(invitation.invitedByName)").text(.caption).foregroundStyle(palette.subtleForeground).lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    Text("Join").text(.caption, weight: .medium).foregroundStyle(palette.foreground)
+                        .padding(.horizontal, 12).frame(minHeight: 28)
+                        .background(palette.secondary, in: Capsule())
+                }
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Invitation to \(invitation.workspaceName) from \(invitation.invitedByName)")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Shows the invitation")
         }
     }
 
@@ -222,6 +240,99 @@ struct AccountMark: View {
     }
 }
 
+/// A workspace you've been invited to and aren't in yet: its initial in a dashed rounded square.
+struct InvitationMark: View {
+    let name: String
+    var size: CGFloat = 32
+    @Environment(\.palette) private var palette
+
+    var body: some View {
+        Text(AccountWords.initial(of: name))
+            .font(.system(size: size * 0.4, weight: .semibold))
+            .foregroundStyle(palette.mutedForeground)
+            .frame(width: size, height: size)
+            .overlay(RoundedRectangle(cornerRadius: size * 0.28, style: .continuous).strokeBorder(palette.input, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+    }
+}
+
+extension AccountInvitation: Identifiable {}
+
+/// An invitation, opened from the account tray: which workspace and who asked, what joining changes, then join
+/// or decline. Joining starts working in the workspace at once.
+struct InvitationTray: View {
+    let invitation: AccountInvitation
+    @Environment(Account.self) private var account
+    @Environment(\.palette) private var palette
+    @Environment(\.dismiss) private var dismiss
+    @State private var busy: Answer?
+    @State private var failed = false
+
+    private enum Answer { case join, decline }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                InvitationMark(name: invitation.workspaceName, size: 44)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(invitation.workspaceName).text(.lead, weight: .semibold).foregroundStyle(palette.foreground)
+                    Text("\(invitation.invitedByName) invited you to join").text(.body).foregroundStyle(palette.mutedForeground)
+                }
+            }
+            .accessibilityElement(children: .combine)
+
+            VStack(alignment: .leading, spacing: 0) {
+                fact("checkmark.seal", AccountWords.youWillBe(invitation.role), AccountWords.forYou(invitation.role))
+                Divider().overlay(palette.hairline)
+                fact("square.stack.3d.up", "One balance, one library", "What you make here uses the workspace's credit and is saved where everyone in it can see.")
+                Divider().overlay(palette.hairline)
+                fact("person", "Your own account stays as it is", "Switch between the two from this menu whenever you like.")
+            }
+            .background(palette.card, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(palette.hairline, lineWidth: 1))
+
+            if failed {
+                Text("That didn't go through. The invitation may have been cancelled. Check your connection and try again.").text(.caption).foregroundStyle(palette.destructive)
+            }
+
+            VStack(spacing: 4) {
+                PrimaryButton(label: "Join \(invitation.workspaceName)", busy: busy == .join) { answer(.join) }
+                    .disabled(busy != nil)
+                Button { answer(.decline) } label: {
+                    Text(busy == .decline ? "Declining…" : "Decline").text(.body, weight: .medium).foregroundStyle(palette.mutedForeground)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PressStyle())
+                .disabled(busy != nil)
+            }
+        }
+        .sensoryFeedback(.success, trigger: account.accountEpoch)
+    }
+
+    private func answer(_ choice: Answer) {
+        busy = choice
+        failed = false
+        Task {
+            let done = choice == .join ? await account.acceptInvitation(invitation) : await account.declineInvitation(invitation)
+            busy = nil
+            if done { dismiss() } else { failed = true }
+        }
+    }
+
+    private func fact(_ symbol: String, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: symbol).font(.system(size: 15)).foregroundStyle(palette.mutedForeground).frame(width: 24).padding(.top, 2).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).text(.body, weight: .medium).foregroundStyle(palette.foreground)
+                Text(detail).text(.caption).foregroundStyle(palette.mutedForeground).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// The words and letters an account is shown with.
 enum AccountWords {
     static func initials(of name: String) -> String {
@@ -244,6 +355,14 @@ enum AccountWords {
     static func kind(of account: AccountSummary) -> String {
         guard account.kind == .workspace else { return "Personal" }
         return role(account.role) + (account.status == .paused ? " · Suspended" : "")
+    }
+
+    /// The role an invitation offers, said to the person: "You'll be a member".
+    static func youWillBe(_ role: AccountInvitationRole) -> String { role == .admin ? "You'll be an admin" : "You'll be a member" }
+
+    /// What that role lets them do, said to them.
+    static func forYou(_ role: AccountInvitationRole) -> String {
+        role == .admin ? "Invite and remove people, make API keys and see everyone's usage, as well as making things." : "Make things with the workspace's credit, and see what you've used."
     }
 
     /// Where the person is working and as what, for Settings: "Working in Northlight Studio · Admin".

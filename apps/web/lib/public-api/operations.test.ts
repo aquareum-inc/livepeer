@@ -201,6 +201,35 @@ describe("public API operations", () => {
     await expect(run("list_accounts", {}, { account: null })).rejects.toMatchObject({ status: 403, code: "account_required" });
   });
 
+  it("answers an invitation by its id, only for the person it is waiting for, and moves an app into the workspace", async () => {
+    const fresh = createMockProvider();
+    const as = (id: string, name: string) => createApiClient({ env: { MOCK_ONLY: "1" }, provider: fresh, user: { id, name } });
+    const run = (name: string, input: Record<string, unknown>, context: Partial<Context>) => OPERATIONS.find((operation) => operation.name === name)!.run({ ...base, via: "device", account: adam, client: as("usr_demo_adam", "Adam Soffer"), ...context }, input);
+    const priya: Account = { user: { id: "usr_demo_priya", name: "Priya Raman", email: "priya@example.test" }, role: "user", deviceId: "dev_2" };
+
+    // The invitation waits for Adam: nobody else can answer it, whoever knows its id.
+    await expect(run("accept_invitation", { id: "inv_adam" }, { account: priya, client: as("usr_demo_priya", "Priya Raman") })).rejects.toMatchObject({ status: 404, code: "invitation_closed" });
+    await expect(run("accept_invitation", { id: "inv_adam" }, { account: null })).rejects.toMatchObject({ status: 403 });
+
+    const joined = (await run("accept_invitation", { id: "inv_adam" }, {})) as { current: string; accounts: Array<{ id: string; role: string }>; invitations: unknown[] };
+    expect(joined.current).toBe("wsp_harbour");
+    expect(joined.accounts.find((entry) => entry.id === "wsp_harbour")).toMatchObject({ role: "member" });
+    expect(joined.invitations).toEqual([]);
+    expect(devices.setWorkspace).toHaveBeenLastCalledWith("dev_1", "wsp_harbour");
+    await expect(run("accept_invitation", { id: "inv_adam" }, {})).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("declines an invitation and leaves the person where they were", async () => {
+    const fresh = createMockProvider();
+    const mine = createApiClient({ env: { MOCK_ONLY: "1" }, provider: fresh, user: { id: "usr_demo_adam", name: "Adam Soffer" } });
+    const run = (name: string, input: Record<string, unknown>) => OPERATIONS.find((operation) => operation.name === name)!.run({ ...base, via: "device", account: adam, client: mine }, input);
+    const calls = vi.mocked(devices.setWorkspace).mock.calls.length;
+    expect(await run("decline_invitation", { id: "inv_adam" })).toMatchObject({ current: "usr_demo_adam", invitations: [] });
+    expect((await mine.listAccounts()).data.accounts.map((entry) => entry.id)).toEqual(["usr_demo_adam", "wsp_northlight"]);
+    expect(vi.mocked(devices.setWorkspace).mock.calls.length).toBe(calls);
+    await expect(run("decline_invitation", { id: "inv_adam" })).rejects.toMatchObject({ status: 404, code: "invitation_closed" });
+  });
+
   it("describes the instance and passes the agent's model and a cast character through", async () => {
     const run = (name: string, input: Record<string, unknown>) => OPERATIONS.find((operation) => operation.name === name)!.run(base, input);
     expect(await run("get_instance", {})).toMatchObject({ name: "Test instance", api_version: "1" });

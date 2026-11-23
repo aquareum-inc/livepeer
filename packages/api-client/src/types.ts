@@ -516,7 +516,7 @@ export interface AccountSummary {
   member_count: number;
 }
 
-/** An invitation to a workspace, as a phone is told of it: enough to say it exists. It is answered on the web. */
+/** An invitation to a workspace, as an app is told of it: what it is for and who sent it, never the link that answers it. */
 export interface AccountInvitation {
   id: string;
   workspace_name: string;

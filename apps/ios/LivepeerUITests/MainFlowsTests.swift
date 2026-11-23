@@ -95,4 +95,22 @@ final class MainFlowsTests: XCTestCase {
         personal.tap()
         XCTAssertTrue(inWorkspace.waitForNonExistence(timeout: patience))
     }
+
+    func testJoiningAWorkspaceFromAnInvitation() throws {
+        try launch(signedIn: true)
+        let labelled = { (format: String, text: String) in self.app.buttons.matching(NSPredicate(format: format, text)).firstMatch }
+        let accountButton = labelled("label BEGINSWITH %@", "Account, ")
+        XCTAssertTrue(accountButton.waitForExistence(timeout: patience))
+        accountButton.tap()
+
+        // The development user has one invitation waiting. Declining it would leave the next run without one,
+        // and joining can't be undone from a phone, so this reads the invitation and closes it.
+        let invitation = labelled("label BEGINSWITH %@", "Invitation to Harbour Films")
+        XCTAssertTrue(invitation.waitForExistence(timeout: patience))
+        invitation.tap()
+        XCTAssertTrue(labelled("label BEGINSWITH %@", "Join Harbour Films").waitForExistence(timeout: patience))
+        XCTAssertTrue(app.buttons["Decline"].exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "You'll be a member")).firstMatch.exists)
+        app.buttons["Close"].firstMatch.tap()
+    }
 }

@@ -223,7 +223,105 @@
     "/accounts": {
       "get": {
         "operationId": "list_accounts",
-        "summary": "The accounts the person can work in (their own, and the workspaces they belong to, each with their role and its balance), which one is current, and invitations waiting. Invitations are answered on the web.",
+        "summary": "The accounts the person can work in (their own, and the workspaces they belong to, each with their role and its balance), which one is current, and invitations waiting, to answer with accept_invitation or decline_invitation.",
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/invitations/{id}/accept": {
+      "post": {
+        "operationId": "accept_invitation",
+        "summary": "Join the workspace an invitation waiting for the person is for. A native app starts working in it at once. Answers with their accounts as they now stand.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "An invitation id from list_accounts."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/invitations/{id}/decline": {
+      "post": {
+        "operationId": "decline_invitation",
+        "summary": "Decline an invitation waiting for the person. Answers with their accounts, the invitation gone.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "An invitation id from list_accounts."
+          }
+        ],
         "responses": {
           "200": {
             "description": "The result.",
@@ -3429,7 +3527,7 @@
           "expires_at"
         ],
         "additionalProperties": false,
-        "description": "An invitation to a workspace, as a phone is told of it: enough to say it exists. It is answered on the web."
+        "description": "An invitation to a workspace, as an app is told of it: what it is for and who sent it, never the link that answers it."
       },
       "AgentModel": {
         "type": "object",

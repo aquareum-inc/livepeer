@@ -174,6 +174,12 @@ private fun MainTabs(container: AppContainer, openBrowser: (android.net.Uri) -> 
     var settingsNext by rememberSaveable { mutableStateOf(false) }
     // Set when the account tray hands over to the console, which covers the app once it has closed.
     var consoleNext by rememberSaveable { mutableStateOf(false) }
+    // Set when the account tray hands over to an invitation, which opens once it has closed.
+    // Kept by id, so the tray survives a rotation or a theme change, and read from the accounts as they stand.
+    var invitationNext by rememberSaveable { mutableStateOf<String?>(null) }
+    var invitationOpenId by rememberSaveable { mutableStateOf<String?>(null) }
+    val accountList by account.accounts.collectAsStateWithLifecycle()
+    val invitationOpen = accountList?.invitations?.firstOrNull { it.id == invitationOpenId }
     val me by account.me.collectAsStateWithLifecycle()
     // A different account is a different app's worth of things: back to Home, and everything is read again.
     val accountEpoch by account.accountEpoch.collectAsStateWithLifecycle()
@@ -325,6 +331,9 @@ private fun MainTabs(container: AppContainer, openBrowser: (android.net.Uri) -> 
             } else if (consoleNext) {
                 consoleNext = false
                 container.console.session.present()
+            } else if (invitationNext != null) {
+                invitationOpenId = invitationNext
+                invitationNext = null
             }
         }) { close ->
             AccountTray(account, container.theme, offersConsole = signedIn && ConsoleSession.offered(me, description), openConsole = {
@@ -333,11 +342,17 @@ private fun MainTabs(container: AppContainer, openBrowser: (android.net.Uri) -> 
             }, signIn = {
                 signInNext = true
                 close()
-            }, close = close) {
+            }, close = close, openInvitation = { invitation ->
+                invitationNext = invitation.id
+                close()
+            }) {
                 settingsNext = true
                 close()
             }
         }
+    }
+    invitationOpen?.let { invitation ->
+        Tray("Invitation", onDismiss = { invitationOpenId = null }) { close -> org.livepeer.app.account.InvitationTray(account, invitation, close) }
     }
     prompt?.let { current ->
         Tray("Sign in or sign up", onDismiss = account::promptClosed) { SignInTray(account, description, current.reason, openBrowser) }

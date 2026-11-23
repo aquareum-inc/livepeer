@@ -52,7 +52,7 @@ in `apps/web/lib/public-api/operations.ts`.
 | Settings | Add credits (an amount of their own, within the operator's limits) | `buyCredits` | Not yet: purchasing is undecided |
 | Settings | Choose, switch or cancel a plan | `changePlan` | Not yet: purchasing is undecided |
 | Settings | See usage | `getUsage` | Built (slice 6) |
-| Account menu | See the accounts you can work in, with each balance, and invitations waiting | `listAccounts` | iOS and Android: the top of the account tray reads `list_accounts`. An invitation is said, not offered: it is answered on the web (`docs/mobile/plan.md` §19) |
+| Account menu | See the accounts you can work in, with each balance, and invitations waiting | `listAccounts` | iOS and Android: the top of the account tray reads `list_accounts`, with a row for each invitation waiting (`docs/mobile/plan.md` §19) |
 | Account menu | Switch between your personal account and a workspace | `listAccounts` (membership is checked, then the session is repointed: `switchAccountAction`) | iOS and Android: one tap in the account tray calls `switch_account`, which repoints the device session; the app returns to Home and reads everything again |
 | Account menu | Create a workspace | `createWorkspace` | Not on mobile |
 | Every tab (phones) | See which account the app is working in | `get_me` (`account`: the current account, with the person's role) | iOS and Android: the account button is the workspace's mark in a workspace; Settings says "Working in Northlight Studio · Admin" |
@@ -66,7 +66,7 @@ in `apps/web/lib/public-api/operations.ts`.
 | Settings · Workspace | Make another member the owner (owner) | `transferOwnership` | Not on mobile |
 | Settings · Workspace | Leave the workspace (admin, member) | `leaveWorkspace` | Not on mobile |
 | Join | Read an invitation from its link | `getInvitation` | Not on mobile |
-| Join | Join, or decline | `acceptInvitation`, `declineInvitation` | Not on mobile |
+| Join | Join, or decline | `acceptInvitation`, `declineInvitation` | iOS and Android: an invitation row in the account tray opens a tray with what joining means, Join and Decline (`accept_invitation`, `decline_invitation`, by the invitation's id). Joining starts working in the workspace |
 | Settings · Usage | In a workspace: see usage by member and API key (owner, admin) | `getMemberUsage`; `getUsage` answers a member with their own entries only | iOS and Android: Usage shows the workspace's totals or the member's own (`get_usage`) and says which. By member stays on the web |
 | Settings · Plan | In a workspace: see the plan and balance; only the owner buys credit or changes the plan | `getAccount`, `getCreditBalance`; `buyCreditPack`, `buyCredits`, `changePlan` refuse anyone else | iOS and Android: the workspace's balance and plan under its name (`get_account`, `get_me`), with whose they are to change. Nothing is bought on phones |
 | Developers | In a workspace: keys are listed, made and revoked by its owner and admins | `listApiKeys`, `createApiKey`, `revokeApiKey` refuse a member | Not on mobile |

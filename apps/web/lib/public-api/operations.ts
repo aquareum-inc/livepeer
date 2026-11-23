@@ -169,6 +169,17 @@ const alertsOf = (context: Context, session: OperatorDeviceRecord, state: PhoneA
 /** Who is revoking a phone from the web console or the API, for the audit log. */
 const revoker = (context: Context) => ({ userId: context.account?.user.id ?? "operator_token", name: context.account?.user.name ?? "Operator API token", deviceId: null, deviceName: null });
 
+/**
+ * The invitation the signed-in person is answering, by its id. Only one that is waiting for them is found, so
+ * an id is never enough to answer someone else's, and the link that answers it never leaves the instance.
+ */
+const waitingInvitation = async (context: Context, id: unknown) => {
+  signedIn(context);
+  const invitation = (await context.client.listAccounts()).data.invitations.find((entry) => entry.id === id);
+  if (!invitation) throw new ApiError(404, "That invitation is no longer open.", "invitation_closed");
+  return invitation;
+};
+
 /** The person's accounts as an app is told of them: an invitation without the link that answers it. */
 const accountList = (list: Accounts): AccountList => ({
   ...list,
@@ -262,13 +273,43 @@ export const OPERATIONS: Operation[] = [
   },
   {
     name: "list_accounts",
-    description: "The accounts the person can work in (their own, and the workspaces they belong to, each with their role and its balance), which one is current, and invitations waiting. Invitations are answered on the web.",
+    description: "The accounts the person can work in (their own, and the workspaces they belong to, each with their role and its balance), which one is current, and invitations waiting, to answer with accept_invitation or decline_invitation.",
     method: "GET",
     path: "/accounts",
     output: "AccountList",
     input: object({}),
     run: async (context) => {
       signedIn(context);
+      return accountList((await context.client.listAccounts()).data);
+    },
+  },
+  {
+    name: "accept_invitation",
+    description: "Join the workspace an invitation waiting for the person is for. A native app starts working in it at once. Answers with their accounts as they now stand.",
+    method: "POST",
+    path: "/invitations/{id}/accept",
+    output: "AccountList",
+    input: object({ id: { type: "string", description: "An invitation id from list_accounts." } }, ["id"]),
+    run: async (context, input) => {
+      const invitation = await waitingInvitation(context, input.id);
+      const workspace = (await context.client.acceptInvitation(invitation.token)).data;
+      const list = (await context.client.listAccounts()).data;
+      // An app moves into the workspace it just joined, as the web does.
+      const deviceId = context.via === "device" ? context.account?.deviceId : null;
+      const moved = deviceId ? context.devices.setWorkspace(deviceId, workspace.id) : false;
+      return accountList(moved ? { ...list, current: workspace.id } : list);
+    },
+  },
+  {
+    name: "decline_invitation",
+    description: "Decline an invitation waiting for the person. Answers with their accounts, the invitation gone.",
+    method: "POST",
+    path: "/invitations/{id}/decline",
+    output: "AccountList",
+    input: object({ id: { type: "string", description: "An invitation id from list_accounts." } }, ["id"]),
+    run: async (context, input) => {
+      const invitation = await waitingInvitation(context, input.id);
+      await context.client.declineInvitation(invitation.token);
       return accountList((await context.client.listAccounts()).data);
     },
   },

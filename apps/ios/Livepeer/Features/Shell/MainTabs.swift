@@ -27,6 +27,9 @@ struct MainTabs: View {
     @State private var settingsOpen = false
     /// Set when the account tray hands over to the operator console, which opens once it has closed.
     @State private var consoleNext = false
+    /// Set when the account tray hands over to an invitation, which opens once it has closed.
+    @State private var invitationNext: AccountInvitation?
+    @State private var invitationOpen: AccountInvitation?
     @Namespace private var travel
 
     enum Destination: Hashable { case home, studio, library, characters }
@@ -83,6 +86,9 @@ struct MainTabs: View {
             } else if consoleNext {
                 consoleNext = false
                 console.present()
+            } else if let invitation = invitationNext {
+                invitationNext = nil
+                invitationOpen = invitation
             }
         }) { _ in
             AccountTray {
@@ -94,7 +100,13 @@ struct MainTabs: View {
             } openConsole: {
                 consoleNext = true
                 accountOpen = nil
+            } openInvitation: { invitation in
+                invitationNext = invitation
+                accountOpen = nil
             }
+        }
+        .tray(item: $invitationOpen, title: { _ in "Invitation" }) { invitation in
+            InvitationTray(invitation: invitation)
         }
         .sheet(isPresented: $settingsOpen) { SettingsView(api: api) }
         .tray(item: $account.prompt, title: { _ in "Sign in or sign up" }, dismissed: account.promptClosed) { prompt in

@@ -105,7 +105,7 @@ enum class AccountInvitationRole(val value: String) {
     }
 }
 
-/** An invitation to a workspace, as a phone is told of it: enough to say it exists. It is answered on the web. */
+/** An invitation to a workspace, as an app is told of it: what it is for and who sent it, never the link that answers it. */
 @Serializable
 data class AccountInvitation(
     @SerialName("id") val id: String,

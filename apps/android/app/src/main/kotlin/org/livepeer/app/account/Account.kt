@@ -6,6 +6,7 @@ import org.livepeer.app.BuildConfig
 import org.livepeer.app.InstanceStore
 import org.livepeer.app.api.Refusal
 import org.livepeer.app.api.TokenVault
+import org.livepeer.app.generated.AccountInvitation
 import org.livepeer.app.generated.AccountList
 import org.livepeer.app.generated.Api
 import org.livepeer.app.generated.Me
@@ -184,6 +185,21 @@ class Account(
             if (error is kotlinx.coroutines.CancellationException) throw error
             _progress.value = SignInProgress.Failed("Sign-in didn't finish. Check your connection and try again.")
         }
+    }
+
+    /** Joins the workspace an invitation is for and starts working in it. False when the instance refused. */
+    suspend fun acceptInvitation(invitation: AccountInvitation): Boolean {
+        if (!_signedIn.value) return false
+        _accounts.value = runCatching { api.acceptInvitation(invitation.id) }.getOrNull() ?: return false
+        refresh()
+        return true
+    }
+
+    /** Declines an invitation. It leaves the list. False when the instance refused. */
+    suspend fun declineInvitation(invitation: AccountInvitation): Boolean {
+        if (!_signedIn.value) return false
+        _accounts.value = runCatching { api.declineInvitation(invitation.id) }.getOrNull() ?: return false
+        return true
     }
 
     /** Ends this device's session on the instance, then forgets it here. Signed out here even when offline. */
