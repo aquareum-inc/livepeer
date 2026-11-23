@@ -2128,3 +2128,164 @@ November 2026.**
 and team id, the Push Notifications capability on `org.livepeer.app` and `org.livepeer.app.dev`, and a
 Firebase project with both Android identifiers registered and a send-only service account; a real iPhone
 and a real Android phone with Google Play services.
+
+### 18.10 Alerts for agents first (proposed 22 November 2026, not built)
+
+Status: **a proposal for the owner. Nothing here is built, and nothing is to be built until the decisions at
+its end are answered.** It follows 18.9 and changes none of it. A builder can start from this subsection
+after reading 18.2 and 18.9.
+
+**Why.** Stage 3 tells a person's phone when something needs them. In practice an operator will not answer
+every alert by hand: an agent will be told first, look, and deal with what it can. The person is needed for
+two things only: what the agent can't deal with, and what the agent shouldn't do without being told it may.
+So the phone stops being the first place an alert goes and becomes the place a person is asked.
+
+Four lines hold throughout:
+
+- **Told once, in one order.** The agent is told first. A person's phone is told when no agent has taken the
+  matter up in time, or when an agent asks for a person.
+- **An agent reads widely and changes narrowly.** It can read what the console reads. It can change only what
+  an operator has granted it by name. Anything else it may ask for, and a person answers on a phone.
+- **A person's yes is a proof, not a tap.** Approving an agent's request uses the device key and the face or
+  fingerprint of 18.2, bound to exactly the operation and input the agent asked for. Nothing an agent sends,
+  and nothing on a lock screen, can approve anything.
+- **Alerts still say what Status says.** The rules stay in `decide` (18.9). An agent is another place the same
+  alert goes, never a second opinion about what is wrong.
+
+**What exists today, and why it isn't enough.**
+
+- An agent reaches the operator operations with `OPERATOR_API_TOKEN`, over `/api/v1/operator/*` or the MCP
+  server (`/api/mcp`), which offers every operation as a tool. That one token can do everything an operator
+  can, has no name, no limits and no expiry, and what it does is not in the audit log, which records phones.
+- The instance can't tell an agent anything. The MCP server is stateless: an agent learns of a problem only
+  by asking `operator_status` again.
+- Alerts go to phones and nowhere else (18.9, decision 22).
+
+**What it is not.** It is not an agent we ship: an operator brings their own, and this is the surface it
+works through. It is not uptime monitoring, for the reason in 18.9. It gives an agent no power a signed-in
+operator doesn't have, and takes none of the web-only operations (keys, settings, phones) off the web.
+
+**1. Agents get names and limits.** An operator creates an agent on the web console (System ▸ Agents): a
+name, what it may read, which changes it may make alone, and an end date. The instance answers once with a
+token (`aqa_…`), stored hashed like the others. Every call an agent makes is in the audit log under its
+name. Revoking is one click and takes effect on the next request. `OPERATOR_API_TOKEN` stays for scripts and
+recovery, is recorded in the audit log from now on, and can't do what follows (take up alerts, ask for
+approval): those need a name.
+
+What an agent may be granted follows what a phone may do (18.2), one step tighter:
+
+| Operation | An agent |
+|---|---|
+| Every operator read (`operator_status`, jobs, reports, users, costs, grants, plans, compute, capabilities, audit) | May be granted. Reads are all or nothing in the first build. |
+| `operator_resolve_report` | May be granted to do alone, or left to ask. |
+| `operator_set_user_status` (suspend, resume) | Asks by default. May be granted, with a daily limit. |
+| `operator_set_capability` (offered or not, never markup) | Asks. Never alone. |
+| `operator_top_up_user`, `operator_assign_plan`, `operator_create_grant`, markup, pricing, billing | Asks, and only once phones can approve money (decision 6 in 18.7 holds until then: web only). |
+| Keys, instance settings, surfaces, sign-in methods, operator phones, agents themselves, alert choices | Never. Web only, by a person. |
+
+**2. Alerts become events an agent can take up.** When `decide` says to alert, the instance records an event
+before it sends anything: an id, the kind, the count, when it started, and its state: open, taken up,
+handed to a person, or over. Events are read through one new read, in order, from a cursor:
+
+- **Reading** (`operator_list_events`, a GET with `after`): works for any agent, over REST or MCP, with no
+  connection to keep open. This is the source of truth.
+- **Being woken** (optional): a webhook the operator sets for an agent. The instance POSTs the event's id and
+  kind, signed with a secret shown once (HMAC over the body and a timestamp). It carries nothing else: the
+  agent comes back with its token to read what it is about. A webhook is a doorbell, not a message, for the
+  reason a notification is a pointer: addresses leak.
+- **Later:** MCP's own notifications, when the MCP server keeps sessions. Not needed for the first build.
+
+An agent takes an event up with `operator_take_event` (it is now the agent's, and phones stay quiet), and
+ends its part with `operator_close_event` (dealt with) or `operator_hand_event` (a person is needed, with a
+reason from a closed list and a note).
+
+**3. Phones are told when an agent hasn't, or can't.** Each phone's choice per kind (18.9, decision 21) gains
+a third value: on, off, or **only when it needs a person**. With that value a phone is told when:
+
+- no agent took the event up within the kind's wait: 2 minutes for the engine, 10 for failing jobs, 30 for
+  reports;
+- an agent handed it over; or
+- an agent took it up and it is still not over after the kind's limit: 15 minutes for the engine, an hour for
+  jobs, a day for reports. An agent's "I have it" buys time, never silence.
+
+What the phone shows is still from the closed list (18.9): "The engine isn't ready", then in the console,
+after the match, who has it and what they wrote. A notification never carries an agent's words: they are
+written by a model that has been reading users' text. `phone_added` is unchanged: always, to every phone, and
+never an agent's to take up.
+
+With no agent created, nothing changes: every phone behaves as in 18.9.
+
+**4. An agent asks, and a person answers on a phone.** When an agent calls a change it may not make alone,
+the instance doesn't refuse it: it answers 202 with a request id and records the request: the agent, the
+operation, the exact input, the agent's reason (a note, read only after the match), and an end 15 minutes
+on. Phones with the new kind `approval_wanted` on are told "An agent is asking for a decision".
+
+In the console a new row under Status's Needs you opens the request: which agent, what it asks in the
+console's own words ("Suspend Dana Okafor"), the record it is about as the console already shows it, the
+agent's note set apart and marked as the agent's, and two buttons. **Approve** asks for the match and signs a
+proof over the request's operation and input hash, exactly as a change made on the phone is signed (18.2).
+The instance then runs that operation with that input once, as the agent, approved by that operator. **Say
+no** needs no proof. Either way the agent learns from the event feed. A request that isn't answered lapses
+and can't be approved late; an input that differs by one character is a different request.
+
+This reuses what exists: the device key, `X-Operator-Proof`, the input hash, the trays (design decisions 66
+on). The new parts are the request record and one screen.
+
+**Operations to add.** Each goes into `operations.ts` first with its `output`, then `pnpm api:openapi` and
+`corepack pnpm mobile:generate`.
+
+| Operation | Who | For |
+|---|---|---|
+| `operator_list_agents`, `operator_create_agent`, `operator_revoke_agent` | Web, a person | Names, grants, end date; the token is answered once |
+| `operator_list_events` (GET) | An agent; phones as a read | The feed, from a cursor |
+| `operator_take_event`, `operator_close_event`, `operator_hand_event` | An agent | Taking a matter up, ending it, asking for a person |
+| `operator_list_requests` (GET), `operator_get_request` (GET) | Phones as reads; the agent for its own | What is waiting for an answer |
+| `operator_answer_request` | Phones, `confirm` | Approve (proof over the request) or say no |
+| `operator_set_agent_webhook` | Web, a person | Where to ring, and the secret, shown once |
+
+`operator_set_alerts` gains the third value per kind and the kind `approval_wanted`. Storage is three more
+files behind the store interface (agents, events, requests), with events and answered requests pruned after
+90 days as the audit log is.
+
+**Threats it adds.**
+
+| Threat | What limits it |
+|---|---|
+| An agent is talked into something by text it reads (a report's note, a character's name, a job's error) | It can change only what it was granted, with daily limits; everything else needs a person's proof bound to the exact input. Anything it writes reaches a person only inside the console, after the match, marked as the agent's. |
+| A stolen agent token | It has a name, limits and an end date, can be revoked at once, and can never touch keys, settings, phones, agents or alert choices. Every call is in the audit log. |
+| An agent silences alerts by taking everything up | Taking up buys minutes, not silence: each kind has a limit after which phones are told anyway. An agent can't change any phone's choices. |
+| People approve without reading | The request shows the record, not the agent's summary; one request, one change; requests lapse in 15 minutes; an agent is limited in how many it may have open (3), and each is in the audit log with who approved. |
+| The webhook is pointed somewhere it shouldn't be | Set only by a person on the web; https only; no addresses inside the instance's own network unless the self-hoster allows them; the body holds an id and a kind and nothing else. |
+| A forged call to the agent | The signature and timestamp on the webhook; and the agent must come back with its token to learn anything. |
+| An agent approving its own requests | Answers come only from an operator device session with a proof. No agent token, the operator API token or a browser session can answer one. |
+
+**Build order.** Each is a pull request with its own review.
+
+1. **Agents with names and limits**: the store, the three operations, the web panel, the audit log for
+   agents and for `OPERATOR_API_TOKEN`. Useful alone: it replaces the one all-powerful token.
+2. **Events**: the record, the feed, take, close and hand; the third value on phones; the waits and limits.
+   This is where "agent first" starts to be true.
+3. **Requests answered on a phone**: the 202, the record, the screen on iOS then Android, the proof.
+4. **The webhook**, then MCP notifications if the MCP server has gained sessions by then.
+
+**Decisions for the owner**, numbered on from 18.9.
+
+| # | Decision | Recommendation |
+|---|---|---|
+| 24 | Build this at all, and when | Yes, after stage 3 has run on real phones for a few weeks. Step 1 is worth doing sooner for its own sake. |
+| 25 | Named agent tokens beside `OPERATOR_API_TOKEN`, or instead of it | Beside. Keep the old token for scripts and recovery, record its use, and don't let it take up alerts or ask for approval. |
+| 26 | How an agent is told | A feed it reads, as the source of truth; a signed webhook as an optional doorbell. No message content in the webhook. |
+| 27 | What an agent may do alone | Reads, and deciding reports if granted. Suspending asks by default. Money and what is offered always ask. Keys, settings, phones and agents never. |
+| 28 | How long an agent has before a phone is told | 2, 10 and 30 minutes to take up the engine, jobs and reports; 15 minutes, an hour and a day before a phone is told anyway. Adjust after live numbers, per instance later if needed. |
+| 29 | May an agent's words appear in a notification | No. Closed sentences only, as in 18.9. Its note is read in the console after the match. |
+| 30 | How a person approves | On the phone, with the device key's proof over the exact request. Not from a notification, not from the web in the first build. |
+| 31 | Approving money from a phone | Not yet. It waits on decision 6 in 18.7; until then those requests are answered on the web. |
+| 32 | One agent or several | Several records from the start, since it costs nothing; one event belongs to one agent at a time. |
+| 33 | The default for phones once an agent exists | Offer "only when it needs a person" on the Alerts page and leave each phone as it was. Nothing changes silently. |
+| 34 | Ship an agent of our own | No. Publish a short guide and one example that reads the feed and takes up reports, and let operators bring theirs. |
+| 35 | Where this lives in the docs once accepted | Its own file, `docs/agents.md`, with this subsection pointing to it: most of it isn't about phones. |
+
+**Open questions**, to settle before step 2: whether the engine should tell the instance of failures as they
+happen so an agent isn't a minute behind (a request for `docs/engine-requests.md`); and whether an event
+should also cover what Status lists but doesn't alert on (stale discovery, late cost sync), which an agent,
+unlike a person at night, might as well hear about.
