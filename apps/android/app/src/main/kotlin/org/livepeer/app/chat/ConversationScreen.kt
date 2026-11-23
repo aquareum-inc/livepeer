@@ -105,6 +105,7 @@ import org.livepeer.app.design.Tray
 import org.livepeer.app.design.absolute
 import org.livepeer.app.home.Composer
 import org.livepeer.app.home.ComposerChoices
+import org.livepeer.app.home.ComposerInset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
@@ -154,7 +155,7 @@ fun ConversationScreen(model: ConversationViewModel, support: ComposerSupport, c
             }
         }
 
-        Column(Modifier.windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)).padding(horizontal = 12.dp).padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)).padding(horizontal = ComposerInset).padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             state.sendError?.let { BasicText(it, style = TypeSize.Caption.style().copy(color = palette.destructive)) }
             Composer(
                 state.draft,

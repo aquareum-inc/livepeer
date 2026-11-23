@@ -11,9 +11,9 @@ in `apps/web/lib/public-api/operations.ts`.
 |--------|--------|--------------|--------|
 | Home | Load capability list for the picker | `listOfferings` | Not on mobile: the agent picks; casting reads `list_capability_labels` to know image to video is on offer |
 | Home | Load starting points | `listPromptStarters` | Built (iOS sample) |
-| Home | Load example gallery | `listShowcase` | Not on iOS (decision 102); Android until it follows |
+| Home | Load example gallery | `listShowcase` | Not on mobile (decisions 102 and 104) |
 | Home | Send a request | `createConversation` | Built (iOS sample) |
-| Home | Start from a starting point (mobile: its name is sent and the agent asks for the rest) | `createConversation` | Built on iOS (decision 103); Android until it follows opens examples |
+| Home | Start from a starting point (mobile: its name is sent and the agent asks for the rest) | `createConversation` | Built on iOS and Android (decisions 103 and 104) |
 | Shell | List recent conversations (open sidebar) | `listConversations` | Built (slice 2): History, from Home, with search by title |
 | Chat | Open a conversation | `getConversation` | Built (iOS sample); from History by its id in slice 2 |
 | Chat | Send a follow-up | `sendMessage` | Built (iOS sample) |
