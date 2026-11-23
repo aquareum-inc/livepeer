@@ -54,6 +54,22 @@ describe("conversations (mock agent)", () => {
     expect(asked.text).toMatch(/^Attach a video or paste a link/);
   });
 
+  it("starts a shot from an uploaded picture", async () => {
+    const client = createApiClient({ env: { MOCK_ONLY: "1" } });
+    const ticket = (await client.requestUpload({ kind: "image", name: "tide-pool.jpg", content_type: "image/jpeg", size_bytes: 3 })).data;
+    const picture = (await client.receiveUpload(ticket.id, new Uint8Array([1, 2, 3]))).data;
+    if (!picture) throw new Error("expected the upload to land");
+    const created = (await client.createConversation({ ...input("Bring this picture to life."), attachment_ids: [picture.id] })).data;
+    vi.advanceTimersByTime(60_000);
+    const agent = (await client.getConversation(created.id)).data?.messages[1];
+    if (agent?.role !== "agent") throw new Error("expected an agent message");
+    expect(agent.steps[0]).toMatchObject({ kind: "plan", title: "Start from your picture" });
+    expect(agent.analysis).toBeNull();
+    const [generationId] = agent.generation_ids;
+    const generation = generationId ? (await client.getGeneration(generationId)).data : null;
+    expect(generation?.request).toMatchObject({ app: "image-to-video", first_frame: picture.image });
+  });
+
   it("plans a multi-step job for a larger request", async () => {
     const client = createApiClient({ env: { MOCK_ONLY: "1" } });
     const created = (await client.createConversation(input("A 30-second film for a mug: script, storyboard, shots"))).data;

@@ -115,6 +115,10 @@ class Api(private val transport: ApiTransport) {
     suspend fun deleteMedia(id: String): Deleted =
         transport.send(Deleted.serializer(), "DELETE", "/library/${ApiTransport.escape(id)}", query = emptyMap(), body = null)
 
+    /** Ask to add a photo or video from the device to the library. Answers with where to send the file: PUT its bytes to `path` on this instance with the same sign-in, and the library item comes back. */
+    suspend fun requestUpload(kind: String, name: String, contentType: String, sizeBytes: Double, aspect: String? = null): UploadTicket =
+        transport.send(UploadTicket.serializer(), "POST", "/uploads", query = emptyMap(), body = mapOf("kind" to JsonPrimitive(kind), "name" to JsonPrimitive(name), "content_type" to JsonPrimitive(contentType), "size_bytes" to JsonPrimitive(sizeBytes), "aspect" to aspect?.let { JsonPrimitive(it) }))
+
     /** Ask about a video: summarise it, find moments, answer a question. */
     suspend fun understandVideo(source: String, question: String): VideoAnalysis =
         transport.send(VideoAnalysis.serializer(), "POST", "/understand", query = emptyMap(), body = mapOf("source" to JsonPrimitive(source), "question" to JsonPrimitive(question)))

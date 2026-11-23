@@ -11,6 +11,7 @@ import {
   sendStoredMessage,
 } from "./mock/conversations";
 import { addGenerationToLibrary, addMediaToLibrary, deleteStoredMedia, listStoredMedia, type MediaFilter } from "./mock/library";
+import { readStoredMediaFile, receiveStoredUpload, requestStoredUpload } from "./mock/uploads";
 import {
   EXAMPLE_APPS,
   addStoredDestination,
@@ -66,12 +67,15 @@ import type {
   LiveLook,
   LiveSession,
   LiveSessionInput,
+  MediaFile,
   MediaItem,
   Offering,
   Preferences,
   PromptStarter,
   SendMessageInput,
   ShowcaseItem,
+  UploadRequest,
+  UploadTicket,
   VideoAnalysis,
 } from "./types";
 
@@ -87,6 +91,7 @@ export { agentModelsFrom, appModel, runnerModel } from "./runner-model";
 export * from "./operator";
 export type { CharacterFilter } from "./mock/characters";
 export type { MediaFilter } from "./mock/library";
+export { UPLOAD_RULES, UploadRefused } from "./mock/uploads";
 
 /** A result plus where it came from, so dev mode can label each screen live or mocked. */
 export interface Sourced<T> {
@@ -129,6 +134,12 @@ export interface ApiClient {
 
   listMedia(filter?: MediaFilter): Promise<Sourced<MediaItem[]>>;
   deleteMedia(id: string): Promise<Sourced<boolean>>;
+  /** Checks a file from the device before it is sent, and answers with where to send it. */
+  requestUpload(request: UploadRequest): Promise<Sourced<UploadTicket>>;
+  /** Takes the file a ticket was given for and adds it to the library. Null when the ticket isn't good. */
+  receiveUpload(id: string, bytes: Uint8Array): Promise<Sourced<MediaItem | null>>;
+  /** The file behind a library item's still. */
+  readMediaFile(id: string): Promise<Sourced<MediaFile | null>>;
 
   listCharacters(filter?: CharacterFilter): Promise<Sourced<Character[]>>;
   getCharacter(slug: string): Promise<Sourced<Character | null>>;
@@ -320,6 +331,17 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     async deleteMedia(id) {
       await latency(80, 160);
       return mock(deleteStoredMedia(id));
+    },
+    async requestUpload(request) {
+      await latency(60, 140);
+      return mock(requestStoredUpload(request));
+    },
+    async receiveUpload(id, bytes) {
+      await latency(120, 260);
+      return mock(receiveStoredUpload(id, bytes));
+    },
+    async readMediaFile(id) {
+      return mock(readStoredMediaFile(id));
     },
 
     async listCharacters(filter) {

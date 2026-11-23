@@ -2,7 +2,7 @@
 
 import type { AgentModel, Character, CharacterCast, MediaItem, Offering, SendMessageInput } from "@livepeer/api-client/types";
 import { Chip, EASE_OUT_EXPO, Sheet, cn } from "@livepeer/ui";
-import { ArrowUp, Check, Film, Mic, Plus, UserRound, X } from "lucide-react";
+import { ArrowUp, Check, Film, ImageIcon, Mic, Plus, Upload, UserRound, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type Ref } from "react";
 
@@ -40,18 +40,35 @@ export interface ComposerProps {
   agentModels: ReadonlyArray<AgentModel>;
   textareaRef?: Ref<HTMLTextAreaElement>;
   placeholder?: string;
-  /** Loads the user's library for attaching. Without it the attach button is hidden. */
+  /** Loads the user's library for attaching. */
   loadLibrary?: () => Promise<MediaItem[]>;
-  /** Loads the characters the user can put on screen. Without it the cast button is hidden. */
+  /** Loads the characters the user can put on screen. Without it and without `guest`, the cast button is hidden. */
   loadCharacters?: () => Promise<Character[]>;
+  /** Sends a photo or video from this device to the library and answers with the item. Throws an Error whose message says why not. */
+  upload?: (file: File) => Promise<MediaItem>;
+  /**
+   * For someone not signed in: attaching and casting are still offered, and using either sends them to
+   * sign in. `characters` says whether the instance has characters switched on.
+   */
+  guest?: { signIn: () => void; characters: boolean };
   /** One line tall until typed in, for the foot of a conversation. */
   compact?: boolean;
 }
 
-/** The message a composer sends. With only attachments, it asks for the videos to be understood. */
+/** What can be attached: something to watch or something to start a shot from. */
+const attachable = (item: MediaItem) => item.kind === "video" || item.kind === "image";
+
+/** The file types an upload accepts, as the instance's media store does. */
+const UPLOAD_TYPES = "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm";
+
+/**
+ * The message a composer sends. With only attachments, it asks for a video to be understood, or for a
+ * picture to be brought to life.
+ */
 export function messageFrom(value: ComposerValue): SendMessageInput {
+  const fallback = value.attachments.some((item) => item.kind === "video") ? "Summarise this and list the key moments." : "Bring this picture to life.";
   return {
-    text: value.prompt.trim() || "Summarise this and list the key moments.",
+    text: value.prompt.trim() || fallback,
     app: value.app,
     aspect: value.aspect,
     duration_seconds: value.durationSeconds,
@@ -84,19 +101,43 @@ export function Composer({
   compact = false,
   loadLibrary,
   loadCharacters,
+  upload,
+  guest,
 }: ComposerProps) {
   const [picking, setPicking] = useState(false);
   const [library, setLibrary] = useState<MediaItem[] | null>(null);
   const [libraryFailed, setLibraryFailed] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   const openPicker = async () => {
-    if (!loadLibrary) return;
+    if (!loadLibrary) return guest?.signIn();
     setPicking(true);
     setLibraryFailed(false);
+    setUploadError(null);
     try {
-      setLibrary(await loadLibrary());
+      setLibrary((await loadLibrary()).filter(attachable));
     } catch {
       setLibraryFailed(true);
+    }
+  };
+
+  // A file from this device goes to the library first, then onto the request like anything else in it.
+  const sendFile = async (file: File | undefined) => {
+    if (!file || !upload) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const item = await upload(file);
+      onChange({ ...value, attachments: [...value.attachments, item] });
+      setPicking(false);
+      localRef.current?.focus();
+    } catch (cause) {
+      setUploadError(cause instanceof Error && cause.message ? cause.message : "That file didn't upload. Try again.");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
     }
   };
 
@@ -105,7 +146,7 @@ export function Composer({
   const [charactersFailed, setCharactersFailed] = useState(false);
 
   const openCasting = async () => {
-    if (!loadCharacters) return;
+    if (!loadCharacters) return guest?.signIn();
     setCasting(true);
     setCharactersFailed(false);
     try {
@@ -178,7 +219,7 @@ export function Composer({
           ) : null}
           {value.attachments.map((item) => (
             <li key={item.id} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-secondary pl-2.5 pr-1 text-caption font-medium text-secondary-foreground">
-              <Film className="size-3.5 text-muted-foreground" aria-hidden />
+              {item.kind === "image" ? <ImageIcon className="size-3.5 text-muted-foreground" aria-hidden /> : <Film className="size-3.5 text-muted-foreground" aria-hidden />}
               <span className="max-w-[180px] truncate">{item.title}</span>
               <button type="button" aria-label={`Remove ${item.title}`} onClick={() => toggleAttachment(item)} className="inline-flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-hover hover:text-foreground">
                 <X className="size-3.5" />
@@ -206,17 +247,17 @@ export function Composer({
         )}
       />
       <motion.div layout="position" className="flex items-center gap-1 pl-1">
-        {loadLibrary ? (
+        {loadLibrary || guest ? (
         <button
           type="button"
           onClick={openPicker}
-          aria-label="Attach a video from your library"
+          aria-label="Attach a photo or video"
           className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-[background-color,color,transform] duration-200 ease-out-expo hover:bg-hover hover:text-foreground active:scale-[0.92]"
         >
           <Plus className="size-[18px]" />
         </button>
         ) : null}
-        {loadCharacters ? (
+        {loadCharacters || guest?.characters ? (
           <button
             type="button"
             onClick={openCasting}
@@ -276,7 +317,24 @@ export function Composer({
           </button>
         </div>
       </motion.div>
-      <Sheet open={picking} onOpenChange={setPicking} title="Attach from your library" description="The agent can watch a video, summarise it, find moments and work from it.">
+      <Sheet open={picking} onOpenChange={setPicking} title="Attach a photo or video" description="The agent can watch a video and work from it, or start a shot from a picture.">
+        {upload ? (
+          <div className="mb-4">
+            <input ref={fileRef} type="file" accept={UPLOAD_TYPES} className="sr-only" tabIndex={-1} aria-hidden onChange={(event) => void sendFile(event.target.files?.[0])} />
+            <button
+              type="button"
+              disabled={uploading}
+              aria-busy={uploading}
+              onClick={() => fileRef.current?.click()}
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-field border border-border bg-card text-body font-medium text-foreground transition-[background-color,transform] duration-200 ease-out-expo hover:bg-hover active:scale-[0.97] disabled:opacity-60"
+            >
+              <Upload className={cn("size-4", uploading && "animate-breathe")} aria-hidden />
+              {uploading ? "Uploading…" : "Upload from this device"}
+            </button>
+            {uploadError ? <p role="alert" className="mt-2 text-caption text-destructive">{uploadError}</p> : null}
+            <p className="mt-4 text-caption font-medium text-muted-foreground">From your library</p>
+          </div>
+        ) : null}
         {libraryFailed ? (
           <p role="alert" className="text-body text-destructive">Your library didn't load. Close this and try again.</p>
         ) : library === null ? (
@@ -286,7 +344,7 @@ export function Composer({
             ))}
           </div>
         ) : library.length === 0 ? (
-          <p className="text-body text-muted-foreground">Nothing in your library yet. Shots you generate are saved there.</p>
+          <p className="text-body text-muted-foreground">Nothing in your library yet. Shots you generate and files you upload are saved there.</p>
         ) : (
           <ul className="grid max-h-[50dvh] grid-cols-3 gap-2 overflow-y-auto">
             {library.map((item) => {

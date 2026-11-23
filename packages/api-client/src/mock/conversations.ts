@@ -49,6 +49,8 @@ const VIDEO = /video|shot|film|footage|clip|animate|scene|camera|drone|tracking|
 const PRODUCTION = /script|storyboard|\bfilm\b|trailer|advert|commercial|\d+[- ]second|scenes/i;
 /** A request that names the kind of thing and nothing about it, such as a starting point sent as it is. */
 const OPENER = /^(i'd like to |i want to |let's |help me )?(make|create|animate|understand|watch|restyle)\s+(a|an|my)\s+(video|image|photo|picture|live camera|camera)\.?$/i;
+/** What a client sends when a picture is attached with no words. */
+const PICTURE_ALONE = "Bring this picture to life.";
 const UNDERSTAND = /summari[sz]e|find (every|the|all)|moments|timestamps|what happens|describe this/i;
 
 function step(kind: AgentStep["kind"], title: string, detail: string, app: string | null, ms: number): ScriptedStep {
@@ -60,7 +62,7 @@ const QUESTIONS: Record<string, string> = {
   "text-to-video":
     "Happy to. What should it show? Give me the subject, what happens and where, and I'll add the lens, light and movement. Say so if you want a particular length or shape.",
   "image-to-video":
-    "Which picture, and what should move? Put a character in it and I'll start from their portrait, or describe the picture and I'll draw the first frame before animating it.",
+    "Which picture, and what should move? Add one with the plus button, or put a character in it and I'll start from their portrait. You can also describe the picture and I'll draw the first frame before animating it.",
   "video-understanding":
     "Attach a video or paste a link and I'll go through it. I can summarise it, list the key moments with timestamps, and find every shot that matches a description.",
   "live-video-to-video":
@@ -88,6 +90,22 @@ function plan(input: SendMessageInput, cast: CharacterCast | null): { script: Sc
   const spec = `${input.duration_seconds}s, ${input.aspect}`;
   const attached = listStoredMedia().find((item) => input.attachment_ids?.includes(item.id));
   const link = /https?:\/\/\S+/.exec(input.text)?.[0];
+
+  // A picture is something to start a shot from, not something to watch.
+  const picture = attached?.kind === "image" ? attached : undefined;
+  if (picture) {
+    const moves = UNDERSTAND.test(input.text) || input.text === PICTURE_ALONE ? "a slow push in, with the light and anything loose in the frame moving a little" : subject;
+    return {
+      generate: 1,
+      script: [
+        step("plan", "Start from your picture", `“${picture.title}” is the first frame, so the shot opens exactly as the picture looks.`, null, 1000),
+        step("tool", "Write the shot prompt", `Described what moves: ${moves}.`, "chat", 1500),
+        step("tool", "Generate the shot", spec, "image-to-video", 10400),
+        step("review", "Check it against the picture", "Compared the first frame and the subject with your picture. They match.", "video-understanding", 1800),
+      ],
+      reply: `Here's “${picture.title}” in motion. It opens on your picture and I checked the subject held. Tell me what should move differently, or open it in the studio to extend it.`,
+    };
+  }
 
   if (attached || link) {
     const name = attached ? `“${attached.title}”` : "the linked video";
@@ -231,11 +249,13 @@ function append(stored: StoredConversation, sent: SendMessageInput): void {
   const script = input.agent_model ? planned.script.map((entry) => (entry.kind === "plan" ? { ...entry, app: input.agent_model ?? null } : entry)) : planned.script;
   const generateIndex = script.findIndex((entry) => entry.kind === "tool" && /-to-video$/.test(entry.app ?? ""));
   const generateAt = script.slice(0, Math.max(0, generateIndex)).reduce((total, entry) => total + entry.ms, 0);
+  const picture = listStoredMedia().find((item) => item.kind === "image" && input.attachment_ids?.includes(item.id));
+  const firstFrame = cast?.image ?? picture?.image ?? null;
   const generationIds = Array.from({ length: generate }, (_, index) =>
     createStoredGeneration({
       kind: "video",
-      app: cast ? "image-to-video" : (input.app ?? "text-to-video"),
-      ...(cast?.image ? { first_frame: cast.image } : {}),
+      app: cast || picture ? "image-to-video" : (input.app ?? "text-to-video"),
+      ...(firstFrame ? { first_frame: firstFrame } : {}),
       prompt: generate > 1 ? `${input.text} — shot ${index + 1}` : input.text,
       aspect: input.aspect,
       duration_seconds: input.duration_seconds,

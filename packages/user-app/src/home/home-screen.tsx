@@ -21,6 +21,10 @@ export interface HomeScreenProps {
   loadLibrary?: () => Promise<MediaItem[]>;
   /** Absent for guests, and when the instance has characters switched off. */
   loadCharacters?: () => Promise<Character[]>;
+  /** Sends a file from this device to the library. Absent for guests. */
+  upload?: (file: File) => Promise<MediaItem>;
+  /** For someone not signed in: the way in, and whether characters are on, so the composer still offers both. */
+  guest?: { signIn: () => void; characters: boolean };
   /** A character already put on screen, arriving from their page. */
   cast?: CharacterCast | null;
 }
@@ -34,7 +38,7 @@ const STARTER_ICONS: Record<string, LucideIcon> = {
 
 const EMPTY: ComposerValue = { attachments: [], cast: null, prompt: "", app: null, model: null, aspect: "16:9", durationSeconds: 5 };
 
-export function HomeScreen({ starters, offerings, agentModels, onSubmit, loadLibrary, loadCharacters, cast = null, backdrop }: HomeScreenProps) {
+export function HomeScreen({ starters, offerings, agentModels, onSubmit, loadLibrary, loadCharacters, upload, guest, cast = null, backdrop }: HomeScreenProps) {
   const [value, setValue] = useState<ComposerValue>(() =>
     cast ? { ...EMPTY, cast, app: offerings.some((offering) => offering.app === "image-to-video") ? "image-to-video" : null } : EMPTY,
   );
@@ -80,6 +84,8 @@ export function HomeScreen({ starters, offerings, agentModels, onSubmit, loadLib
             textareaRef={textareaRef}
             {...(loadLibrary ? { loadLibrary } : {})}
             {...(loadCharacters ? { loadCharacters } : {})}
+            {...(upload ? { upload } : {})}
+            {...(guest ? { guest } : {})}
           />
         </div>
 

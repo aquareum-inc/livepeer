@@ -22,6 +22,8 @@ export interface ChatScreenProps {
   loadLibrary: () => Promise<MediaItem[]>;
   /** Absent when the instance has characters switched off. */
   loadCharacters?: () => Promise<Character[]>;
+  /** Sends a file from this device to the library. */
+  upload: (file: File) => Promise<MediaItem>;
 }
 
 const POLL_MS = 700;
@@ -40,7 +42,7 @@ function CastLabel({ cast }: { cast: CharacterCast }) {
 }
 const EMPTY: ComposerValue = { attachments: [], cast: null, prompt: "", app: null, model: null, aspect: "16:9", durationSeconds: 5 };
 
-export function ChatScreen({ conversation: initial, offerings, agentModels, models, getConversation, sendMessage, getGeneration, onOpenInStudio, onOpenMoment, loadLibrary, loadCharacters }: ChatScreenProps) {
+export function ChatScreen({ conversation: initial, offerings, agentModels, models, getConversation, sendMessage, getGeneration, onOpenInStudio, onOpenMoment, loadLibrary, loadCharacters, upload }: ChatScreenProps) {
   const [conversation, setConversation] = useState(initial);
   // Steps name the model that did each piece of work, the agent's own model included.
   const stepModels = useMemo<AppModel[]>(
@@ -143,7 +145,7 @@ export function ChatScreen({ conversation: initial, offerings, agentModels, mode
             {error}
           </p>
         ) : null}
-        <Composer value={value} onChange={setValue} onSubmit={submit} offerings={offerings} agentModels={agentModels} placeholder="Ask for a change, or describe the next shot…" compact loadLibrary={loadLibrary} {...(loadCharacters ? { loadCharacters } : {})} />
+        <Composer value={value} onChange={setValue} onSubmit={submit} offerings={offerings} agentModels={agentModels} placeholder="Ask for a change, or describe the next shot…" compact loadLibrary={loadLibrary} upload={upload} {...(loadCharacters ? { loadCharacters } : {})} />
       </div>
     </div>
   );

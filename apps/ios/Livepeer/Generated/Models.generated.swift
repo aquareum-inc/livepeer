@@ -1726,6 +1726,22 @@ struct StudioMode: Codable, Sendable, Hashable {
     }
 }
 
+/// Leave to send one file: where to PUT its bytes, and until when.
+struct UploadTicket: Codable, Sendable, Hashable {
+    var id: String
+    /// Where to PUT the file, on this instance, with the same sign-in. The library item comes back.
+    var path: String
+    var maxBytes: Double
+    var expiresAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case path
+        case maxBytes = "max_bytes"
+        case expiresAt = "expires_at"
+    }
+}
+
 /// What a user has spent: totals by capability, and their recent jobs.
 struct Usage: Codable, Sendable, Hashable {
     var summary: UsageSummary

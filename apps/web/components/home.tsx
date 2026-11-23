@@ -5,6 +5,7 @@ import { HomeScreen, messageFrom } from "@livepeer/user-app";
 import { useRouter } from "next/navigation";
 
 import { createConversationAction, listCastableCharactersAction, listMediaAction } from "@/lib/actions";
+import { uploadFile } from "@/lib/upload";
 
 export interface HomeProps {
   starters: PromptStarter[];
@@ -23,7 +24,7 @@ export function Home({ signedIn, characters, ...props }: HomeProps) {
   return (
     <HomeScreen
       {...props}
-      {...(signedIn ? { loadLibrary: listMediaAction } : {})}
+      {...(signedIn ? { loadLibrary: listMediaAction, upload: uploadFile } : { guest: { signIn: () => window.location.assign("/sign-in"), characters } })}
       {...(signedIn && characters ? { loadCharacters: listCastableCharactersAction } : {})}
       onSubmit={async (value) => {
         // A guest can write a request; sending it is where they sign in.
