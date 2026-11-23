@@ -98,8 +98,8 @@ struct HomeView: View {
     /// sits in a conversation.
     private var dock: some View {
         VStack(spacing: 10) {
-            // Starting points are for a blank page: once there are words they step aside for them.
-            if model.draft.prompt.isEmpty {
+            // Starting points are for a blank page: once there are words or something attached they step aside.
+            if model.draft.prompt.isEmpty && model.draft.attachments.isEmpty {
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
                         ForEach(model.starters, id: \.id) { starter in
@@ -129,7 +129,7 @@ struct HomeView: View {
             }
             .matchedTransitionSource(id: "composer", in: travel)
         }
-        .animation(motion(.morph), value: model.draft.prompt.isEmpty)
+        .animation(motion(.morph), value: model.draft.prompt.isEmpty && model.draft.attachments.isEmpty)
         .padding(.horizontal, Composer.inset)
         .padding(.bottom, 8)
     }

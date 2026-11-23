@@ -17,10 +17,12 @@ struct Draft: Equatable {
     var isVideo: Bool { app?.contains("video") == true && app?.hasPrefix("live") == false }
     var canSend: Bool { !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty }
 
-    /// What is sent. With only attachments, it asks for the videos to be understood, as the web does.
+    /// What is sent. With only attachments, it asks for a video to be understood or a picture to be
+    /// brought to life, as the web does.
     var text: String {
         let words = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        return words.isEmpty ? "Summarise this and list the key moments." : words
+        if !words.isEmpty { return words }
+        return attachments.contains { $0.kind == .video } ? "Summarise this and list the key moments." : "Bring this picture to life."
     }
 
     /// What carries on to the next message in a conversation: the same model, and the same cast.
@@ -142,7 +144,8 @@ struct Composer: View {
     /// What to write, given what has been added: a cast asks for a scene, an attachment for a question.
     private var placeholderText: String {
         if let cast = draft.cast { return "Put \(cast.name) in a scene: where, doing what, in what light…" }
-        if !draft.attachments.isEmpty { return "Ask about it, or send as it is for a summary and the key moments" }
+        if draft.attachments.contains(where: { $0.kind == .video }) { return "Ask about it, or send as it is for a summary and the key moments" }
+        if !draft.attachments.isEmpty { return "Say what should move, or send it as it is" }
         return placeholder
     }
 

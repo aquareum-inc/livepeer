@@ -19,6 +19,22 @@ struct ComposerTests {
         #expect(draft.text == "Make it slower")
     }
 
+    @Test func aPictureAloneAsksToBeBroughtToLife() throws {
+        var picture = try #require(try fixture("search_library", as: [MediaItem].self).first)
+        picture.kind = .image
+        #expect(Draft(attachments: [picture]).text == "Bring this picture to life.")
+    }
+
+    @Test func aPickedPhotoGetsTheNearestShapeAndAName() throws {
+        #expect(PickedFile.shape(width: 4032, height: 3024) == "16:9")
+        #expect(PickedFile.shape(width: 3024, height: 4032) == "9:16")
+        #expect(PickedFile.shape(width: 1080, height: 1080) == "1:1")
+        #expect(PickedFile.shape(width: 0, height: 10) == nil)
+        #expect(PickedFile.name(for: "image").hasPrefix("Photo, "))
+        #expect(PickedFile.name(for: "video").hasPrefix("Video, "))
+        #expect(try fixture("request_upload", as: UploadTicket.self).path.hasPrefix("/api/v1/uploads/"))
+    }
+
     @Test func theModelAndTheCastCarryOn() {
         let cast = CharacterCast(slug: "mara", name: "Mara", image: nil)
         let carried = Draft(prompt: "On a rooftop", app: "image-to-video", cast: cast, model: "northlight/chat/gemma-3-27b").carriedOn
