@@ -107,6 +107,8 @@ const keys: AccessKey[] = [
     created_at: new Date(Date.UTC(2026, 8, 2 + index * 9, 10)).toISOString(),
     revoked_at: null,
   })),
+  // A workspace is one actor, so its keys are that actor's.
+  { key_id: "key_northlight_render", kind: "actor", actor_id: "wsp_northlight", application_id: "default", permissions: ["jobs.run", "jobs.read", "costs.read"], label: "Render queue", created_at: "2026-10-21T10:05:00Z", revoked_at: null },
 ];
 let keySequence = keys.length;
 

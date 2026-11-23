@@ -1,25 +1,7 @@
 "use client";
 
 import { BrandBadge, BrandWordmark, cn, useTheme, type Brand } from "@livepeer/ui";
-import {
-  Activity,
-  ArrowLeft,
-  Blocks,
-  CreditCard,
-  Cpu,
-  Flag,
-  Gift,
-  KeyRound,
-  LayoutDashboard,
-  Moon,
-  ReceiptText,
-  ServerCog,
-  Settings2,
-  Sun,
-  Tags,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
+import { Activity, ArrowLeft, Blocks, Building2, Cpu, CreditCard, Flag, Gift, KeyRound, LayoutDashboard, Moon, ReceiptText, ServerCog, Settings2, Sun, Tags, Users, type LucideIcon } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
 export interface ConsoleLinkProps {
@@ -35,6 +17,7 @@ const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string;
     items: [
       { href: "/operator", label: "Overview", icon: LayoutDashboard },
       { href: "/operator/users", label: "Users", icon: Users },
+      { href: "/operator/workspaces", label: "Workspaces", icon: Building2 },
       { href: "/operator/jobs", label: "Jobs", icon: Activity },
       { href: "/operator/reports", label: "Reports", icon: Flag },
     ],

@@ -1,6 +1,7 @@
 export { ConsoleShell, type ConsoleLinkProps } from "./shell/console-shell";
 export { OverviewView, type OverviewProps } from "./views/overview";
 export { UserDetailView, UsersView, type UserDetailProps, type UserRow } from "./views/users";
+export { WorkspaceDetailView, WorkspacesView, type WorkspaceDetailProps, type WorkspacesViewProps } from "./views/workspaces";
 export { JobsView, type JobsViewProps } from "./views/jobs";
 export { CostsView, type CostsViewProps } from "./views/costs";
 export { PricingView, type PricingViewProps } from "./views/pricing";

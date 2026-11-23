@@ -1,5 +1,7 @@
 /** Operator-side types. The engine shapes are as documented in docs/research/engine.md §4. */
 
+import type { WorkspaceInvitation, WorkspaceMember } from "../provider/types";
+
 export type JobState = "queued" | "running" | "succeeded" | "failed" | "uncertain";
 export type CostClass = "delivered" | "failed_after_payment" | "uncertain" | "pending";
 
@@ -189,4 +191,36 @@ export interface OverviewStats {
   revenue_estimated: boolean;
   /** Per day, oldest first. */
   series: Array<{ day: string; revenue_usd: number; wholesale_usd: number }>;
+}
+
+/** A workspace as the operator sees it: the provider's shared account joined with its budget and plan. */
+export interface OperatorWorkspace {
+  id: string;
+  name: string;
+  status: "active" | "paused";
+  owner_id: string;
+  owner_name: string;
+  member_count: number;
+  plan: string | null;
+  /** The workspace's allocation, in the provider's currency; null when it has none. */
+  budget: number | null;
+  spent: number | null;
+  remaining: number | null;
+  created_at: string;
+}
+
+export interface OperatorWorkspaceMember extends WorkspaceMember {
+  credits: number;
+  jobs: number;
+  last_used_at: string | null;
+}
+
+/** One workspace with who belongs, who is invited and what each has used. */
+export interface OperatorWorkspaceDetail extends OperatorWorkspace {
+  plan_id: string | null;
+  members: OperatorWorkspaceMember[];
+  /** Waiting invitations, without the link that answers them: that is the invited person's. */
+  invitations: Array<Omit<WorkspaceInvitation, "token">>;
+  /** What the workspace's API keys and people who have left used. */
+  other_usage: Array<{ kind: "key" | "former_member"; id: string; credits: number; jobs: number; last_used_at: string | null }>;
 }
