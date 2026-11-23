@@ -1,6 +1,6 @@
 "use client";
 
-import type { AgentModel, CharacterCast, Offering, PromptStarter, ShowcaseItem } from "@livepeer/api-client";
+import type { AgentModel, CharacterCast, Offering, PromptStarter } from "@livepeer/api-client";
 import { HomeScreen, messageFrom } from "@livepeer/user-app";
 import { useRouter } from "next/navigation";
 
@@ -8,7 +8,6 @@ import { createConversationAction, listCastableCharactersAction, listMediaAction
 
 export interface HomeProps {
   starters: PromptStarter[];
-  showcase: ShowcaseItem[];
   offerings: Offering[];
   agentModels: AgentModel[];
   signedIn: boolean;

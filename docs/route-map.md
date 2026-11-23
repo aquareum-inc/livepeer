@@ -8,7 +8,7 @@ Status: **built** = exists today, otherwise the slice that builds it.
 
 | Route | Screen | Ref | Differs from the reference | Slice |
 |-------|--------|-----|----------------------------|-------|
-| `/` | Home: composer, starting points, example gallery | `/chat/agent` home | Video-first copy and gallery. Starting points reveal examples and never send. `?with=<slug>` arrives from a character's page with that character cast in the composer. | built |
+| `/` | Home: composer and starting points | `/chat/agent` home | Video-first copy. A starting point sends its name and opens the conversation, where the agent asks for the rest (decision 105). `?with=<slug>` arrives from a character's page with that character cast in the composer. | built |
 | `/chat/[id]` | Conversation with the agent (built; video understanding in e) | `/chat/agent/:id` | Larger requests show a plan (script, storyboard, shots, audio, assembly) with each tool call as a step. Attach or link a video to summarise, find moments, ask questions. Any output opens in the studio. One chat, not agentic + classic. | b, e |
 | (modal) | Search conversations and library | Search modal | Also searches library media by content. | b, e |
 | `/studio` → `/studio/video` | Studio, video composer (Frames / References / Edit) | `/studio/video` | Leads the media order. Capability picker lists discovered apps, not branded models. | built → c |
@@ -34,8 +34,8 @@ Status: **built** = exists today, otherwise the slice that builds it.
 
 ### Reference screens we leave out, and why — please confirm
 
-1. **Discover** (templated "star in it" recipes). Not in the brief. Our example gallery on Home covers
-   inspiration; recipes could come later as instance content. *Left out.*
+1. **Discover** (templated "star in it" recipes). Not in the brief. *Left out for now.* The example gallery
+   came off Home (decision 105); a discovery view is its planned home, and `listShowcase` is kept for it.
 2. **Minds** (marketplace of user-built agents, with earnings). Not in the brief and overlaps Characters.
    *Left out.*
 3. **Movie Editor** (multi-track timeline). The brief says "same media types and video composer modes";

@@ -10,7 +10,7 @@ To switch a function from mock to live: implement it in `packages/api-client/src
 |----------|--------|----------------------------|-------|------------|--------|
 | `listOfferings` | live | `GET /v1/offerings` | none (public) | — | Slices 2–3 |
 | `getCreditBalance` | mock | `GET /v1/allowance` → credits via markup rule | builder key | Needs a signed-in builder key (auth lands in slice a) and the markup rule. | Slices 1, 6 |
-| `listShowcase` | mock | instance content (config or library) | — | No engine endpoint; instance-owned. | Not used on mobile (decisions 102 and 104) |
+| `listShowcase` | mock | instance content (config or library) | — | No engine endpoint; instance-owned. No screen reads it today: the gallery came off Home (decision 105) and waits for a discovery view. | Not used on mobile (decisions 102 and 104) |
 | `listPromptStarters` | mock | instance content (config) | — | No engine endpoint; instance-owned. | Built (iOS sample) |
 | `createGeneration` | mock | `POST /v1/jobs` with `mode: "async"` | builder key | Engine returns 501 for async jobs; no video generation capability is on the live network today. | Slice 3 |
 | `getGeneration` | mock | `GET /v1/jobs/{id}` + `GET /v1/jobs/{id}/result` | builder key | `/result` returns 501. | Built (iOS sample) |

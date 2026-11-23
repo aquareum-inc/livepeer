@@ -1,18 +1,15 @@
 "use client";
 
-import type { AgentModel, Character, CharacterCast, MediaItem, Offering, PromptStarter, ShowcaseItem } from "@livepeer/api-client/types";
-import { Chip, EASE_OUT_EXPO, STAGGER } from "@livepeer/ui";
-import { CornerDownLeft, Film, ImagePlay, Radio, ScanSearch, type LucideIcon } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import type { AgentModel, Character, CharacterCast, MediaItem, Offering, PromptStarter } from "@livepeer/api-client/types";
+import { Chip } from "@livepeer/ui";
+import { Film, ImagePlay, Radio, ScanSearch, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Composer, type ComposerValue } from "./composer";
 import { HomeBackdrop } from "./home-backdrop";
-import { ShowcaseGrid } from "./showcase-grid";
 
 export interface HomeScreenProps {
   starters: ReadonlyArray<PromptStarter>;
-  showcase: ReadonlyArray<ShowcaseItem>;
   offerings: ReadonlyArray<Offering>;
   /** The language models the agent can run on, for its model menu. */
   agentModels: ReadonlyArray<AgentModel>;
@@ -37,30 +34,35 @@ const STARTER_ICONS: Record<string, LucideIcon> = {
 
 const EMPTY: ComposerValue = { attachments: [], cast: null, prompt: "", app: null, model: null, aspect: "16:9", durationSeconds: 5 };
 
-export function HomeScreen({ starters, showcase, offerings, agentModels, onSubmit, loadLibrary, loadCharacters, cast = null, backdrop }: HomeScreenProps) {
+export function HomeScreen({ starters, offerings, agentModels, onSubmit, loadLibrary, loadCharacters, cast = null, backdrop }: HomeScreenProps) {
   const [value, setValue] = useState<ComposerValue>(() =>
     cast ? { ...EMPTY, cast, app: offerings.some((offering) => offering.app === "image-to-video") ? "image-to-video" : null } : EMPTY,
   );
-  const [openStarter, setOpenStarter] = useState<string | null>(null);
+  // The starting point being sent, so a second tap can't start a second conversation.
+  const [starting, setStarting] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   // Arriving with a character cast, the next thing to do is describe the scene.
   const arrivedWithCast = cast !== null;
   useEffect(() => {
     if (arrivedWithCast) textareaRef.current?.focus();
   }, [arrivedWithCast]);
-  const starter = starters.find((entry) => entry.id === openStarter) ?? null;
   const known = (app: string) => (offerings.some((offering) => offering.app === app) ? app : null);
 
-  const fill = (prompt: string, app: string) => {
-    setValue((current) => ({ ...current, prompt, app: known(app) }));
-    textareaRef.current?.focus();
-    textareaRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  // A starting point is sent as it is: its name is the request, and the agent asks for the rest in the
+  // conversation it opens. What is in the composer stays there.
+  const start = async (entry: PromptStarter) => {
+    setStarting(entry.id);
+    try {
+      await onSubmit({ ...EMPTY, prompt: entry.label, app: known(entry.app), model: value.model, aspect: value.aspect, durationSeconds: value.durationSeconds });
+    } finally {
+      setStarting(null);
+    }
   };
 
   return (
     <div className="relative flex flex-1 flex-col overflow-y-auto">
       <HomeBackdrop video={backdrop?.video ?? null} poster={backdrop?.poster ?? null} image={backdrop?.image ?? null} aurora={backdrop?.aurora ?? false} />
-      <section className="relative mx-auto flex w-full max-w-[720px] flex-col items-center px-4 pb-10 pt-[12vh] md:px-6 md:pt-[16vh]">
+      <section className="relative mx-auto flex w-full max-w-[720px] flex-1 flex-col items-center justify-center px-4 pb-[14vh] pt-10 md:px-6">
         <h1 className="text-balance text-center text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-foreground md:text-display">
           Direct anything.
         </h1>
@@ -84,65 +86,14 @@ export function HomeScreen({ starters, showcase, offerings, agentModels, onSubmi
         <div className="mt-4 flex w-full flex-wrap justify-center gap-2">
           {starters.map((entry) => {
             const Icon = STARTER_ICONS[entry.id] ?? Film;
-            const selected = entry.id === openStarter;
             return (
-              <Chip
-                key={entry.id}
-                selected={selected}
-                aria-expanded={selected}
-                onClick={() => {
-                  setOpenStarter(selected ? null : entry.id);
-                  setValue((current) => ({ ...current, app: selected ? current.app : known(entry.app) }));
-                }}
-                className="glass h-9 border-glass-edge px-3.5 text-body text-foreground/85"
-              >
+              <Chip key={entry.id} disabled={starting !== null} onClick={() => void start(entry)} className="glass h-9 border-glass-edge px-3.5 text-body text-foreground/85">
                 <Icon aria-hidden />
                 {entry.label}
               </Chip>
             );
           })}
         </div>
-
-        <AnimatePresence initial={false} mode="wait">
-          {starter ? (
-            <motion.ul
-              key={starter.id}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0, transition: { duration: 0.15 } }}
-              transition={{ duration: 0.32, ease: EASE_OUT_EXPO }}
-              className="mt-3 w-full overflow-hidden"
-            >
-              {starter.examples.map((example, index) => (
-                <motion.li
-                  key={example}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * STAGGER, duration: 0.24, ease: EASE_OUT_EXPO }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => fill(example, starter.app)}
-                    className="group flex w-full items-center gap-3 rounded-field px-4 py-2.5 text-left text-body text-muted-foreground transition-colors duration-150 hover:bg-hover hover:text-foreground"
-                  >
-                    <span className="min-w-0 flex-1">{example}</span>
-                    <CornerDownLeft className="size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" aria-hidden />
-                  </button>
-                </motion.li>
-              ))}
-            </motion.ul>
-          ) : null}
-        </AnimatePresence>
-      </section>
-
-      <section aria-labelledby="examples-heading" className="relative mx-auto w-full max-w-[1120px] px-4 pb-16 md:px-8">
-        <div className="mb-4 flex items-baseline justify-between">
-          <h2 id="examples-heading" className="text-body font-semibold text-foreground">
-            Made here
-          </h2>
-          <p className="text-caption text-subtle-foreground">Pick one to start from its prompt</p>
-        </div>
-        <ShowcaseGrid items={showcase} onUse={(item) => fill(item.prompt, item.app)} />
       </section>
     </div>
   );
