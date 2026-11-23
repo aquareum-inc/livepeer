@@ -71,7 +71,8 @@ private struct ConsoleGate: View {
                         .foregroundStyle(palette.mutedForeground)
                         .multilineTextAlignment(.center)
                 }
-                if let failure = session.failure, signingIn == nil {
+                // Without Face ID the grey sentence above already says why; the same words in red add nothing.
+                if let failure = session.failure, signingIn == nil, biometry != nil || failure != ConsoleSession.needsBiometrics {
                     Text(failure)
                         .text(.body)
                         .foregroundStyle(palette.destructive)

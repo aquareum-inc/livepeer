@@ -250,6 +250,24 @@ describe("the lease", () => {
   });
 });
 
+it("leaves out a phone on a platform it can't send to, without a line in the audit log each time", async () => {
+  const { alerts, offers, enrol, to, sent, events } = setup();
+  const iphone = enrol(sam, "Sam's iPhone");
+  const pixel = enrol(sam, "Sam's Pixel", ALL, "android");
+  offers.android = false;
+  await engineDown(alerts);
+  await alerts.settled();
+  expect(to(iphone.pushToken)).toEqual(["The engine isn't ready"]);
+  expect(to(pixel.pushToken)).toEqual([]);
+  expect(events().filter((entry) => entry.device_name === "Sam's Pixel")).toEqual([]);
+  // It wasn't told the engine was down, so it isn't told it is back. Its alerts stay on for the next one.
+  offers.android = true;
+  await engineUp(alerts);
+  await alerts.settled();
+  expect(sent.filter((entry) => entry.target.token === pixel.pushToken)).toEqual([]);
+  expect(pixel.session().alerts?.pushSealed).toBeTruthy();
+});
+
 it("says whether a platform can be sent to, and whether a push token is that platform's", () => {
   const { alerts, offers } = setup();
   offers.android = false;
