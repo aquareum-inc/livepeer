@@ -1,1 +1,1 @@
-{"id":"usr_demo_adam","name":"Adam Soffer","email":"adam@example.test","role":"user","balance":{"credits":2480,"allowance":{"granted":"50.00","spent":"25.20","available":"24.80","currency":"USD"}}}
+{"id":"usr_demo_adam","name":"Adam Soffer","email":"adam@example.test","role":"user","balance":{"credits":2480,"allowance":{"granted":"50.00","spent":"25.20","available":"24.80","currency":"USD"}},"account":{"id":"usr_demo_adam","kind":"personal","name":"Adam Soffer","role":"owner","credits":2480,"status":"active","member_count":1}}

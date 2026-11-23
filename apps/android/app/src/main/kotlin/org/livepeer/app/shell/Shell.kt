@@ -174,7 +174,27 @@ private fun MainTabs(container: AppContainer, openBrowser: (android.net.Uri) -> 
     var settingsNext by rememberSaveable { mutableStateOf(false) }
     // Set when the account tray hands over to the console, which covers the app once it has closed.
     var consoleNext by rememberSaveable { mutableStateOf(false) }
+    // Set when the account tray hands over to an invitation, which opens once it has closed.
+    // Kept by id, so the tray survives a rotation or a theme change, and read from the accounts as they stand.
+    var invitationNext by rememberSaveable { mutableStateOf<String?>(null) }
+    var invitationOpenId by rememberSaveable { mutableStateOf<String?>(null) }
+    val accountList by account.accounts.collectAsStateWithLifecycle()
+    val invitationOpen = accountList?.invitations?.firstOrNull { it.id == invitationOpenId }
     val me by account.me.collectAsStateWithLifecycle()
+    // A different account is a different app's worth of things: back to Home, and everything is read again.
+    val accountEpoch by account.accountEpoch.collectAsStateWithLifecycle()
+    var seenEpoch by rememberSaveable { mutableStateOf(accountEpoch) }
+    LaunchedEffect(accountEpoch) {
+        if (accountEpoch == seenEpoch) return@LaunchedEffect
+        seenEpoch = accountEpoch
+        navigation.popBackStack(Tab.Home.route, inclusive = false)
+        container.conversations.clear()
+        container.composer.signedOut()
+        container.settings.signedOut()
+        container.studio.switchedAccount()
+        container.composer.load()
+        container.characters.load()
+    }
 
     val tabs = Tab.entries.filter { it != Tab.Characters || description?.content?.characters == true }
     val onTab = tabs.any { tab -> entry?.destination?.route == tab.route }
@@ -236,7 +256,7 @@ private fun MainTabs(container: AppContainer, openBrowser: (android.net.Uri) -> 
                 composable(Tab.Studio.route) { StudioScreen(container.studio, account, accountButton) }
                 composable(Tab.Library.route) {
                     val model = viewModel<LibraryViewModel>(factory = viewModelFactory { initializer { LibraryViewModel(container.api, account) } })
-                    LibraryScreen(model, signIn, accountButton) { conversation ->
+                    LibraryScreen(model, org.livepeer.app.account.AccountWords.workspace(me)?.name, signIn, accountButton) { conversation ->
                         container.conversations[conversation.id] = conversation
                         navigation.navigate("conversation/${conversation.id}")
                     }
@@ -276,7 +296,7 @@ private fun MainTabs(container: AppContainer, openBrowser: (android.net.Uri) -> 
                     val back = { navigation.popBackStack(); Unit }
                     when (SettingsPage.entries.firstOrNull { it.route == entry.arguments?.getString("page") }) {
                         SettingsPage.Plan -> PlanSettingsScreen(container.settings, account, back)
-                        SettingsPage.Usage -> UsageSettingsScreen(container.settings, back)
+                        SettingsPage.Usage -> UsageSettingsScreen(container.settings, account, back)
                         SettingsPage.Preferences -> PreferencesSettingsScreen(container.settings, description?.content?.adultContent == true, back)
                         SettingsPage.Devices -> DevicesSettingsScreen(container.settings, back)
                         SettingsPage.Privacy -> PrivacySettingsScreen(container.settings, back)
@@ -311,6 +331,9 @@ private fun MainTabs(container: AppContainer, openBrowser: (android.net.Uri) -> 
             } else if (consoleNext) {
                 consoleNext = false
                 container.console.session.present()
+            } else if (invitationNext != null) {
+                invitationOpenId = invitationNext
+                invitationNext = null
             }
         }) { close ->
             AccountTray(account, container.theme, offersConsole = signedIn && ConsoleSession.offered(me, description), openConsole = {
@@ -319,11 +342,17 @@ private fun MainTabs(container: AppContainer, openBrowser: (android.net.Uri) -> 
             }, signIn = {
                 signInNext = true
                 close()
+            }, close = close, openInvitation = { invitation ->
+                invitationNext = invitation.id
+                close()
             }) {
                 settingsNext = true
                 close()
             }
         }
+    }
+    invitationOpen?.let { invitation ->
+        Tray("Invitation", onDismiss = { invitationOpenId = null }) { close -> org.livepeer.app.account.InvitationTray(account, invitation, close) }
     }
     prompt?.let { current ->
         Tray("Sign in or sign up", onDismiss = account::promptClosed) { SignInTray(account, description, current.reason, openBrowser) }

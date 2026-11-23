@@ -42,8 +42,8 @@ class LibraryViewModel(private val api: Api, account: Account) : ViewModel() {
 
     init {
         viewModelScope.launch {
-            // A moment after typing stops, and again whenever someone signs in.
-            combine(account.signedIn, search.debounce(220)) { signedIn, filter -> signedIn to filter }.collect { (signedIn, filter) ->
+            // A moment after typing stops, and again whenever someone signs in or starts working in another account.
+            combine(account.signedIn, search.debounce(220), account.accountEpoch) { signedIn, filter, _ -> signedIn to filter }.collect { (signedIn, filter) ->
                 _state.update { it.copy(signedIn = signedIn) }
                 if (signedIn) run(filter.first, filter.second) else _state.update { LibraryState(signedIn = false) }
             }

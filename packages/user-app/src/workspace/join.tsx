@@ -94,7 +94,7 @@ export function JoinWorkspace({ invitation, alreadyMember, accept, decline }: Jo
       <Card className="mt-7">
         <ul className="divide-y divide-hairline">
           <Fact icon={BadgeCheck} title={`You'll be ${role}`}>{ROLE_FOR_YOU[invitation.role]}</Fact>
-          <Fact icon={Coins} title="One balance, one library">What you make here uses {invitation.workspace_name}'s credit and is saved where everyone in it can see.</Fact>
+          <Fact icon={Coins} title="One balance, one library">What you make here uses the workspace's credit and is saved where everyone in it can see.</Fact>
           <Fact icon={UserRound} title="Your own account stays as it is">Switch between the two from the account menu whenever you like.</Fact>
         </ul>
       </Card>

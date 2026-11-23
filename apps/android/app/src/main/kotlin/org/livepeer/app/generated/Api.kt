@@ -35,6 +35,22 @@ class Api(private val transport: ApiTransport) {
     suspend fun deleteAccount(): Deleted =
         transport.send(Deleted.serializer(), "DELETE", "/me", query = emptyMap(), body = null)
 
+    /** The accounts the person can work in (their own, and the workspaces they belong to, each with their role and its balance), which one is current, and invitations waiting, to answer with accept_invitation or decline_invitation. */
+    suspend fun listAccounts(): AccountList =
+        transport.send(AccountList.serializer(), "GET", "/accounts", query = emptyMap(), body = null)
+
+    /** Join the workspace an invitation waiting for the person is for. A native app starts working in it at once. Answers with their accounts as they now stand. */
+    suspend fun acceptInvitation(id: String): AccountList =
+        transport.send(AccountList.serializer(), "POST", "/invitations/${ApiTransport.escape(id)}/accept", query = emptyMap(), body = null)
+
+    /** Decline an invitation waiting for the person. Answers with their accounts, the invitation gone. */
+    suspend fun declineInvitation(id: String): AccountList =
+        transport.send(AccountList.serializer(), "POST", "/invitations/${ApiTransport.escape(id)}/decline", query = emptyMap(), body = null)
+
+    /** From a native app: work in another of the person's accounts, their own or a workspace they belong to. Everything the app then reads and makes is that account's. */
+    suspend fun switchAccount(accountId: String): AccountList =
+        transport.send(AccountList.serializer(), "POST", "/accounts/current", query = emptyMap(), body = mapOf("account_id" to JsonPrimitive(accountId)))
+
     /** List the phones and tablets signed in to the person's account, most recently used first. */
     suspend fun listDevices(): List<DeviceSession> =
         transport.send(ListSerializer(DeviceSession.serializer()), "GET", "/devices", query = emptyMap(), body = null)

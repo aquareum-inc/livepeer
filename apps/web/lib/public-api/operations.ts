@@ -1,4 +1,4 @@
-import type { AgentModelEntry, ApiClient, CapabilityLabel, Character, Preferences, PrivacyDescription, ReportReason, DeviceSession, GenerationRequest, StudioMedium, DeviceToken, EngineJob, InstanceDescription, OfferedCapability, OperatorAlertKind, OperatorAlerts, OperatorAttention, OperatorClient, OperatorStatus } from "@livepeer/api-client";
+import type { AccountList, Accounts, AgentModelEntry, ApiClient, CapabilityLabel, Character, Preferences, PrivacyDescription, ReportReason, DeviceSession, GenerationRequest, StudioMedium, DeviceToken, EngineJob, InstanceDescription, OfferedCapability, OperatorAlertKind, OperatorAlerts, OperatorAttention, OperatorClient, OperatorStatus } from "@livepeer/api-client";
 
 import type { Moderation } from "../moderation/moderation";
 import type { AuditLog } from "../operator-devices/audit";
@@ -23,6 +23,8 @@ export type Via = "guest" | "operator_token" | "browser" | "api_key" | "device" 
 export interface DeviceAccess {
   redeemCode(input: { code: string; verifier: string; deviceName: string; platform: "ios" | "android" }): DeviceToken | null;
   list(userId: string, currentId: string | null): DeviceSession[];
+  /** Points a device session at a workspace, or at the personal account with null. */
+  setWorkspace(id: string, workspaceId: string | null): boolean;
   revoke(userId: string, id: string): boolean;
   /** Ends every device session a user has. */
   revokeAll(userId: string): number;
@@ -167,6 +169,23 @@ const alertsOf = (context: Context, session: OperatorDeviceRecord, state: PhoneA
 /** Who is revoking a phone from the web console or the API, for the audit log. */
 const revoker = (context: Context) => ({ userId: context.account?.user.id ?? "operator_token", name: context.account?.user.name ?? "Operator API token", deviceId: null, deviceName: null });
 
+/**
+ * The invitation the signed-in person is answering, by its id. Only one that is waiting for them is found, so
+ * an id is never enough to answer someone else's, and the link that answers it never leaves the instance.
+ */
+const waitingInvitation = async (context: Context, id: unknown) => {
+  signedIn(context);
+  const invitation = (await context.client.listAccounts()).data.invitations.find((entry) => entry.id === id);
+  if (!invitation) throw new ApiError(404, "That invitation is no longer open.", "invitation_closed");
+  return invitation;
+};
+
+/** The person's accounts as an app is told of them: an invitation without the link that answers it. */
+const accountList = (list: Accounts): AccountList => ({
+  ...list,
+  invitations: list.invitations.map(({ id, workspace_name, invited_by_name, role, expires_at }) => ({ id, workspace_name, invited_by_name, role, expires_at })),
+});
+
 const signedIn = (context: Context): Account => {
   if (!context.account) throw new ApiError(403, "This needs a signed-in person, not an API key.", "account_required");
   return context.account;
@@ -247,7 +266,70 @@ export const OPERATIONS: Operation[] = [
     input: object({}),
     run: async (context) => {
       const { user, role } = signedIn(context);
-      return { ...user, role, balance: (await context.client.getCreditBalance()).data };
+      const [balance, list] = await Promise.all([context.client.getCreditBalance(), context.client.listAccounts()]);
+      const account = list.data.accounts.find((entry) => entry.id === list.data.current) ?? list.data.accounts[0];
+      return { ...user, role, balance: balance.data, account };
+    },
+  },
+  {
+    name: "list_accounts",
+    description: "The accounts the person can work in (their own, and the workspaces they belong to, each with their role and its balance), which one is current, and invitations waiting, to answer with accept_invitation or decline_invitation.",
+    method: "GET",
+    path: "/accounts",
+    output: "AccountList",
+    input: object({}),
+    run: async (context) => {
+      signedIn(context);
+      return accountList((await context.client.listAccounts()).data);
+    },
+  },
+  {
+    name: "accept_invitation",
+    description: "Join the workspace an invitation waiting for the person is for. A native app starts working in it at once. Answers with their accounts as they now stand.",
+    method: "POST",
+    path: "/invitations/{id}/accept",
+    output: "AccountList",
+    input: object({ id: { type: "string", description: "An invitation id from list_accounts." } }, ["id"]),
+    run: async (context, input) => {
+      const invitation = await waitingInvitation(context, input.id);
+      const workspace = (await context.client.acceptInvitation(invitation.token)).data;
+      const list = (await context.client.listAccounts()).data;
+      // An app moves into the workspace it just joined, as the web does.
+      const deviceId = context.via === "device" ? context.account?.deviceId : null;
+      const moved = deviceId ? context.devices.setWorkspace(deviceId, workspace.id) : false;
+      return accountList(moved ? { ...list, current: workspace.id } : list);
+    },
+  },
+  {
+    name: "decline_invitation",
+    description: "Decline an invitation waiting for the person. Answers with their accounts, the invitation gone.",
+    method: "POST",
+    path: "/invitations/{id}/decline",
+    output: "AccountList",
+    input: object({ id: { type: "string", description: "An invitation id from list_accounts." } }, ["id"]),
+    run: async (context, input) => {
+      const invitation = await waitingInvitation(context, input.id);
+      await context.client.declineInvitation(invitation.token);
+      return accountList((await context.client.listAccounts()).data);
+    },
+  },
+  {
+    name: "switch_account",
+    description: "From a native app: work in another of the person's accounts, their own or a workspace they belong to. Everything the app then reads and makes is that account's.",
+    method: "POST",
+    path: "/accounts/current",
+    output: "AccountList",
+    mcp: false,
+    input: object({ account_id: { type: "string", description: "An account id from list_accounts." } }, ["account_id"]),
+    run: async (context, input) => {
+      const { deviceId } = signedIn(context);
+      // A browser keeps its place in its session cookie, and a key belongs to one account: only an app switches here.
+      if (context.via !== "device" || !deviceId) throw new ApiError(400, "Only a native app switches accounts this way.", "device_only");
+      const list = (await context.client.listAccounts()).data;
+      const target = list.accounts.find((entry) => entry.id === input.account_id);
+      if (!target) throw new ApiError(404, "You don't belong to that account.", "not_a_member");
+      if (!context.devices.setWorkspace(deviceId, target.kind === "workspace" ? target.id : null)) throw new ApiError(401, "This device is no longer signed in.");
+      return accountList({ ...list, current: target.id });
     },
   },
   { name: "list_devices", description: "List the phones and tablets signed in to the person's account, most recently used first.", method: "GET", path: "/devices", output: ["DeviceSession"], input: object({}), run: async (context) => { const { user, deviceId } = signedIn(context); return context.devices.list(user.id, deviceId); } },

@@ -133,4 +133,38 @@ class MainFlowsTest {
         compose.onNode(hasText("Settings")).performClick()
         waitFor(hasText("credits", substring = true, ignoreCase = true), 10)
     }
+
+    @Test
+    fun switchingToAWorkspaceAndBack() {
+        launch(signedIn = true)
+        waitFor(hasContentDescription("Account, ", substring = true))
+        compose.onNode(hasContentDescription("Account, ", substring = true)).performClick()
+        // The development user is an admin of the seeded workspace.
+        waitFor(hasContentDescription("Northlight Studio, workspace", substring = true), 10)
+        compose.onNode(hasContentDescription("Northlight Studio, workspace", substring = true)).performClick()
+
+        // The tray closes, and the account button says where the app is working now.
+        waitFor(hasContentDescription("working in Northlight Studio", substring = true), 10)
+        tab("Library").performClick()
+        waitFor(hasContentDescription(", video", substring = true))
+
+        compose.onNode(hasContentDescription("working in Northlight Studio", substring = true)).performClick()
+        waitFor(hasContentDescription("personal account", substring = true), 10)
+        compose.onNode(hasContentDescription("personal account", substring = true)).performClick()
+        compose.waitUntilDoesNotExist(hasContentDescription("working in Northlight Studio", substring = true), 10_000)
+    }
+
+    @Test
+    fun anInvitationOpensFromTheAccountTray() {
+        launch(signedIn = true)
+        waitFor(hasContentDescription("Account, ", substring = true))
+        compose.onNode(hasContentDescription("Account, ", substring = true)).performClick()
+        // The development user has one invitation waiting. Declining it would leave the next run without one,
+        // and joining can't be undone from a phone, so this reads the invitation and stops there.
+        waitFor(hasContentDescription("Invitation to Harbour Films", substring = true), 10)
+        compose.onNode(hasContentDescription("Invitation to Harbour Films", substring = true)).performClick()
+        waitFor(hasText("Join Harbour Films"), 10)
+        waitFor(hasText("You'll be a member"), 5)
+        waitFor(hasText("Decline"), 5)
+    }
 }

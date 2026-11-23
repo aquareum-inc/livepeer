@@ -6,7 +6,7 @@ import { quoteCredits, type ApiClient, type OperatorClient } from "@livepeer/api
 import type { NextRequest } from "next/server";
 
 import { alerts } from "../alerts";
-import { apiFor } from "../api";
+import { apiFor, workspaceOf } from "../api";
 import { SESSION_COOKIE, readSessionValue } from "../auth/session";
 import { devices, mobileEnabled } from "../devices";
 import { DEVICE_TOKEN_PREFIX } from "../devices/sessions";
@@ -71,8 +71,10 @@ export async function authenticate(request: NextRequest): Promise<Caller | null>
       const device = devices().find(token);
       if (!device) return null;
       const user = { id: device.userId, name: device.name, email: device.email };
+      // The app works in the account the device session names, if the person still belongs to it.
+      const workspaceId = await workspaceOf({ userId: device.userId, workspaceId: device.workspaceId ?? null });
       // Always `operator: null`, whatever the role: a user's device session never does operator work.
-      return { via: "device", client: apiFor(user), operator: null, account: { user, role: device.role ?? "user", deviceId: device.id }, operatorDevice: null };
+      return { via: "device", client: apiFor(user, "offered", workspaceId), operator: null, account: { user, role: device.role ?? "user", deviceId: device.id }, operatorDevice: null };
     }
     const key = (await apiFor(null).verifyApiKey(token)).data;
     if (!key) return null;
@@ -85,7 +87,8 @@ export async function authenticate(request: NextRequest): Promise<Caller | null>
   const user = { id: session.userId, name: session.name, email: session.email };
   return {
     via: "browser",
-    client: apiFor(user),
+    // As the web's own pages do: the account the session is working in.
+    client: apiFor(user, "offered", await workspaceOf(session)),
     operator: session.role === "operator" ? buildOperatorClient() : null,
     account: { user, role: session.role, deviceId: null },
     operatorDevice: null,

@@ -1,0 +1,1 @@
+{"id":"usr_demo_adam","name":"Adam Soffer","email":"adam@example.test","role":"user","balance":{"credits":36660,"allowance":{"granted":"600.00","spent":"233.40","available":"366.60","currency":"USD"}},"account":{"id":"wsp_northlight","kind":"workspace","name":"Northlight Studio","role":"admin","credits":36660,"status":"active","member_count":4}}

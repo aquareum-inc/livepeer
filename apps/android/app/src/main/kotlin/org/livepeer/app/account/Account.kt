@@ -6,6 +6,8 @@ import org.livepeer.app.BuildConfig
 import org.livepeer.app.InstanceStore
 import org.livepeer.app.api.Refusal
 import org.livepeer.app.api.TokenVault
+import org.livepeer.app.generated.AccountInvitation
+import org.livepeer.app.generated.AccountList
 import org.livepeer.app.generated.Api
 import org.livepeer.app.generated.Me
 import org.livepeer.app.generated.SignInMethodName
@@ -47,8 +49,18 @@ class Account(
     private val _prompt = MutableStateFlow<SignInPrompt?>(null)
     private val _progress = MutableStateFlow<SignInProgress>(SignInProgress.Idle)
 
+    private val _accounts = MutableStateFlow<AccountList?>(null)
+    private val _switchingTo = MutableStateFlow<String?>(null)
+    private val _accountEpoch = MutableStateFlow(0)
+
     val signedIn: StateFlow<Boolean> = _signedIn
     val me: StateFlow<Me?> = _me
+    /** The accounts the person can work in: their own and the workspaces they belong to. Null until read. */
+    val accounts: StateFlow<AccountList?> = _accounts
+    /** The account being switched to, while the instance is asked. */
+    val switchingTo: StateFlow<String?> = _switchingTo
+    /** Goes up each time the app starts working in a different account, so everything on screen is read again. */
+    val accountEpoch: StateFlow<Int> = _accountEpoch
     /** The sign-in tray, when it's open. */
     val prompt: StateFlow<SignInPrompt?> = _prompt
     val progress: StateFlow<SignInProgress> = _progress
@@ -73,7 +85,31 @@ class Account(
 
     suspend fun refresh() {
         if (!_signedIn.value) return
-        runCatching { api.getMe() }.getOrNull()?.let { _me.value = it }
+        val fresh = runCatching { api.getMe() }.getOrNull() ?: return
+        // The account can change under the app: a switch here, or being removed from a workspace elsewhere.
+        val before = _me.value?.account?.id
+        _me.value = fresh
+        if (before != null && before != fresh.account.id) _accountEpoch.value += 1
+    }
+
+    /** Reads the accounts the person can work in. What was known stays if the instance can't be reached. */
+    suspend fun loadAccounts() {
+        if (!_signedIn.value) return
+        runCatching { api.listAccounts() }.getOrNull()?.let { _accounts.value = it }
+    }
+
+    /** Starts working in another account. False when the instance refused or couldn't be reached. */
+    suspend fun switchAccount(id: String): Boolean {
+        if (id == _me.value?.account?.id) return true
+        if (!_signedIn.value || _switchingTo.value != null) return false
+        _switchingTo.value = id
+        try {
+            _accounts.value = runCatching { api.switchAccount(id) }.getOrNull() ?: return false
+            refresh()
+            return _me.value?.account?.id == id
+        } finally {
+            _switchingTo.value = null
+        }
     }
 
     /**
@@ -151,6 +187,21 @@ class Account(
         }
     }
 
+    /** Joins the workspace an invitation is for and starts working in it. False when the instance refused. */
+    suspend fun acceptInvitation(invitation: AccountInvitation): Boolean {
+        if (!_signedIn.value) return false
+        _accounts.value = runCatching { api.acceptInvitation(invitation.id) }.getOrNull() ?: return false
+        refresh()
+        return true
+    }
+
+    /** Declines an invitation. It leaves the list. False when the instance refused. */
+    suspend fun declineInvitation(invitation: AccountInvitation): Boolean {
+        if (!_signedIn.value) return false
+        _accounts.value = runCatching { api.declineInvitation(invitation.id) }.getOrNull() ?: return false
+        return true
+    }
+
     /** Ends this device's session on the instance, then forgets it here. Signed out here even when offline. */
     suspend fun signOut() {
         runCatching { api.endDeviceSession() }
@@ -173,6 +224,7 @@ class Account(
         vault.set(null)
         _signedIn.value = false
         _me.value = null
+        _accounts.value = null
     }
 
     private companion object {

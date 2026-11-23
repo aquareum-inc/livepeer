@@ -72,7 +72,8 @@ struct RootView: View {
             case .available:
                 // The console is its own place: it covers the app, tab bar and all, and the app waits under it.
                 ZStack {
-                    MainTabs(api: api).accessibilityHidden(console.presented)
+                    // A different account is a different app's worth of things: every screen starts again, on Home.
+                    MainTabs(api: api).id(account.accountEpoch).accessibilityHidden(console.presented)
                     if console.presented { ConsoleRoot().transition(.opacity) }
                 }
                 .animation(motion(.enter), value: console.presented)

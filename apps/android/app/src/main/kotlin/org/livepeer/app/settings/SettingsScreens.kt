@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -58,6 +59,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.livepeer.app.account.Account
+import org.livepeer.app.account.AccountMark
+import org.livepeer.app.account.AccountWords
 import org.livepeer.app.account.Avatar
 import org.livepeer.app.account.initials
 import org.livepeer.app.composer.Load
@@ -73,6 +76,7 @@ import org.livepeer.app.generated.PreferencesDefaultAspect
 import org.livepeer.app.generated.Radius
 import org.livepeer.app.generated.TypeSize
 import org.livepeer.app.generated.UsageEntryStatus
+import org.livepeer.app.generated.WorkspaceRole
 import org.livepeer.app.shell.EmptyState
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
@@ -100,6 +104,7 @@ private fun count(value: Double) = NumberFormat.getIntegerInstance(Locale.ENGLIS
 fun SettingsScreen(account: Account, onBack: () -> Unit, open: (SettingsPage) -> Unit) {
     val palette = LocalPalette.current
     val me by account.me.collectAsStateWithLifecycle()
+    val workspace = AccountWords.workspace(me)
     val scope = rememberCoroutineScope()
     var confirming by rememberSaveable { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
@@ -115,7 +120,15 @@ fun SettingsScreen(account: Account, onBack: () -> Unit, open: (SettingsPage) ->
                     me?.email?.let { BasicText(it, style = TypeSize.Body.style().copy(color = palette.mutedForeground)) }
                 }
             }
+            workspace?.let { current ->
+                Divider()
+                Row(Modifier.padding(14.dp).semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.width(48.dp), contentAlignment = Alignment.Center) { AccountMark(current, 28) }
+                    BasicText(AccountWords.workingIn(current), style = TypeSize.Body.style().copy(color = palette.foreground))
+                }
+            }
         }
+        if (workspace != null) Footer("Plan, credits and usage below are the workspace's. Members, roles and invitations are on the web.")
         Group {
             SettingsPage.entries.forEachIndexed { index, page ->
                 if (index > 0) Divider()
@@ -169,8 +182,9 @@ fun SettingsScreen(account: Account, onBack: () -> Unit, open: (SettingsPage) ->
 fun PlanSettingsScreen(model: SettingsModel, account: Account, onBack: () -> Unit) {
     val palette = LocalPalette.current
     val me by account.me.collectAsStateWithLifecycle()
+    val workspace = AccountWords.workspace(me)
     Loaded(SettingsPage.Plan.title, model.plan, "Your plan didn't load. Check your connection and try again.", { model.loadPlan() }, onBack) { details ->
-        Label("Balance")
+        Label(workspace?.let { "${it.name}'s balance" } ?: "Balance")
         Group {
             Column(Modifier.padding(14.dp)) {
                 me?.balance?.credits?.let { BasicText(count(it), style = TypeSize.Title.style(FontWeight.Medium, mono = true).copy(color = palette.foreground)) }
@@ -181,7 +195,7 @@ fun PlanSettingsScreen(model: SettingsModel, account: Account, onBack: () -> Uni
         Group {
             val plan = details.plan
             if (plan == null) {
-                BasicText("You're not on a plan. Your work uses the credits on your account.", style = TypeSize.Body.style().copy(color = palette.mutedForeground), modifier = Modifier.padding(14.dp))
+                BasicText(workspace?.let { "${it.name} isn't on a plan. Work here uses the credits on the workspace." } ?: "You're not on a plan. Your work uses the credits on your account.", style = TypeSize.Body.style().copy(color = palette.mutedForeground), modifier = Modifier.padding(14.dp))
             } else {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -199,24 +213,28 @@ fun PlanSettingsScreen(model: SettingsModel, account: Account, onBack: () -> Uni
                 }
             }
         }
+        workspace?.let { Footer(if (it.role == WorkspaceRole.Owner) "You own this workspace. Add credit or change its plan on the web." else "The workspace's owner adds credit and chooses its plan.") }
     }
 }
 
 /** What has been spent, by capability, and the most recent jobs. */
 @Composable
-fun UsageSettingsScreen(model: SettingsModel, onBack: () -> Unit) {
+fun UsageSettingsScreen(model: SettingsModel, account: Account, onBack: () -> Unit) {
     val palette = LocalPalette.current
+    val me by account.me.collectAsStateWithLifecycle()
+    val workspace = AccountWords.workspace(me)
     val labels by model.labels.collectAsStateWithLifecycle()
     val name = { app: String -> labels[app] ?: app }
     Loaded(SettingsPage.Usage.title, model.usage, "Usage didn't load. Check your connection and try again.", { model.loadUsage() }, onBack) { usage ->
         if (usage.entries.isEmpty()) {
-            Box(Modifier.fillMaxWidth().heightIn(min = 360.dp)) { EmptyState(Icons.Rounded.BarChart, "No usage yet", "Each generation, analysis and session you run is listed here with what it cost.") }
+            Box(Modifier.fillMaxWidth().heightIn(min = 360.dp)) { EmptyState(Icons.Rounded.BarChart, "No usage yet", workspace?.let { "Nothing has been charged to ${it.name} yet. Each generation, analysis and session made here is listed with what it cost." } ?: "Each generation, analysis and session you run is listed here with what it cost.") }
             return@Loaded
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Total("Credits used", usage.summary.credits, Modifier.weight(1f))
             Total("Jobs run", usage.summary.jobs, Modifier.weight(1f))
         }
+        workspace?.let { Footer(if (it.role == WorkspaceRole.Member) "What you've used in ${it.name}. Its owner and admins see everyone's." else "Everything made in ${it.name}, by everyone and every API key. Usage by member is on the web.") }
         Label("By capability")
         Group {
             val top = usage.summary.byApp.firstOrNull()?.credits ?: 1.0

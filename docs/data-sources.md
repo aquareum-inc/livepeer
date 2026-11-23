@@ -52,7 +52,7 @@ and checked with `can()` in `packages/api-client/src/workspaces.ts`.
 
 | Function | Source | Endpoint (used or planned) | Token | Blocked by | Mobile |
 |----------|--------|----------------------------|-------|------------|--------|
-| `listAccounts` | mock, through the provider interface | `workspaces.listForUser`, `workspaces.listInvitationsForUser`, `budgets.getAllocation` per account | session | Q18, Q19 | Not on mobile: a phone works in the Personal account only (`docs/workspaces.md` §8) |
+| `listAccounts` | mock, through the provider interface | `workspaces.listForUser`, `workspaces.listInvitationsForUser`, `budgets.getAllocation` per account | session | Q18, Q19 | iOS and Android: `list_accounts`, `switch_account`, and the current account in `get_me` (`docs/mobile/plan.md` §19) |
 | `createWorkspace`, `renameWorkspace` | mock, through the provider interface | `workspaces.create`, `workspaces.rename` | session | Q18 | Not on mobile |
 | `getWorkspace` | mock, through the provider interface | `workspaces.get`, `listMembers`, `listInvitations`, `usage.getUsageByMember` | session | Q19, Q21 | Not on mobile |
 | `inviteMember`, `revokeInvitation`, `getInvitation`, `acceptInvitation`, `declineInvitation` | mock, through the provider interface | `workspaces.invite`, `revokeInvitation`, `getInvitation`, `acceptInvitation`, `declineInvitation` | session | Q20. The mock sends no email; the invitation's link is copied from the page. | Not on mobile |
@@ -68,7 +68,9 @@ key made in a workspace calls the instance API in that workspace (`verifyApiKey`
 `workspace_id`).
 
 The session cookie names the current workspace (`workspaceId`); `workspaceOf` in `apps/web/lib/api.ts` asks
-the provider whether the person still belongs on every request.
+the provider whether the person still belongs on every request. A native app's device session record carries
+the same pointer (`workspaceId` in `apps/web/lib/devices/store.ts`), written only by `switch_account` and
+checked the same way, so on a phone every existing operation acts in the account the app chose.
 
 ## Operator console (slice f)
 
@@ -136,7 +138,10 @@ browser session cookie holds it.
 |-----------|------|-------|
 | `create_device_session` | Exchanges the one-time code from a native sign-in, with its PKCE verifier, for a device session | none (the code is the credential) |
 | `end_device_session` | Signs the calling device out | its device session |
-| `get_me` | The signed-in person, their balance (`getCreditBalance`) and their `role`, so an app knows whether to offer the console | a device, operator device or browser session |
+| `list_accounts` | The accounts the person can work in (`listAccounts`): their own and each workspace with their role and its balance, which is current, and invitations waiting, each without the link that answers it | a device, browser session | iOS and Android |
+| `accept_invitation`, `decline_invitation` | Answers an invitation waiting for the signed-in person, by its id (`acceptInvitation`, `declineInvitation`). The id is looked up in their own waiting invitations (`listAccounts`), so it can't answer anyone else's, and the link that answers an invitation never leaves the instance. Accepting from a device session also points it at the workspace | a device, browser session | iOS and Android |
+| `switch_account` | Works in another of the person's accounts: checks they belong (`listAccounts`), then writes the workspace's id on the device session record. Refused to anything but a device session (`device_only`) and left out of MCP | a device session | iOS and Android |
+| `get_me` | The signed-in person, their balance (`getCreditBalance`) and their `role`, so an app knows whether to offer the console; and `account`, the account they are working in | a device, operator device or browser session |
 | `list_devices`, `revoke_device` | The person's device sessions; sign one out | a device or browser session |
 
 **Operator device sessions** (`aqo_…`) are what let an operator's phone open the console (`docs/mobile/plan.md`

@@ -2141,3 +2141,92 @@ November 2026.**
 and team id, the Push Notifications capability on `org.livepeer.app` and `org.livepeer.app.dev`, and a
 Firebase project with both Android identifiers registered and a send-only service account; a real iPhone
 and a real Android phone with Google Play services.
+
+## 19. Workspaces on phones: switching accounts (23 November 2026)
+
+Workspaces are shared accounts with members and roles (`docs/workspaces.md`). The web has all of it. A phone
+gets one thing: working in a workspace you already belong to. Managing one stays on the web, as buying
+credit does.
+
+### 19.1 Server
+
+- `list_accounts` (`GET /accounts`, `AccountList`): the personal account, each workspace with the person's
+  role and its balance, which one is current, and invitations waiting. An invitation is sent without the
+  link that answers it.
+- `switch_account` (`POST /accounts/current`, `account_id`): checks the person belongs, then writes the
+  workspace's id on the device session record (`workspaceId`; null for personal). Only a device session may
+  call it: a browser keeps its place in its cookie, and a key belongs to one account. Left out of MCP.
+- `accept_invitation` and `decline_invitation` (`POST /invitations/{id}/accept`, `…/decline`): answer an
+  invitation waiting for the signed-in person, by its id. The id is looked up in their own waiting
+  invitations, so it can't answer anyone else's, and the link stays on the instance. Accepting from a device
+  session points it at the workspace joined.
+- `get_me` gains `account`: the account the app is working in. `balance` is that account's.
+- `authenticate()` builds a device session's client in the workspace its record names, asking the provider
+  on every request whether the person still belongs (`workspaceOf`, as for the web). Someone removed falls
+  back to their personal account, and `get_me` says so.
+- The record holds an opaque workspace id and nothing else: no names, roles or membership.
+
+### 19.2 Design
+
+- **The switcher is the top of the account tray.** The tray is the phone's account menu, so it follows the
+  web's (decisions 107 and 114): the person's own account first, carrying their name with "Personal"
+  beneath, then each workspace with their role, each with its balance in mono and a tick on the current one.
+  With one account (no workspaces) the tray is as it was.
+- **Marks.** A person is a circle, a workspace a rounded square with its initial (decision 108), on the same
+  fill as the avatar. The account button at the top right of each tab shows the current account's mark, so
+  the shape alone says whose credit a request will spend.
+- **Switching** is one tap: a selection haptic, the tray closes, and the app returns to Home with everything
+  read again for the new account: conversations, library, characters, studio, balance. A switch that fails
+  leaves the tray open and says so in one line.
+- **An invitation** is a row under the accounts in the same shape as them: a dashed rounded square with the
+  workspace's initial (a workspace you aren't in yet), its name, "Invited by Sam Whitfield" and a "Join"
+  pill. Tapping it closes the account tray and opens an Invitation tray: the workspace and who asked, three
+  short facts (your role and what it lets you do, one balance and one library, your own account stays as it
+  is), then "Join Harbour Films" as the one ink action and a quiet "Decline". Joining starts working in the
+  workspace at once, as a switch does; declining takes the row away. (First built as a line of text that
+  sent the person to the web; changed the same day on the owner's review.)
+- **Settings.** The header stays the person. In a workspace a line under it says where they are working
+  and as what ("Working in Northlight Studio · Admin"). Plan and credits shows the workspace's balance and
+  plan under its name, with "Inés's to change" in words when the person isn't the owner; nothing is bought
+  on phones either way. Usage says whether it is everyone's or only theirs. Devices, Preferences, Privacy
+  and Delete account are the person's and don't change.
+- **Library.** In a workspace an item's detail says who made it.
+- **Not on phones:** creating a workspace, inviting, roles, removing, transferring, leaving, and usage by
+  member. Each is on the web.
+
+### 19.3 Build order
+
+iOS, then Android from this spec with the iOS build as a behavioural reference. Each is built and run
+against a mock-only instance, where the development user is an admin of "Northlight Studio", and each
+changed screen is captured in dark and light into `docs/screenshots/mobile/`.
+
+### 19.4 What was built (23 November 2026)
+
+- **Server.** As 19.1. Tests in `apps/web/lib/public-api/operations.test.ts` and
+  `apps/web/lib/devices/sessions.test.ts`. Fixtures captured over HTTP from a mock-only instance as a phone:
+  `list_accounts.json`, `switch_account.json`, `get_me.json` (personal) and `get_me_workspace.json`, with
+  `get_account.json` and `get_usage.json` captured again because their types gained fields with workspaces.
+- **Both apps.** The account tray lists the accounts and switches with one tap; the account button takes the
+  workspace's mark; Settings, Plan and credits, Usage and Library say whose things they show. On iOS the tab
+  view is rebuilt for the new account (`accountEpoch`); on Android the back stack returns to Home and the
+  shared models are cleared and read again. Being removed from a workspace elsewhere is seen at the next
+  `get_me` and handled the same way.
+- **Tests.** iOS: 69 unit tests and 5 UI tests, one of which switches to the workspace and back. Android:
+  unit tests for the same fixtures and words, and an instrumented test for the same switch.
+- **Run on both** against a mock-only instance, signed in as the development user: switched to Northlight
+  Studio and back, with the balance, plan, usage and library changing each time, and a library item naming
+  who made it. Screenshots: `docs/screenshots/mobile/{ios,android}-workspace-{account,settings}-{dark,light}.jpg`
+  and `{ios,android}-workspace-{plan,usage,library,library-item}-dark.jpg`, with
+  `android-account-switcher-dark.jpg` for the tray in the personal account.
+- **Not done, and why.** A member's view (the development user is an admin, and the mock signs in only two
+  people) was not seen on a phone; its words are covered by the role in the code, not by a run. A suspended
+  workspace shows "Suspended" in the tray, but making something in one is refused by the server with a
+  sentence the apps show as a general failure, not a screen of its own.
+- **Two things for whoever tests next.** `xcodebuild` output for this checkout is one of several
+  `DerivedData/Livepeer-*` folders, one per checkout: install from the one whose `info.plist` names this
+  path. The emulator `Medium_Phone_API_37.0` has a PIN and boots locked; `Livepeer_Home_Check` has none.
+- **Invitations (added the same day).** Both apps answer an invitation from the account tray. iOS has a UI
+  test and Android an instrumented test that open the invitation and read it; neither joins or declines,
+  since the mock has one invitation and the next run needs it. Joining and declining were run by hand on
+  both. Screenshots: `{ios,android}-account-invitation-dark.jpg`, `{ios,android}-invitation-{dark,light}.jpg`
+  and `ios-invitation-joined-dark.jpg`.

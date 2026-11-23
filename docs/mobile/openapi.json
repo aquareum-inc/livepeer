@@ -220,6 +220,200 @@
         }
       }
     },
+    "/accounts": {
+      "get": {
+        "operationId": "list_accounts",
+        "summary": "The accounts the person can work in (their own, and the workspaces they belong to, each with their role and its balance), which one is current, and invitations waiting, to answer with accept_invitation or decline_invitation.",
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/invitations/{id}/accept": {
+      "post": {
+        "operationId": "accept_invitation",
+        "summary": "Join the workspace an invitation waiting for the person is for. A native app starts working in it at once. Answers with their accounts as they now stand.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "An invitation id from list_accounts."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/invitations/{id}/decline": {
+      "post": {
+        "operationId": "decline_invitation",
+        "summary": "Decline an invitation waiting for the person. Answers with their accounts, the invitation gone.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "An invitation id from list_accounts."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/current": {
+      "post": {
+        "operationId": "switch_account",
+        "summary": "From a native app: work in another of the person's accounts, their own or a workspace they belong to. Everything the app then reads and makes is that account's.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "account_id": {
+                    "type": "string",
+                    "description": "An account id from list_accounts."
+                  }
+                },
+                "required": [
+                  "account_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/devices": {
       "get": {
         "operationId": "list_devices",
@@ -3213,6 +3407,128 @@
       }
     },
     "schemas": {
+      "AccountList": {
+        "type": "object",
+        "properties": {
+          "current": {
+            "type": "string",
+            "description": "The id of the account every other call acts in."
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountSummary"
+            },
+            "description": "Personal first, then workspaces by name."
+          },
+          "invitations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountInvitation"
+            }
+          },
+          "workspaces_supported": {
+            "type": "boolean",
+            "description": "Whether the provider has workspaces at all. When false there is only ever the personal account."
+          }
+        },
+        "required": [
+          "current",
+          "accounts",
+          "invitations",
+          "workspaces_supported"
+        ],
+        "additionalProperties": false,
+        "description": "The accounts a person can work in from an app, which one they are in, and the invitations waiting for them."
+      },
+      "AccountSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "workspace"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "The workspace's name, or the person's own for their personal account."
+          },
+          "role": {
+            "$ref": "#/components/schemas/WorkspaceRole",
+            "description": "The person's role in it. They are the owner of their personal account."
+          },
+          "credits": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused"
+            ]
+          },
+          "member_count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "role",
+          "credits",
+          "status",
+          "member_count"
+        ],
+        "additionalProperties": false,
+        "description": "An account the signed-in person can work in: their own, or a workspace they belong to."
+      },
+      "WorkspaceRole": {
+        "type": "string",
+        "enum": [
+          "owner",
+          "admin",
+          "member"
+        ]
+      },
+      "AccountInvitation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "workspace_name": {
+            "type": "string"
+          },
+          "invited_by_name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "member"
+            ]
+          },
+          "expires_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_name",
+          "invited_by_name",
+          "role",
+          "expires_at"
+        ],
+        "additionalProperties": false,
+        "description": "An invitation to a workspace, as an app is told of it: what it is for and who sent it, never the link that answers it."
+      },
       "AgentModel": {
         "type": "object",
         "properties": {
@@ -4990,7 +5306,12 @@
             "description": "Whether the person runs this instance. An app offers the console from this; the server still decides every request."
           },
           "balance": {
-            "$ref": "#/components/schemas/CreditBalance"
+            "$ref": "#/components/schemas/CreditBalance",
+            "description": "The balance of the account they are working in."
+          },
+          "account": {
+            "$ref": "#/components/schemas/AccountSummary",
+            "description": "The account they are working in: their own, or a workspace. Everything they see and make is that account's."
           }
         },
         "required": [
@@ -4998,10 +5319,10 @@
           "name",
           "email",
           "role",
-          "balance"
+          "balance",
+          "account"
         ],
-        "additionalProperties": false,
-        "description": "The signed-in user, as the account menu shows them."
+        "additionalProperties": false
       },
       "MediaItem": {
         "type": "object",
