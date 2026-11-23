@@ -553,7 +553,6 @@ struct EngineJob: Codable, Sendable, Hashable {
     }
 }
 
-/// Operator-side types. The engine shapes are as documented in docs/research/engine.md §4.
 enum JobState: String, Codable, Sendable, Hashable, CaseIterable {
     case queued = "queued"
     case running = "running"

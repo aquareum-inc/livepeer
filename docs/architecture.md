@@ -64,7 +64,8 @@ behind one signature, chosen by `DATA_SOURCES` (see `docs/data-sources.md`); `MO
 Results carry their source so dev mode can label screens.
 
 Areas: `discovery`, `jobs`, `generations`, `sessions` (live), `conversations`, `library`, `characters`,
-`keys`, `costs`, `operator.*` (actors, grants, allocations, keys, capabilities, compute, settings, system).
+`keys`, `costs`, `workspaces` (accounts, members, invitations), `operator.*` (actors, grants, allocations, keys,
+capabilities, compute, settings, system, workspaces).
 
 Tokens, least powerful first: builder key (user-app calls, from the sealed session), reader token (operator
 reads), admin token (operator writes and sign-up provisioning). All server-side.
@@ -74,10 +75,13 @@ reads), admin token (operator writes and sign-up provisioning). All server-side.
 Uses the engine's terms; not coupled to one provider.
 
 ```
-identity:  getSession, listUsers, getUser, setUserStatus, setUserRole
+identity:   getSession, listUsers, getUser, setUserStatus, setUserRole
 budgets:   listGrants, createGrant, fundGrant, getAllocation, provisionAllocation, topUpAllocation, getBalance
 plans:     listPlans, createPlan, updatePlan, assignPlan, getUserPlan, listCreditPacks
-usage:     listUsage, getUsageSummary
+usage:     listUsage, getUsageSummary, getUsageByMember
+workspaces: list, listForUser, get, create, rename, setStatus, listMembers, setMemberRole, removeMember,
+           transferOwnership, listInvitations, listInvitationsForUser, getInvitation, invite,
+           revokeInvitation, acceptInvitation, declineInvitation
 features:  supports { plans, allowances, invoices, oidc, ... }
 ```
 
@@ -85,33 +89,36 @@ Implementations: `batteries` (budgets and usage live through engine routes; plan
 unsupported) and `mock` in PymtHouse's shape (plans, allowances, invoices, OIDC users). A credit balance is
 the allocation balance converted by the markup rule; a credit pack is a one-off allocation top-up.
 
-## Workspaces (planned, not built)
+## Workspaces
 
-People often share one budget: a studio, an agency, a company. The plan is to make the billing account a
-**workspace** rather than a person.
+People often share one budget: a studio, an agency, a company. A **workspace** is a shared account several
+people belong to, each with a role. The plan, with what was decided and why, is `docs/workspaces.md`; the web
+user app and the web console have it, on mocked data.
 
-- **A workspace is the billing account.** In the provider it is one user (one `externalUserId` in PymtHouse,
-  one actor on the engine), so it owns the allocation (the credit balance), the plan, usage and API keys.
-  None of the provider's or engine's money model changes.
-- **People are members.** Everyone gets a personal workspace at sign-up and can be invited to others, with a
-  role: owner (billing and members), admin (keys and settings) or member (makes video, spends credits). The
-  instance roles `user | operator` stay separate: they are about the instance, not a workspace.
-- **The app acts in one workspace at a time.** The session holds the current workspace and its builder key;
-  switching workspace switches the key. Jobs, the library and usage belong to the workspace, and each job
-  records who ran it.
-- **In the operator console,** Users lists people and the workspaces they belong to, and budgets, plans and
-  top-ups move to the workspace.
+- **A workspace is a billing account.** To the provider it is an account id used wherever a user id is, so it
+  owns an allocation (the credit balance), a plan, usage and API keys; to the engine it is one actor. None of
+  the money model changes and there is no second ledger. A personal account stays what it was, and is not a
+  workspace.
+- **Membership is the provider's.** `provider.workspaces` (`packages/api-client/src/provider/types.ts`) holds
+  workspaces, members with a role (owner, admin, member), and invitations by email. The app stores none of it.
+  The mock implements it in the shape PymtHouse is expected to expose (questions Q18 to Q24 in
+  `docs/engine-requests.md`); Batteries reports `features.workspaces: false`.
+- **The app acts in one account at a time.** The session cookie names the current workspace (`workspaceId`),
+  and `workspaceOf` (`apps/web/lib/api.ts`) asks the provider on every request whether the person still
+  belongs, falling back to their personal account. `createApiClient({ workspaceId })` then reads and charges
+  the workspace's account.
+- **Roles are one rule.** `can(role, action)` in `packages/api-client/src/workspaces.ts`: the owner handles
+  money, admins handle people and keys, members make things. The API client refuses with it (`NotAllowed`) and
+  the screens hide with it. The role is read from the provider on each call, never from the cookie. The
+  instance roles `user | operator` are separate.
+- **What is the workspace's:** credit, plan, usage (each entry names the member or key that ran it), API keys,
+  the library and private characters. Chats are each member's own inside the workspace. Profile, sign-in,
+  devices and preferences stay the person's.
+- **In the operator console,** Workspaces lists them beside Users; suspending one pauses its allocation and
+  leaves its members' own accounts alone.
 
-**What is missing:** membership (who belongs to which workspace, with what role). Neither provider stores
-it today: PymtHouse users, allowances, plans and keys are each one person's, and Clearinghouse has no users
-(provider question Q10 in `docs/engine-requests.md`). If the provider takes it on, the app reads it through
-the provider interface (`identity.listWorkspaces`, `listMembers`, `invite`, `setMemberRole`) like any other
-function. If not, it needs a small store of its own. That holds membership only, never balances, so it isn't
-a second ledger.
-
-**Until then,** every workspace is a personal one with a single member, and nothing in the UI mentions
-workspaces. New code should treat the billing account as the workspace's, not the person's, so adding
-members later doesn't mean renaming it.
+Not built: member spending limits, deleting a workspace, per-seat pricing, the public `/api/v1` operations,
+and the native apps, which work in the personal account only.
 
 ## Auth
 

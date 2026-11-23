@@ -1,6 +1,8 @@
 # Workspaces: plan
 
-Status: **proposed 23 November 2026, waiting for the project owner's approval. Nothing is built.**
+Status: **approved by the project owner on 23 November 2026. The first build (section 8, slices 1 to 5) is
+done on mocked data: the web user app and the web operator console.** Section 9 says what was built and where
+it differs from the plan.
 
 A workspace is a shared account that several people belong to, each with a role, spending from one credit
 balance. This plan settles what it is, then lists what gets built and in what order. It replaces the sketch in
@@ -201,3 +203,39 @@ public `/api/v1` operations, the native apps, and the console on phones.
 three operations (`list_accounts`, `switch_account`, with the device session holding the current account,
 and the current account in `get_me`), a switcher in Settings, and the workspace's name where the balance is
 shown. Managing a workspace (inviting, roles, transfer) would stay on the web, as buying credit does.
+
+## 9. What was built (23 November 2026)
+
+All five slices, as planned, on mocked data behind the provider interface. Where to look:
+
+- Provider interface and mock: `packages/api-client/src/provider/types.ts` (`workspaces`, `usage.getUsageByMember`,
+  `features.workspaces`) and `provider/mock.ts`. Two seeded workspaces: Northlight Studio (owner Inés, with
+  the demo user Adam as an admin) and Harbour Films (which has an invitation waiting for Adam).
+- Role rules: `packages/api-client/src/workspaces.ts`.
+- API client: the functions in section 7, in `packages/api-client/src/index.ts`, all `mock` in the
+  data-source map.
+- Web: the switcher in the account menu, `/settings/workspace`, `/join/<token>`, and role-aware Plan, Usage
+  and API keys. Console: `/operator/workspaces` and `/operator/workspaces/<id>`.
+- Screenshots: `docs/screenshots/` (`account-switcher-*`, `settings-workspace-*`, `settings-usage-workspace-*`,
+  `settings-plan-workspace-*`, `join-workspace-*`, `operator-workspace*`). Design decisions 107 to 113.
+
+Differences from the plan, and things worth knowing:
+
+- **Resend is not its own provider call.** Inviting an address that already has an invitation waiting renews
+  it (same link, new 7 days), so "Resend" is `invite` again.
+- **An invitation link works for whoever holds it,** as long as they are signed in; it is not tied to the
+  invited address in the mock. Whether PymtHouse ties it is part of Q20.
+- **A workspace's API key works in that workspace** when it calls the instance API, with no person behind it,
+  and may only make things. The mock does not yet record usage against keys it issues; the seeded figures
+  show what that will look like.
+- **The mock does not debit a balance when something is made** (it did not before either), so usage and
+  balances are seeded figures and do not move as members work. Top-ups and plan changes do apply.
+- **Personal accounts still share one mock library, cast and key list,** as before this work. Only workspaces
+  were given their own, since that is what switching needed.
+- **Trying it as a second person:** development sign-in offers two people, Adam (user) and Sam (operator).
+  Invite `sam@example.test` from a workspace, sign in as the operator, and the invitation is in Sam's account
+  menu.
+- **Added to shared types, so the generated mobile models changed** (regenerated, never edited by hand):
+  `UsageEntry.member_id` and `key_id`, `MediaItem.made_by`, `ApiKey.created_by`, and
+  `ProviderFeatures.workspaces`. The apps read none of them yet.
+

@@ -4220,8 +4220,7 @@
           "succeeded",
           "failed",
           "uncertain"
-        ],
-        "description": "Operator-side types. The engine shapes are as documented in docs/research/engine.md §4."
+        ]
       },
       "JobAttempt": {
         "type": "object",

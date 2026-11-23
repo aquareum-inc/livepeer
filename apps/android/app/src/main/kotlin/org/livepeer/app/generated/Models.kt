@@ -488,7 +488,6 @@ data class EngineJob(
     @SerialName("completed_at") val completedAt: String? = null,
 )
 
-/** Operator-side types. The engine shapes are as documented in docs/research/engine.md §4. */
 @Serializable(with = JobState.Serializer::class)
 enum class JobState(val value: String) {
     Queued("queued"),

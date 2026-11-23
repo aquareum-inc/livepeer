@@ -43,6 +43,33 @@ This table covers what is built so far. The full client is specified in `docs/ar
 | `startCall`, `endCall` | mock | `POST /v1/sessions` against a real-time character capability | builder key | Sessions return 501; no avatar capability on the network. | Planned, after live sessions |
 | `listExampleApps` | mock | Instance content | — | Instance-owned. | Not on mobile |
 
+## Workspaces (23 November 2026)
+
+Shared accounts, on mocked data until PymtHouse has them (`docs/workspaces.md`; questions Q18 to Q24 in
+`docs/engine-requests.md`). Every function goes through the provider interface's `workspaces` area, so each
+switches to live when that provider is connected. The person's role is read from the provider on every call
+and checked with `can()` in `packages/api-client/src/workspaces.ts`.
+
+| Function | Source | Endpoint (used or planned) | Token | Blocked by | Mobile |
+|----------|--------|----------------------------|-------|------------|--------|
+| `listAccounts` | mock, through the provider interface | `workspaces.listForUser`, `workspaces.listInvitationsForUser`, `budgets.getAllocation` per account | session | Q18, Q19 | Not on mobile: a phone works in the Personal account only (`docs/workspaces.md` §8) |
+| `createWorkspace`, `renameWorkspace` | mock, through the provider interface | `workspaces.create`, `workspaces.rename` | session | Q18 | Not on mobile |
+| `getWorkspace` | mock, through the provider interface | `workspaces.get`, `listMembers`, `listInvitations`, `usage.getUsageByMember` | session | Q19, Q21 | Not on mobile |
+| `inviteMember`, `revokeInvitation`, `getInvitation`, `acceptInvitation`, `declineInvitation` | mock, through the provider interface | `workspaces.invite`, `revokeInvitation`, `getInvitation`, `acceptInvitation`, `declineInvitation` | session | Q20. The mock sends no email; the invitation's link is copied from the page. | Not on mobile |
+| `setMemberRole`, `removeMember`, `leaveWorkspace`, `transferOwnership` | mock, through the provider interface | `workspaces.setMemberRole`, `removeMember`, `transferOwnership` | session | Q19 | Not on mobile |
+| `getMemberUsage` | mock, through the provider interface | `usage.getUsageByMember` | session | Q21, and the engine recording who a job was run for (R10) | Not on mobile |
+
+In a workspace the existing account functions act on the workspace's account id instead of the person's:
+`getCreditBalance`, `getAccount`, `buyCreditPack`, `buyCredits`, `changePlan` (owner only), `getUsage` (a
+member sees their own entries), and `listApiKeys`, `createApiKey`, `revokeApiKey` (owner and admins). The mock
+library, characters, conversations and keys are kept per account: a workspace's library and private characters
+are shared by its members, its chats are each member's own, and a personal account keeps what it had. An API
+key made in a workspace calls the instance API in that workspace (`verifyApiKey` answers with its
+`workspace_id`).
+
+The session cookie names the current workspace (`workspaceId`); `workspaceOf` in `apps/web/lib/api.ts` asks
+the provider whether the person still belongs on every request.
+
 ## Operator console (slice f)
 
 The map is `OPERATOR_DATA_SOURCES` in `packages/api-client/src/operator/index.ts`; the System page shows it.
@@ -66,6 +93,7 @@ Reads use `ENGINE_READER_TOKEN`; writes use `ENGINE_ADMIN_TOKEN`.
 | `listPayments`, `refundPayment`, `getBillingSettings`, `updateBillingSettings` | mock | provider or card processor | — | Who collects payment is open question Q2. |
 | `getCapabilitySetting`, `updateCapabilitySetting` | live (instance config) | `instance.config.json`, through the `CapabilityStore`: switched off is an exact entry in `capabilities.block`, where it appears is `capabilities.overrides[app].surfaces`, markup is `pricing.markup.perApp[app]` | — | Users are served and priced from the same file, so a change applies on their next request. |
 | Provider: grants, allocations, plans, credit packs (list, create, edit), usage, users | per `payments.provider` | see the provider interface | reader / admin | `mock` by default; `batteries` reads allocations and grants through the engine. |
+| `listWorkspaces`, `getWorkspace`, `setWorkspaceStatus` | mock | `provider.workspaces.list`, `get`, `listMembers`, `listInvitations`, `setStatus`, with `budgets.getAllocation`, `plans.getUserPlan` and `usage.getUsageByMember` for each | reader / admin | Blocked by Q18 to Q24. A workspace's plan and top-up use the same provider functions as a user's, given the workspace's id. Invitation links are never sent to the console. |
 | Instance settings | real | writes `instance.config.json`, validated | — | Read-only when the file is mounted read-only (the Compose bundle). |
 | Doctor | real | probes engine and tokens | reader, admin | Same checks as `livepeer doctor`. |
 

@@ -142,12 +142,22 @@ export function WorkspaceSettings({ detail, rename, invite, revokeInvitation, se
                   <span className="truncate">{member.name}</span>
                   {member.user_id === viewer_id ? <span className="shrink-0 text-caption font-normal text-subtle-foreground">You</span> : null}
                 </p>
-                <p className="mt-0.5 truncate text-caption text-muted-foreground">
-                  {member.email ?? "No email"}
-                  {usage(member) ? <span className="font-mono text-[11px] text-subtle-foreground"> · {usage(member)}</span> : null}
+                {/* On a phone the usage takes its own line, so neither it nor the address is cut short. */}
+                <p className="mt-0.5 text-caption text-muted-foreground sm:truncate">
+                  <span className="block truncate sm:inline">
+                    <span className="font-medium text-foreground sm:hidden">{ROLE_LABEL[member.role]} · </span>
+                    {member.email ?? "No email"}
+                  </span>
+                  {usage(member) ? (
+                    <span className="block whitespace-nowrap font-mono text-[11px] text-subtle-foreground sm:inline">
+                      <span className="hidden sm:inline"> · </span>
+                      {usage(member)}
+                    </span>
+                  ) : null}
                 </p>
               </div>
-              <Badge tone={member.role === "owner" ? "live" : "neutral"} className="shrink-0">{ROLE_LABEL[member.role]}</Badge>
+              {/* The role is a badge where there is room, and leads the second line on a phone. */}
+              <Badge tone={member.role === "owner" ? "live" : "neutral"} className="hidden shrink-0 sm:inline-flex">{ROLE_LABEL[member.role]}</Badge>
               {manageable(member) ? (
                 <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setManaging({ userId: member.user_id, step: "manage" })}>Manage</Button>
               ) : null}
