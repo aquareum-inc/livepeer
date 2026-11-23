@@ -79,45 +79,59 @@ struct Composer: View {
             .padding(.horizontal, 10)
             .padding(.top, 8)
             .padding(.bottom, 4)
-            // The placeholder can wrap past the field's one line; a tap anywhere on it starts typing.
+            // Any part of the composer that isn't a control starts typing, as a text field would.
             .contentShape(Rectangle())
             .onTapGesture { focused.wrappedValue = true }
 
             // Everything besides words sits under them, as on the web: what to add on the left, send on the right.
-            HStack(spacing: 4) {
-                tool("plus", label: "Attach from your library", action: choices.attach)
-                if choices.casting {
-                    // A portrait in a frame: the character's portrait becomes the first frame of the shot.
-                    tool(draft.cast == nil ? "person.crop.square" : "person.crop.square.fill", label: "Put a character in it", on: draft.cast != nil, action: choices.castCharacter)
-                }
-                if choices.models.count >= 2 { modelMenu }
-                // Parameters appear with intent: only once the request is a video.
-                if draft.isVideo {
-                    Menu {
-                        Picker("Shape", selection: $draft.aspect) {
-                            ForEach(Self.aspects, id: \.self) { Text($0).tag($0) }
-                        }
-                    } label: {
-                        parameter(draft.aspect)
-                    }
-                    .accessibilityLabel("Shape, \(draft.aspect)")
-                    Menu {
-                        Picker("Length", selection: $draft.durationSeconds) {
-                            ForEach(Self.durations, id: \.self) { Text("\(Int($0)) seconds").tag($0) }
-                        }
-                    } label: {
-                        parameter("\(Int(draft.durationSeconds))s")
-                    }
-                    .accessibilityLabel("Length, \(Int(draft.durationSeconds)) seconds")
-                }
-                Spacer(minLength: 0)
-                sendButton
+            // When the row can't hold it all, at a large text size or with a long model name, the model
+            // menu drops to its mark alone rather than anything being cut off.
+            ViewThatFits(in: .horizontal) {
+                tools(modelNamed: true)
+                tools(modelNamed: false)
             }
         }
         .animation(motion(.morph), value: draft.isVideo)
         .animation(motion(.morph), value: draft.attachments.count + (draft.cast == nil ? 0 : 1))
         .padding(8)
         .glass(in: RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous))
+    }
+
+    private func tools(modelNamed: Bool) -> some View {
+        HStack(spacing: 0) {
+            tool("plus", label: "Attach from your library", action: choices.attach)
+            if choices.casting {
+                // A portrait in a frame: the character's portrait becomes the first frame of the shot.
+                tool(draft.cast == nil ? "person.crop.square" : "person.crop.square.fill", label: "Put a character in it", on: draft.cast != nil, action: choices.castCharacter)
+            }
+            if choices.models.count >= 2 { modelMenu(named: modelNamed) }
+            // Parameters appear with intent: only once the request is a video.
+            if draft.isVideo {
+                Menu {
+                    Picker("Shape", selection: $draft.aspect) {
+                        ForEach(Self.aspects, id: \.self) { Text($0).tag($0) }
+                    }
+                } label: {
+                    parameter(draft.aspect)
+                }
+                .accessibilityLabel("Shape, \(draft.aspect)")
+                Menu {
+                    Picker("Length", selection: $draft.durationSeconds) {
+                        ForEach(Self.durations, id: \.self) { Text("\(Int($0)) seconds").tag($0) }
+                    }
+                } label: {
+                    parameter("\(Int(draft.durationSeconds))s")
+                }
+                .accessibilityLabel("Length, \(Int(draft.durationSeconds)) seconds")
+            }
+            Color.clear
+                .frame(minWidth: 4, maxWidth: .infinity)
+                .frame(height: 44)
+                .contentShape(Rectangle())
+                .onTapGesture { focused.wrappedValue = true }
+                .accessibilityHidden(true)
+            sendButton
+        }
     }
 
     /// What to write, given what has been added: a cast asks for a scene, an attachment for a question.
@@ -137,7 +151,7 @@ struct Composer: View {
             Image(systemName: symbol)
                 .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(on ? palette.foreground : palette.mutedForeground)
-                .frame(width: 38, height: 44)
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle(round: true))
@@ -145,7 +159,7 @@ struct Composer: View {
     }
 
     /// Which language model runs the agent. It names the one chosen, so nothing else has to.
-    private var modelMenu: some View {
+    private func modelMenu(named: Bool) -> some View {
         Menu {
             Picker("Model", selection: $draft.model) {
                 Text("Auto").tag(String?.none)
@@ -164,12 +178,14 @@ struct Composer: View {
                     .stroke(style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
                     .frame(width: 20, height: 20)
                     .accessibilityHidden(true)
-                Text(chosenModel?.name ?? "Auto").text(.caption, weight: .medium).lineLimit(1)
+                if named {
+                    Text(chosenModel?.name ?? "Auto").text(.caption, weight: .medium).lineLimit(1).fixedSize()
+                }
                 Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
             }
             .foregroundStyle(chosenModel == nil ? palette.mutedForeground : palette.foreground)
-            .padding(.horizontal, 6)
-            .frame(minHeight: 44)
+            .padding(.horizontal, 8)
+            .frame(minWidth: 44, minHeight: 44)
             .contentShape(Rectangle())
         }
         .accessibilityLabel("Model, \(chosenModel?.name ?? "Auto")")
@@ -241,6 +257,8 @@ struct Composer: View {
         }
         .buttonStyle(PressStyle(round: true))
         .disabled(!ready)
+        // With a keyboard attached, Return adds a line and Command-Return sends.
+        .keyboardShortcut(.return, modifiers: .command)
         .sensoryFeedback(.impact(weight: .light), trigger: sending) { _, now in now }
         .accessibilityLabel(sending ? "Sending" : "Send")
     }
@@ -255,6 +273,10 @@ struct Composer: View {
             .frame(minHeight: 32)
             .background(palette.hover, in: Capsule())
             .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
+            // The pill is 32 tall; what answers a touch is 44, with a little room either side.
+            .padding(.horizontal, 3)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
             .transition(.scale(scale: 0.9).combined(with: .opacity))
     }
 }

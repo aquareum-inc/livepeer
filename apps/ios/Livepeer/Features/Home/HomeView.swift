@@ -113,20 +113,24 @@ struct HomeView: View {
                 .transition(.opacity.combined(with: .offset(y: 6)))
             }
 
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    ForEach(model.starters, id: \.id) { starter in
-                        Chip(label: starter.label, symbol: Self.starterSymbols[starter.id] ?? "film", selected: model.openStarter == starter.id) {
-                            withAnimation(motion(.morph)) { model.toggle(starter) }
+            // Starting points are for a blank page: once there are words they step aside for them.
+            if model.draft.prompt.isEmpty || model.openStarter != nil {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        ForEach(model.starters, id: \.id) { starter in
+                            Chip(label: starter.label, symbol: Self.starterSymbols[starter.id] ?? "film", selected: model.openStarter == starter.id) {
+                                withAnimation(motion(.morph)) { model.toggle(starter) }
+                            }
+                            .accessibilityHint("Shows example requests")
                         }
-                        .accessibilityHint("Shows example requests")
                     }
+                    .padding(.horizontal, Composer.inset)
                 }
-                .padding(.horizontal, Composer.inset)
+                .scrollIndicators(.hidden)
+                .scrollClipDisabled() // The chips' shadows fall outside the row.
+                .padding(.horizontal, -Composer.inset)
+                .transition(.opacity)
             }
-            .scrollIndicators(.hidden)
-            .scrollClipDisabled() // The chips' shadows fall outside the row.
-            .padding(.horizontal, -Composer.inset)
 
             if let error = model.sendError {
                 Text(error).text(.caption).foregroundStyle(palette.destructive).transition(.opacity)
@@ -141,6 +145,7 @@ struct HomeView: View {
             }
             .matchedTransitionSource(id: "composer", in: travel)
         }
+        .animation(motion(.morph), value: model.draft.prompt.isEmpty)
         .padding(.horizontal, Composer.inset)
         .padding(.bottom, 8)
     }
