@@ -3,7 +3,7 @@
 import type { Accounts } from "@livepeer/api-client";
 import { can } from "@livepeer/api-client/workspaces";
 import { Button, Field, Input, Popover, PopoverClose, PopoverContent, PopoverTrigger, RollingNumber, Sheet, cn, useTheme } from "@livepeer/ui";
-import { Check, Coins, LogIn, LogOut, Mail, Moon, Plus, Settings2, ShieldCheck, Sparkles, Sun, UserRound, Users, Wrench, type LucideIcon } from "lucide-react";
+import { Check, Coins, LogIn, LogOut, Moon, Plus, Settings2, ShieldCheck, Sun, UserRound, Users, Wrench, type LucideIcon } from "lucide-react";
 import { useState, useTransition, type FormEvent, type ReactNode } from "react";
 
 import { ROLE_LABEL, WorkspaceMark, count, type Outcome } from "../workspace/shared";
@@ -50,19 +50,34 @@ function Avatar({ account, className }: { account: Account | null; className?: s
   );
 }
 
-const ITEM = "flex h-10 w-full items-center gap-3 rounded-field px-3 text-left text-body text-foreground transition-colors duration-150 hover:bg-hover";
+/**
+ * Every row in the menu has the same shape: a 28px slot on the left, then the words. An account's mark fills
+ * the slot and an icon sits in the middle of it, so marks, icons and labels each keep to one column.
+ */
+const ROW = "flex h-9 w-full items-center gap-2.5 rounded-field px-2 text-left text-body text-foreground transition-colors duration-150 hover:bg-hover";
+const SLOT = "size-7 text-[11px]";
 
-function Item({ href, icon: Icon, tall = false, children }: { href: string; icon: LucideIcon; tall?: boolean; children: ReactNode }) {
+function Lead({ icon: Icon }: { icon: LucideIcon }) {
+  return (
+    <span aria-hidden className="flex size-7 shrink-0 items-center justify-center text-muted-foreground">
+      <Icon className="size-4" strokeWidth={1.75} />
+    </span>
+  );
+}
+
+function Item({ href, icon, children }: { href: string; icon: LucideIcon; children: ReactNode }) {
   const Link = useLink();
   return (
     <PopoverClose asChild>
-      <Link href={href} className={cn(ITEM, tall && "h-12")}>
-        <Icon className="size-4 text-muted-foreground" strokeWidth={1.75} />
+      <Link href={href} className={ROW}>
+        <Lead icon={icon} />
         {children}
       </Link>
     </PopoverClose>
   );
 }
+
+const RULE = <div className="my-1 h-px bg-hairline" />;
 
 /**
  * The account, at the foot of the sidebar: who you are, your credits, and the way to plans,
@@ -72,6 +87,7 @@ export function AccountMenu({ account, switching, expanded = false, signOutActio
   const { credits } = useCredits();
   const { resolved, setPreference } = useTheme();
   const name = account?.name ?? "Guest";
+  const Link = useLink();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [workspaceName, setWorkspaceName] = useState("");
@@ -134,63 +150,48 @@ export function AccountMenu({ account, switching, expanded = false, signOutActio
           ) : null}
         </button>
       </PopoverTrigger>
-      <PopoverContent side={side} align="start" className="w-[280px]">
-        <div className="flex items-center gap-3 px-3 pb-2 pt-2.5">
-          <Avatar account={account} className="size-10 text-body" />
-          <div className="min-w-0">
-            <p className="truncate text-body font-semibold">{name}</p>
-            <p className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
-              {account ? (
-                switching ? (
-                  <span className="truncate font-sans text-caption">{account.email ?? "Signed in"}</span>
-                ) : (
-                  <>
-                    <Coins className="size-3" aria-hidden />
-                    <RollingNumber value={credits} /> credits
-                  </>
-                )
-              ) : (
-                "Sign in to generate and save your work"
-              )}
-            </p>
-          </div>
-        </div>
-
+      <PopoverContent side={side} align="start" className="w-[272px]">
         {account && switching ? (
           <>
-            <div className="my-1 h-px bg-hairline" />
-            <p className="px-3 pb-1 pt-1.5 text-[11px] font-medium text-subtle-foreground">Working in</p>
-            <ul aria-label="Accounts">
+            {/* The accounts are the top of the menu: the person's own first, so it also says who is signed in. */}
+            <ul aria-label="Working in">
               {switching.accounts.accounts.map((entry) => {
                 const selected = entry.id === switching.accounts.current;
                 return (
                   <li key={entry.id}>
-                    <button type="button" aria-current={selected ? "true" : undefined} disabled={pending} onClick={() => switchTo(entry.id)} className={cn(ITEM, "h-12", switchingTo === entry.id && "opacity-60")}>
-                      {entry.kind === "workspace" ? <WorkspaceMark name={entry.name} className="size-7 text-[11px]" /> : <Avatar account={account} className="size-7 text-[10px]" />}
+                    <button type="button" aria-current={selected ? "true" : undefined} disabled={pending} onClick={() => switchTo(entry.id)} className={cn(ROW, "h-11", switchingTo === entry.id && "opacity-60")}>
+                      {entry.kind === "workspace" ? <WorkspaceMark name={entry.name} className={SLOT} /> : <Avatar account={account} className={SLOT} />}
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium">{entry.kind === "workspace" ? entry.name : "Personal"}</span>
-                        <span className="block truncate text-[11px] text-subtle-foreground">
-                          {entry.kind === "workspace" ? `${ROLE_LABEL[entry.role]}${entry.status === "paused" ? " · Suspended" : ""}` : "Only you"}
+                        <span className="block truncate font-medium leading-[18px]">{entry.name}</span>
+                        <span className="block truncate text-[11px] leading-[15px] text-subtle-foreground">
+                          {entry.kind === "workspace" ? `${ROLE_LABEL[entry.role]}${entry.status === "paused" ? " · Suspended" : ""}` : "Personal"}
                         </span>
                       </span>
                       <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{count(selected ? credits : entry.credits)}</span>
-                      <Check className={cn("size-4 shrink-0 text-foreground", selected ? "opacity-100" : "opacity-0")} strokeWidth={2} aria-hidden />
+                      <Check className={cn("size-3.5 shrink-0 text-foreground", selected ? "opacity-100" : "opacity-0")} strokeWidth={2.25} aria-hidden />
                     </button>
                   </li>
                 );
               })}
             </ul>
             {switching.accounts.invitations.map((invitation) => (
-              <Item key={invitation.id} href={`/join/${invitation.token}`} icon={Mail} tall>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">Join {invitation.workspace_name}</span>
-                  <span className="block truncate text-[11px] text-subtle-foreground">Invited by {invitation.invited_by_name}</span>
-                </span>
-              </Item>
+              <PopoverClose asChild key={invitation.id}>
+                <Link href={`/join/${invitation.token}`} className={cn(ROW, "h-11")}>
+                  {/* Dashed: a workspace you don't belong to yet. */}
+                  <span aria-hidden className={cn(SLOT, "inline-flex shrink-0 items-center justify-center rounded-[9px] border border-dashed border-input font-semibold text-muted-foreground")}>
+                    {invitation.workspace_name.trim()[0]?.toUpperCase() ?? "?"}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium leading-[18px]">{invitation.workspace_name}</span>
+                    <span className="block truncate text-[11px] leading-[15px] text-subtle-foreground">Invited by {invitation.invited_by_name}</span>
+                  </span>
+                  <span className="inline-flex h-6 shrink-0 items-center rounded-full bg-secondary px-2.5 text-[11px] font-medium text-secondary-foreground">Join</span>
+                </Link>
+              </PopoverClose>
             ))}
             <button
               type="button"
-              className={ITEM}
+              className={cn(ROW, "text-muted-foreground hover:text-foreground")}
               onClick={() => {
                 setOpen(false);
                 setError(null);
@@ -198,44 +199,67 @@ export function AccountMenu({ account, switching, expanded = false, signOutActio
                 setCreating(true);
               }}
             >
-              <Plus className="size-4 text-muted-foreground" strokeWidth={1.75} />
+              <Lead icon={Plus} />
               Create workspace
             </button>
           </>
-        ) : null}
+        ) : (
+          <div className="flex min-h-11 items-center gap-2.5 px-2 py-1">
+            <Avatar account={account} className={SLOT} />
+            <div className="min-w-0">
+              <p className="truncate text-body font-medium leading-[18px]">{name}</p>
+              <p className="flex items-center gap-1 text-[11px] leading-[15px] text-subtle-foreground">
+                {account ? (
+                  <span className="flex items-center gap-1 font-mono">
+                    <Coins className="size-3" aria-hidden />
+                    <RollingNumber value={credits} /> credits
+                  </span>
+                ) : (
+                  "Sign in to generate and save your work"
+                )}
+              </p>
+            </div>
+          </div>
+        )}
 
         {account ? (
           <>
-            <div className="my-1 h-px bg-hairline" />
-            {!current || can(current.role, "manage_billing") ? <Item href="/settings/plan" icon={Coins}>Add credits</Item> : null}
-            <Item href="/settings/plan" icon={Sparkles}>Plan</Item>
+            {RULE}
+            {/* One page holds both, so one row leads to it. Only someone who can buy is offered credits by name. */}
+            <Item href="/settings/plan" icon={Coins}>{!current || can(current.role, "manage_billing") ? "Plan and credits" : "Plan"}</Item>
             {workspace ? <Item href="/settings/workspace" icon={Users}>Members</Item> : null}
-            <div className="my-1 h-px bg-hairline" />
             <Item href="/settings" icon={Settings2}>Settings</Item>
             <Item href="/settings/privacy" icon={ShieldCheck}>Who can see what</Item>
             {account.role === "operator" && consoleAvailable ? <Item href="/operator" icon={Wrench}>Operator console</Item> : null}
           </>
         ) : null}
 
-        <div className="my-1 h-px bg-hairline" />
-        <button type="button" className={ITEM} onClick={() => setPreference(resolved === "dark" ? "light" : "dark")}>
-          {resolved === "dark" ? <Sun className="size-4 text-muted-foreground" strokeWidth={1.75} /> : <Moon className="size-4 text-muted-foreground" strokeWidth={1.75} />}
-          {resolved === "dark" ? "Light theme" : "Dark theme"}
-        </button>
-        <div className="my-1 h-px bg-hairline" />
-        {account ? (
-          <form action={signOutAction} method="post">
-            <button type="submit" className={ITEM}>
-              <LogOut className="size-4 text-muted-foreground" strokeWidth={1.75} />
-              Sign out
-            </button>
-          </form>
-        ) : (
-          <a href={signInHref} className={ITEM}>
-            <LogIn className="size-4 text-muted-foreground" strokeWidth={1.75} />
-            Sign in or sign up
-          </a>
-        )}
+        {RULE}
+        {/* Leaving and the theme share the last row: the theme is a glance-and-tap control, not a destination. */}
+        <div className="flex items-center gap-1">
+          {account ? (
+            <form action={signOutAction} method="post" className="min-w-0 flex-1">
+              <button type="submit" className={ROW}>
+                <Lead icon={LogOut} />
+                Sign out
+              </button>
+            </form>
+          ) : (
+            <a href={signInHref} className={cn(ROW, "min-w-0 flex-1")}>
+              <Lead icon={LogIn} />
+              Sign in or sign up
+            </a>
+          )}
+          <button
+            type="button"
+            aria-label={resolved === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            title={resolved === "dark" ? "Light theme" : "Dark theme"}
+            onClick={() => setPreference(resolved === "dark" ? "light" : "dark")}
+            className="flex size-9 shrink-0 items-center justify-center rounded-field text-muted-foreground transition-colors duration-150 hover:bg-hover hover:text-foreground"
+          >
+            {resolved === "dark" ? <Sun className="size-4" strokeWidth={1.75} /> : <Moon className="size-4" strokeWidth={1.75} />}
+          </button>
+        </div>
       </PopoverContent>
     </Popover>
 
