@@ -10,7 +10,6 @@ final class HomeModel {
     /// Why the last send didn't go through, in words for the user.
     var sendError: String?
     var draft = Draft()
-    var openStarter: String?
     private let api: API
 
     init(api: API) { self.api = api }
@@ -25,37 +24,34 @@ final class HomeModel {
         }
     }
 
-    /// Opens or closes a starting point. It reveals examples; it never sends.
-    func toggle(_ starter: PromptStarter) {
-        let closing = openStarter == starter.id
-        openStarter = closing ? nil : starter.id
-        if !closing { draft.app = starter.app }
-    }
-
-    /// Puts an example's words in the composer, ready to edit.
-    func fill(_ prompt: String, app: String) {
-        draft.prompt = prompt
-        draft.app = app
-        openStarter = nil
+    /// Starts a conversation from a starting point. Its name is the whole request: the agent asks for
+    /// the rest before it makes anything. What is in the composer stays there.
+    func start(_ starter: PromptStarter) async -> Conversation? {
+        await create(text: starter.label, app: starter.app, attachments: [], cast: nil)
     }
 
     func send() async -> Conversation? {
-        guard draft.canSend, !sending else { return nil }
+        guard draft.canSend else { return nil }
+        let conversation = await create(text: draft.text, app: draft.app, attachments: draft.attachments, cast: draft.cast)
+        if conversation != nil { draft = Draft() }
+        return conversation
+    }
+
+    private func create(text: String, app: String?, attachments: [MediaItem], cast: CharacterCast?) async -> Conversation? {
+        guard !sending else { return nil }
         sending = true
         sendError = nil
         defer { sending = false }
         do {
-            let conversation = try await api.createConversation(
-                text: draft.text,
-                app: draft.app,
+            return try await api.createConversation(
+                text: text,
+                app: app,
                 aspect: draft.aspect,
                 durationSeconds: draft.durationSeconds,
-                attachmentIds: draft.attachments.isEmpty ? nil : draft.attachments.map(\.id),
+                attachmentIds: attachments.isEmpty ? nil : attachments.map(\.id),
                 agentModel: draft.model,
-                characterSlug: draft.cast?.slug
+                characterSlug: cast?.slug
             )
-            draft = Draft()
-            return conversation
         } catch let error as APIError where error.isSignedOut {
             sendError = "Sign in to send a request."
         } catch {

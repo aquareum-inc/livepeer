@@ -86,42 +86,25 @@ struct HomeView: View {
         }
     }
 
+    /// A starting point is sent as it is, and the agent asks for the rest in the conversation it opens.
+    private func start(_ starter: PromptStarter) {
+        Task {
+            guard await account.requireSignIn("Sign in to start a conversation.") else { return }
+            if let conversation = await model.start(starter) { open(conversation) }
+        }
+    }
+
     /// The foot of the page, in the thumb's reach: starting points, then the composer, where it also
     /// sits in a conversation.
     private var dock: some View {
         VStack(spacing: 10) {
-            if let starter = model.starters.first(where: { $0.id == model.openStarter }) {
-                VStack(spacing: 0) {
-                    ForEach(starter.examples, id: \.self) { example in
-                        Button {
-                            withAnimation(motion(.morph)) { model.fill(example, app: starter.app) }
-                            composing = true
-                        } label: {
-                            Text(example)
-                                .text(.body)
-                                .foregroundStyle(palette.mutedForeground)
-                                .multilineTextAlignment(.leading)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 12)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(PressStyle())
-                        .accessibilityHint("Puts this in the composer")
-                    }
-                }
-                .transition(.opacity.combined(with: .offset(y: 6)))
-            }
-
             // Starting points are for a blank page: once there are words they step aside for them.
-            if model.draft.prompt.isEmpty || model.openStarter != nil {
+            if model.draft.prompt.isEmpty {
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
                         ForEach(model.starters, id: \.id) { starter in
-                            Chip(label: starter.label, symbol: Self.starterSymbols[starter.id] ?? "film", selected: model.openStarter == starter.id) {
-                                withAnimation(motion(.morph)) { model.toggle(starter) }
-                            }
-                            .accessibilityHint("Shows example requests")
+                            Chip(label: starter.label, symbol: Self.starterSymbols[starter.id] ?? "film") { start(starter) }
+                                .accessibilityHint("Starts a conversation")
                         }
                     }
                     .padding(.horizontal, Composer.inset)
@@ -129,6 +112,7 @@ struct HomeView: View {
                 .scrollIndicators(.hidden)
                 .scrollClipDisabled() // The chips' shadows fall outside the row.
                 .padding(.horizontal, -Composer.inset)
+                .disabled(model.sending)
                 .transition(.opacity)
             }
 

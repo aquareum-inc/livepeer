@@ -13,6 +13,7 @@ in `apps/web/lib/public-api/operations.ts`.
 | Home | Load starting points | `listPromptStarters` | Built (iOS sample) |
 | Home | Load example gallery | `listShowcase` | Not on iOS (decision 102); Android until it follows |
 | Home | Send a request | `createConversation` | Built (iOS sample) |
+| Home | Start from a starting point (mobile: its name is sent and the agent asks for the rest) | `createConversation` | Built on iOS (decision 103); Android until it follows opens examples |
 | Shell | List recent conversations (open sidebar) | `listConversations` | Built (slice 2): History, from Home, with search by title |
 | Chat | Open a conversation | `getConversation` | Built (iOS sample); from History by its id in slice 2 |
 | Chat | Send a follow-up | `sendMessage` | Built (iOS sample) |
