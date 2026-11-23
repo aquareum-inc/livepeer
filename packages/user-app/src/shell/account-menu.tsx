@@ -1,9 +1,12 @@
 "use client";
 
-import { Popover, PopoverClose, PopoverContent, PopoverTrigger, RollingNumber, cn, useTheme } from "@livepeer/ui";
-import { Coins, LogIn, LogOut, Moon, Settings2, ShieldCheck, Sparkles, Sun, UserRound, Wrench, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import type { Accounts } from "@livepeer/api-client";
+import { can } from "@livepeer/api-client/workspaces";
+import { Button, Field, Input, Popover, PopoverClose, PopoverContent, PopoverTrigger, RollingNumber, Sheet, cn, useTheme } from "@livepeer/ui";
+import { Check, Coins, LogIn, LogOut, Mail, Moon, Plus, Settings2, ShieldCheck, Sparkles, Sun, UserRound, Users, Wrench, type LucideIcon } from "lucide-react";
+import { useState, useTransition, type FormEvent, type ReactNode } from "react";
 
+import { ROLE_LABEL, WorkspaceMark, count, type Outcome } from "../workspace/shared";
 import { useCredits } from "./credits";
 import { useLink } from "./link";
 
@@ -13,9 +16,17 @@ export interface Account {
   role: "user" | "operator";
 }
 
+/** The accounts the person can work in, and how to move between them. Null where the provider has no workspaces. */
+export interface AccountSwitching {
+  accounts: Accounts;
+  switchAccount: (accountId: string) => Promise<void>;
+  createWorkspace: (name: string) => Promise<Outcome>;
+}
+
 export interface AccountMenuProps {
   /** The signed-in person, or null for a guest. */
   account: Account | null;
+  switching: AccountSwitching | null;
   /** Shows the name and balance beside the avatar (the open sidebar). */
   expanded?: boolean;
   /** Where the sign-out form posts. */
@@ -41,11 +52,11 @@ function Avatar({ account, className }: { account: Account | null; className?: s
 
 const ITEM = "flex h-10 w-full items-center gap-3 rounded-field px-3 text-left text-body text-foreground transition-colors duration-150 hover:bg-hover";
 
-function Item({ href, icon: Icon, children }: { href: string; icon: LucideIcon; children: ReactNode }) {
+function Item({ href, icon: Icon, tall = false, children }: { href: string; icon: LucideIcon; tall?: boolean; children: ReactNode }) {
   const Link = useLink();
   return (
     <PopoverClose asChild>
-      <Link href={href} className={ITEM}>
+      <Link href={href} className={cn(ITEM, tall && "h-12")}>
         <Icon className="size-4 text-muted-foreground" strokeWidth={1.75} />
         {children}
       </Link>
@@ -57,13 +68,44 @@ function Item({ href, icon: Icon, children }: { href: string; icon: LucideIcon; 
  * The account, at the foot of the sidebar: who you are, your credits, and the way to plans,
  * settings and sign-out. A guest gets the same place, with a way to sign in.
  */
-export function AccountMenu({ account, expanded = false, signOutAction, signInHref, consoleAvailable, side = "top" }: AccountMenuProps) {
+export function AccountMenu({ account, switching, expanded = false, signOutAction, signInHref, consoleAvailable, side = "top" }: AccountMenuProps) {
   const { credits } = useCredits();
   const { resolved, setPreference } = useTheme();
   const name = account?.name ?? "Guest";
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [switchingTo, setSwitchingTo] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const current = switching?.accounts.accounts.find((entry) => entry.id === switching.accounts.current) ?? null;
+  const workspace = current?.kind === "workspace" ? current : null;
+
+  const switchTo = (accountId: string) => {
+    if (!switching || accountId === switching.accounts.current) return setOpen(false);
+    setSwitchingTo(accountId);
+    startTransition(async () => {
+      await switching.switchAccount(accountId);
+      setSwitchingTo(null);
+      setOpen(false);
+    });
+  };
+
+  const create = (event: FormEvent) => {
+    event.preventDefault();
+    if (!switching) return;
+    setError(null);
+    startTransition(async () => {
+      // On success the action moves to the new workspace's settings, so only a refusal comes back.
+      const result = await switching.createWorkspace(workspaceName);
+      if (result && !result.ok) setError(result.error);
+      else setCreating(false);
+    });
+  };
 
   return (
-    <Popover>
+    <>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -80,7 +122,8 @@ export function AccountMenu({ account, expanded = false, signOutAction, signInHr
               <span className="flex items-center gap-1 font-mono text-[11px] text-subtle-foreground">
                 {account ? (
                   <>
-                    <Coins className="size-3" aria-hidden />
+                    {workspace ? <span className="min-w-0 truncate font-sans text-[12px]">{workspace.name} ·</span> : null}
+                    <Coins className="size-3 shrink-0" aria-hidden />
                     <RollingNumber value={credits} />
                   </>
                 ) : (
@@ -98,10 +141,14 @@ export function AccountMenu({ account, expanded = false, signOutAction, signInHr
             <p className="truncate text-body font-semibold">{name}</p>
             <p className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
               {account ? (
-                <>
-                  <Coins className="size-3" aria-hidden />
-                  <RollingNumber value={credits} /> credits
-                </>
+                switching ? (
+                  <span className="truncate font-sans text-caption">{account.email ?? "Signed in"}</span>
+                ) : (
+                  <>
+                    <Coins className="size-3" aria-hidden />
+                    <RollingNumber value={credits} /> credits
+                  </>
+                )
               ) : (
                 "Sign in to generate and save your work"
               )}
@@ -109,11 +156,60 @@ export function AccountMenu({ account, expanded = false, signOutAction, signInHr
           </div>
         </div>
 
+        {account && switching ? (
+          <>
+            <div className="my-1 h-px bg-hairline" />
+            <p className="px-3 pb-1 pt-1.5 text-[11px] font-medium text-subtle-foreground">Working in</p>
+            <ul aria-label="Accounts">
+              {switching.accounts.accounts.map((entry) => {
+                const selected = entry.id === switching.accounts.current;
+                return (
+                  <li key={entry.id}>
+                    <button type="button" aria-current={selected ? "true" : undefined} disabled={pending} onClick={() => switchTo(entry.id)} className={cn(ITEM, "h-12", switchingTo === entry.id && "opacity-60")}>
+                      {entry.kind === "workspace" ? <WorkspaceMark name={entry.name} className="size-7 text-[11px]" /> : <Avatar account={account} className="size-7 text-[10px]" />}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{entry.kind === "workspace" ? entry.name : "Personal"}</span>
+                        <span className="block truncate text-[11px] text-subtle-foreground">
+                          {entry.kind === "workspace" ? `${ROLE_LABEL[entry.role]}${entry.status === "paused" ? " · Suspended" : ""}` : "Only you"}
+                        </span>
+                      </span>
+                      <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{count(selected ? credits : entry.credits)}</span>
+                      <Check className={cn("size-4 shrink-0 text-foreground", selected ? "opacity-100" : "opacity-0")} strokeWidth={2} aria-hidden />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {switching.accounts.invitations.map((invitation) => (
+              <Item key={invitation.id} href={`/join/${invitation.token}`} icon={Mail} tall>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">Join {invitation.workspace_name}</span>
+                  <span className="block truncate text-[11px] text-subtle-foreground">Invited by {invitation.invited_by_name}</span>
+                </span>
+              </Item>
+            ))}
+            <button
+              type="button"
+              className={ITEM}
+              onClick={() => {
+                setOpen(false);
+                setError(null);
+                setWorkspaceName("");
+                setCreating(true);
+              }}
+            >
+              <Plus className="size-4 text-muted-foreground" strokeWidth={1.75} />
+              Create workspace
+            </button>
+          </>
+        ) : null}
+
         {account ? (
           <>
             <div className="my-1 h-px bg-hairline" />
-            <Item href="/settings/plan" icon={Coins}>Add credits</Item>
+            {!current || can(current.role, "manage_billing") ? <Item href="/settings/plan" icon={Coins}>Add credits</Item> : null}
             <Item href="/settings/plan" icon={Sparkles}>Plan</Item>
+            {workspace ? <Item href="/settings/workspace" icon={Users}>Members</Item> : null}
             <div className="my-1 h-px bg-hairline" />
             <Item href="/settings" icon={Settings2}>Settings</Item>
             <Item href="/settings/privacy" icon={ShieldCheck}>Who can see what</Item>
@@ -142,5 +238,21 @@ export function AccountMenu({ account, expanded = false, signOutAction, signInHr
         )}
       </PopoverContent>
     </Popover>
+
+    <Sheet
+      open={creating}
+      onOpenChange={setCreating}
+      title="Create a workspace"
+      description="A shared account for a team: one credit balance, one library, and a role for each person. Your personal account stays as it is."
+    >
+      <form onSubmit={create} className="flex flex-col gap-4">
+        <Field label="Name" hint="Usually your team's or company's name. You can change it later.">
+          <Input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} placeholder="Northlight Studio" minLength={2} maxLength={48} autoFocus required />
+        </Field>
+        {error ? <p role="alert" className="text-caption text-destructive">{error}</p> : null}
+        <Button type="submit" variant="primary" disabled={pending || workspaceName.trim().length < 2}>{pending ? "Creating…" : "Create workspace"}</Button>
+      </form>
+    </Sheet>
+    </>
   );
 }

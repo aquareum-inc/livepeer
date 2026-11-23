@@ -1298,6 +1298,8 @@ data class ProviderFeatures(
     @SerialName("custom_top_up") val customTopUp: Boolean,
     @SerialName("invoices") val invoices: Boolean,
     @SerialName("oidc") val oidc: Boolean,
+    /** Shared accounts with members and roles. */
+    @SerialName("workspaces") val workspaces: Boolean,
 )
 
 @Serializable(with = PreferencesDefaultAspect.Serializer::class)
@@ -1514,7 +1516,12 @@ enum class UsageEntryStatus(val value: String) {
 @Serializable
 data class UsageEntry(
     @SerialName("id") val id: String,
+    /** The account that was charged: a person, or a workspace. */
     @SerialName("user_id") val userId: String,
+    /** The person who ran it. On a personal account that is the account's own id; null when an API key ran it. */
+    @SerialName("member_id") val memberId: String? = null,
+    /** The API key that ran it, or null when a person did. */
+    @SerialName("key_id") val keyId: String? = null,
     @SerialName("app") val app: String,
     /** What the network charged. */
     @SerialName("wholesale") val wholesale: Money,

@@ -118,3 +118,8 @@ export function KeysScreen({ initialKeys, create, revoke }: KeysScreenProps) {
     </>
   );
 }
+
+/** In a workspace, for a member: keys spend shared credit, so its owner and admins make them. */
+export function KeysUnavailable({ workspace }: { workspace: string }) {
+  return <EmptyState icon={KeyRound} title="Keys are made by owners and admins" body={`An API key spends ${workspace}'s credit, so only its owner and admins can make or see them. Ask one of them for a key, or switch to your personal account to make your own.`} />;
+}

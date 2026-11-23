@@ -1527,6 +1527,8 @@ struct ProviderFeatures: Codable, Sendable, Hashable {
     var customTopUp: Bool
     var invoices: Bool
     var oidc: Bool
+    /// Shared accounts with members and roles.
+    var workspaces: Bool
 
     enum CodingKeys: String, CodingKey {
         case users
@@ -1537,6 +1539,7 @@ struct ProviderFeatures: Codable, Sendable, Hashable {
         case customTopUp = "custom_top_up"
         case invoices
         case oidc
+        case workspaces
     }
 }
 
@@ -1782,7 +1785,12 @@ enum UsageEntryStatus: String, Codable, Sendable, Hashable, CaseIterable {
 
 struct UsageEntry: Codable, Sendable, Hashable {
     var id: String
+    /// The account that was charged: a person, or a workspace.
     var userId: String
+    /// The person who ran it. On a personal account that is the account's own id; null when an API key ran it.
+    var memberId: String?
+    /// The API key that ran it, or null when a person did.
+    var keyId: String?
     var app: String
     /// What the network charged.
     var wholesale: Money
@@ -1794,6 +1802,8 @@ struct UsageEntry: Codable, Sendable, Hashable {
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "user_id"
+        case memberId = "member_id"
+        case keyId = "key_id"
         case app
         case wholesale
         case credits

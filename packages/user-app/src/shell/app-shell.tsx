@@ -5,7 +5,8 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { motion } from "motion/react";
 import { useCallback, useState, type ComponentType, type ReactNode } from "react";
 
-import { AccountMenu, type Account } from "./account-menu";
+import { AccountProvider } from "./account";
+import { AccountMenu, type Account, type AccountSwitching } from "./account-menu";
 import { LinkProvider, type LinkProps } from "./link";
 import { NAV_ITEMS, isActive } from "./nav";
 import { SIDEBAR_COOKIE } from "./sidebar";
@@ -24,6 +25,8 @@ export interface AppShellProps {
   recents: ReadonlyArray<{ href: string; title: string }>;
   /** The signed-in person, or null for a guest. */
   account: Account | null;
+  /** The accounts the person can work in and how to switch; null for a guest or where there are no workspaces. */
+  switching: AccountSwitching | null;
   signOutAction: string;
   signInHref: string;
   consoleAvailable: boolean;
@@ -61,8 +64,9 @@ function SidebarToggle({ open, onToggle }: { open: boolean; onToggle: () => void
   );
 }
 
-export function AppShell({ brand, pathname, Link, availableRoutes, features, recents, account, signOutAction, signInHref, consoleAvailable, initialOpen, children }: AppShellProps) {
-  const menu = { account, signOutAction, signInHref, consoleAvailable };
+export function AppShell({ brand, pathname, Link, availableRoutes, features, recents, account, switching, signOutAction, signInHref, consoleAvailable, initialOpen, children }: AppShellProps) {
+  const current = switching?.accounts.accounts.find((entry) => entry.id === switching.accounts.current) ?? null;
+  const menu = { account, switching, signOutAction, signInHref, consoleAvailable };
   const items = NAV_ITEMS.filter((item) => (item.href !== "/characters" || features.characters) && (item.href !== "/developers" || features.developers));
   const [open, setOpen] = useState(initialOpen);
 
@@ -79,6 +83,7 @@ export function AppShell({ brand, pathname, Link, availableRoutes, features, rec
   return (
     <BrandProvider brand={brand}>
     <LinkProvider Link={Link}>
+    <AccountProvider account={current}>
     {/* Fades in once when the page loads; the layout persists across navigation, so it doesn't repeat. */}
     <div className="flex h-dvh animate-[fade-in_360ms_var(--ease-out-expo)] overflow-hidden bg-background text-foreground">
       {/* Sidebar (tablet and up): a rail of icons, or open with the wordmark and labels */}
@@ -205,6 +210,7 @@ export function AppShell({ brand, pathname, Link, availableRoutes, features, rec
         </nav>
       </div>
     </div>
+    </AccountProvider>
     </LinkProvider>
     </BrandProvider>
   );
