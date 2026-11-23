@@ -133,4 +133,24 @@ class MainFlowsTest {
         compose.onNode(hasText("Settings")).performClick()
         waitFor(hasText("credits", substring = true, ignoreCase = true), 10)
     }
+
+    @Test
+    fun switchingToAWorkspaceAndBack() {
+        launch(signedIn = true)
+        waitFor(hasContentDescription("Account, ", substring = true))
+        compose.onNode(hasContentDescription("Account, ", substring = true)).performClick()
+        // The development user is an admin of the seeded workspace.
+        waitFor(hasContentDescription("Northlight Studio, workspace", substring = true), 10)
+        compose.onNode(hasContentDescription("Northlight Studio, workspace", substring = true)).performClick()
+
+        // The tray closes, and the account button says where the app is working now.
+        waitFor(hasContentDescription("working in Northlight Studio", substring = true), 10)
+        tab("Library").performClick()
+        waitFor(hasContentDescription(", video", substring = true))
+
+        compose.onNode(hasContentDescription("working in Northlight Studio", substring = true)).performClick()
+        waitFor(hasContentDescription("personal account", substring = true), 10)
+        compose.onNode(hasContentDescription("personal account", substring = true)).performClick()
+        compose.waitUntilDoesNotExist(hasContentDescription("working in Northlight Studio", substring = true), 10_000)
+    }
 }

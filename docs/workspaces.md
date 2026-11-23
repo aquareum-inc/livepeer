@@ -196,13 +196,15 @@ member ran it.
 Screenshots (dark, light, mobile width), design decisions logged and docs kept current after each, as
 `CLAUDE.md` asks.
 
-**Not in the first build:** member limits, deleting a workspace, per-seat pricing, a workspace avatar, the
-public `/api/v1` operations, the native apps, and the console on phones.
+**Not in the first build:** member limits, deleting a workspace, per-seat pricing, a workspace avatar, public
+`/api/v1` operations for managing a workspace, and the console on phones.
 
-**Native apps, later.** Until then a phone works in the Personal account only. When they follow, they need
-three operations (`list_accounts`, `switch_account`, with the device session holding the current account,
-and the current account in `get_me`), a switcher in Settings, and the workspace's name where the balance is
-shown. Managing a workspace (inviting, roles, transfer) would stay on the web, as buying credit does.
+**Native apps (built 23 November 2026, `docs/mobile/plan.md` §19).** A phone switches between the person's
+own account and the workspaces they belong to, from the top of the account tray, and everything it then shows
+and makes is that account's. Three operations carry it: `list_accounts`, `switch_account` (the device session
+record holds the current workspace's id and nothing else) and the current account in `get_me`. Managing a
+workspace (creating one, inviting, roles, transfer, leaving, answering an invitation) stays on the web, as
+buying credit does.
 
 ## 9. What was built (23 November 2026)
 

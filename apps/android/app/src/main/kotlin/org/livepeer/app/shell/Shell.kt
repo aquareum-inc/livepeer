@@ -175,6 +175,20 @@ private fun MainTabs(container: AppContainer, openBrowser: (android.net.Uri) -> 
     // Set when the account tray hands over to the console, which covers the app once it has closed.
     var consoleNext by rememberSaveable { mutableStateOf(false) }
     val me by account.me.collectAsStateWithLifecycle()
+    // A different account is a different app's worth of things: back to Home, and everything is read again.
+    val accountEpoch by account.accountEpoch.collectAsStateWithLifecycle()
+    var seenEpoch by rememberSaveable { mutableStateOf(accountEpoch) }
+    LaunchedEffect(accountEpoch) {
+        if (accountEpoch == seenEpoch) return@LaunchedEffect
+        seenEpoch = accountEpoch
+        navigation.popBackStack(Tab.Home.route, inclusive = false)
+        container.conversations.clear()
+        container.composer.signedOut()
+        container.settings.signedOut()
+        container.studio.switchedAccount()
+        container.composer.load()
+        container.characters.load()
+    }
 
     val tabs = Tab.entries.filter { it != Tab.Characters || description?.content?.characters == true }
     val onTab = tabs.any { tab -> entry?.destination?.route == tab.route }
@@ -236,7 +250,7 @@ private fun MainTabs(container: AppContainer, openBrowser: (android.net.Uri) -> 
                 composable(Tab.Studio.route) { StudioScreen(container.studio, account, accountButton) }
                 composable(Tab.Library.route) {
                     val model = viewModel<LibraryViewModel>(factory = viewModelFactory { initializer { LibraryViewModel(container.api, account) } })
-                    LibraryScreen(model, signIn, accountButton) { conversation ->
+                    LibraryScreen(model, org.livepeer.app.account.AccountWords.workspace(me)?.name, signIn, accountButton) { conversation ->
                         container.conversations[conversation.id] = conversation
                         navigation.navigate("conversation/${conversation.id}")
                     }
@@ -276,7 +290,7 @@ private fun MainTabs(container: AppContainer, openBrowser: (android.net.Uri) -> 
                     val back = { navigation.popBackStack(); Unit }
                     when (SettingsPage.entries.firstOrNull { it.route == entry.arguments?.getString("page") }) {
                         SettingsPage.Plan -> PlanSettingsScreen(container.settings, account, back)
-                        SettingsPage.Usage -> UsageSettingsScreen(container.settings, back)
+                        SettingsPage.Usage -> UsageSettingsScreen(container.settings, account, back)
                         SettingsPage.Preferences -> PreferencesSettingsScreen(container.settings, description?.content?.adultContent == true, back)
                         SettingsPage.Devices -> DevicesSettingsScreen(container.settings, back)
                         SettingsPage.Privacy -> PrivacySettingsScreen(container.settings, back)
@@ -319,7 +333,7 @@ private fun MainTabs(container: AppContainer, openBrowser: (android.net.Uri) -> 
             }, signIn = {
                 signInNext = true
                 close()
-            }) {
+            }, close = close) {
                 settingsNext = true
                 close()
             }

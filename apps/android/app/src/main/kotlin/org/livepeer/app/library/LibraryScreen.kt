@@ -76,6 +76,7 @@ import org.livepeer.app.design.pressable
 import org.livepeer.app.design.style
 import org.livepeer.app.generated.Conversation
 import org.livepeer.app.generated.MediaItem
+import org.livepeer.app.generated.MediaItemSource
 import org.livepeer.app.generated.MediaKind
 import org.livepeer.app.generated.Radius
 import org.livepeer.app.generated.TypeSize
@@ -91,7 +92,7 @@ private fun ratio(item: MediaItem): Float = if (item.kind == MediaKind.Audio) 16
 /** Everything the person has made or added, newest first, searchable by what is in it. A guest sees what the library is for. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LibraryScreen(model: LibraryViewModel, signIn: () -> Unit, accountButton: @Composable () -> Unit, openConversation: (Conversation) -> Unit) {
+fun LibraryScreen(model: LibraryViewModel, workspace: String?, signIn: () -> Unit, accountButton: @Composable () -> Unit, openConversation: (Conversation) -> Unit) {
     val palette = LocalPalette.current
     val state by model.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -127,7 +128,11 @@ fun LibraryScreen(model: LibraryViewModel, signIn: () -> Unit, accountButton: @C
                 state.loading -> Skeleton()
                 state.failed -> LoadFailure("Your library didn't load. Check your connection and try again.", Modifier.fillMaxSize()) { model.retry() }
                 state.items.isEmpty() && state.filtered -> EmptyState(Icons.Rounded.SearchOff, "Nothing matches", "Try describing what's on screen: a place, an action, a colour, a time of day.")
-                state.items.isEmpty() -> EmptyState(Icons.Rounded.AutoAwesomeMosaic, "Your library is empty", "Shots you make on Home or in the studio are saved here.")
+                state.items.isEmpty() -> EmptyState(
+                    Icons.Rounded.AutoAwesomeMosaic,
+                    workspace?.let { "$it's library is empty" } ?: "Your library is empty",
+                    if (workspace == null) "Shots you make on Home or in the studio are saved here." else "Shots anyone here makes on Home or in the studio are saved here, for everyone in the workspace.",
+                )
                 else -> PullToRefreshBox(refreshing, onRefresh = { scope.launch { refreshing = true; model.refresh(); refreshing = false } }) {
                     LazyVerticalStaggeredGrid(
                         StaggeredGridCells.Fixed(2),
@@ -183,6 +188,8 @@ private fun ItemTray(item: MediaItem, model: LibraryViewModel, close: () -> Unit
                 for (tag in item.tags) BasicText(tag, style = TypeSize.Caption.style().copy(color = palette.mutedForeground), modifier = Modifier.background(palette.secondary, CircleShape).padding(horizontal = 8.dp, vertical = 4.dp))
             }
         }
+        // In a workspace's library, who made it.
+        item.madeBy?.let { BasicText("${if (item.source == MediaItemSource.Upload) "Added" else "Made"} by $it", style = TypeSize.Caption.style().copy(color = palette.mutedForeground), modifier = Modifier.padding(top = 4.dp)) }
     }
     PrimaryButton("Open in the studio") {
         close()

@@ -2190,3 +2190,30 @@ credit does.
 iOS, then Android from this spec with the iOS build as a behavioural reference. Each is built and run
 against a mock-only instance, where the development user is an admin of "Northlight Studio", and each
 changed screen is captured in dark and light into `docs/screenshots/mobile/`.
+
+### 19.4 What was built (23 November 2026)
+
+- **Server.** As 19.1. Tests in `apps/web/lib/public-api/operations.test.ts` and
+  `apps/web/lib/devices/sessions.test.ts`. Fixtures captured over HTTP from a mock-only instance as a phone:
+  `list_accounts.json`, `switch_account.json`, `get_me.json` (personal) and `get_me_workspace.json`, with
+  `get_account.json` and `get_usage.json` captured again because their types gained fields with workspaces.
+- **Both apps.** The account tray lists the accounts and switches with one tap; the account button takes the
+  workspace's mark; Settings, Plan and credits, Usage and Library say whose things they show. On iOS the tab
+  view is rebuilt for the new account (`accountEpoch`); on Android the back stack returns to Home and the
+  shared models are cleared and read again. Being removed from a workspace elsewhere is seen at the next
+  `get_me` and handled the same way.
+- **Tests.** iOS: 69 unit tests and 5 UI tests, one of which switches to the workspace and back. Android:
+  unit tests for the same fixtures and words, and an instrumented test for the same switch.
+- **Run on both** against a mock-only instance, signed in as the development user: switched to Northlight
+  Studio and back, with the balance, plan, usage and library changing each time, and a library item naming
+  who made it. Screenshots: `docs/screenshots/mobile/{ios,android}-workspace-{account,settings}-{dark,light}.jpg`
+  and `{ios,android}-workspace-{plan,usage,library,library-item}-dark.jpg`, with
+  `android-account-switcher-dark.jpg` for the tray in the personal account.
+- **Not done, and why.** A member's view (the development user is an admin, and the mock signs in only two
+  people) was not seen on a phone; its words are covered by the role in the code, not by a run. A suspended
+  workspace shows "Suspended" in the tray, but making something in one is refused by the server with a
+  sentence the apps show as a general failure, not a screen of its own.
+- **Two things for whoever tests next.** `xcodebuild` output for this checkout is one of several
+  `DerivedData/Livepeer-*` folders, one per checkout: install from the one whose `info.plist` names this
+  path. The emulator `Medium_Phone_API_37.0` has a PIN and boots locked; `Livepeer_Home_Check` has none.
+

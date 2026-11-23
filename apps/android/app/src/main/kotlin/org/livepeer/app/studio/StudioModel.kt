@@ -90,6 +90,9 @@ class StudioModel(private val api: Api) {
         }
     }
 
+    /** The app now works in another account: what was made in the last one isn't this one's to show. */
+    fun switchedAccount() = _state.update { it.copy(made = emptyMap(), generating = false, error = null) }
+
     fun choose(kind: MediaKind) = _state.update { it.copy(kind = kind, error = null) }
 
     fun setDraft(draft: StudioDraft) = _state.update { it.copy(drafts = it.drafts + (it.kind to draft)) }

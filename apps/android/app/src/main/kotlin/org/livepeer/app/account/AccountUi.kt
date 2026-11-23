@@ -24,9 +24,12 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.automirrored.rounded.Logout
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.MailOutline
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,6 +47,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -66,6 +70,9 @@ import org.livepeer.app.design.PrimaryButton
 import org.livepeer.app.design.SecondaryButton
 import org.livepeer.app.design.pressable
 import org.livepeer.app.design.style
+import org.livepeer.app.generated.AccountList
+import org.livepeer.app.generated.AccountSummary
+import org.livepeer.app.generated.AccountSummaryKind
 import org.livepeer.app.generated.InstanceDescription
 import org.livepeer.app.generated.InstanceDescriptionSignInSignUp
 import org.livepeer.app.generated.Radius
@@ -76,18 +83,66 @@ import java.text.NumberFormat
 
 /** The account menu: who is signed in and their credits, the theme, and signing out. For a guest, the way in. */
 @Composable
-fun AccountTray(account: Account, theme: ThemePreference, offersConsole: Boolean, openConsole: () -> Unit, signIn: () -> Unit, openSettings: () -> Unit) {
+fun AccountTray(account: Account, theme: ThemePreference, offersConsole: Boolean, openConsole: () -> Unit, signIn: () -> Unit, close: () -> Unit, openSettings: () -> Unit) {
     val palette = LocalPalette.current
     val signedIn by account.signedIn.collectAsStateWithLifecycle()
     val me by account.me.collectAsStateWithLifecycle()
+    val accounts by account.accounts.collectAsStateWithLifecycle()
+    val switchingTo by account.switchingTo.collectAsStateWithLifecycle()
     val choice by theme.choice.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     var confirming by remember { mutableStateOf(false) }
+    var switchFailed by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { account.refresh() }
+    LaunchedEffect(Unit) {
+        account.refresh()
+        account.loadAccounts()
+    }
 
-    if (signedIn) {
+    val list = accounts
+    if (signedIn && list != null && list.accounts.size > 1) {
+        // The accounts the person can work in, the current one ticked. One tap works in another.
+        Column {
+            for (entry in list.accounts) {
+                val current = entry.id == (me?.account?.id ?: list.current)
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                        .pressable(enabled = switchingTo == null, label = if (current) null else "Works in this account") {
+                            switchFailed = false
+                            scope.launch {
+                                if (account.switchAccount(entry.id)) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    close()
+                                } else {
+                                    switchFailed = true
+                                }
+                            }
+                        }
+                        .clearAndSetSemantics { contentDescription = AccountWords.spoken(entry, current); selected = current; role = Role.Button },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    AccountMark(entry, 36)
+                    Column(Modifier.weight(1f)) {
+                        BasicText(entry.name, style = TypeSize.Body.style(FontWeight.Medium).copy(color = palette.foreground), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        BasicText(AccountWords.kind(entry), style = TypeSize.Caption.style().copy(color = palette.subtleForeground))
+                    }
+                    // The current account's balance is the live one; the others are as last read.
+                    BasicText(NumberFormat.getIntegerInstance().format(((if (current) me?.balance?.credits else null) ?: entry.credits).toLong()), style = TypeSize.Caption.style(mono = true).copy(color = palette.mutedForeground))
+                    Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                        if (switchingTo == entry.id) {
+                            CircularProgressIndicator(Modifier.size(16.dp), color = palette.mutedForeground, strokeWidth = 2.dp)
+                        } else if (current) {
+                            Icon(Icons.Rounded.Check, contentDescription = null, tint = palette.foreground, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+        }
+        if (switchFailed) BasicText("That didn't switch. Check your connection and try again.", style = TypeSize.Caption.style().copy(color = palette.destructive), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        Invitations(list)
+    } else if (signedIn) {
         // At large text the credits go under the name and email instead of squeezing them.
         val stacked = LocalDensity.current.fontScale > 1.3f
         val credits: @Composable () -> Unit = {
@@ -110,6 +165,7 @@ fun AccountTray(account: Account, theme: ThemePreference, offersConsole: Boolean
             }
             if (!stacked) credits()
         }
+        list?.let { Invitations(it) }
     } else {
         BasicText("Sign in to generate and save your work.", style = TypeSize.Body.style().copy(color = palette.mutedForeground))
         PrimaryButton("Sign in or sign up", onClick = signIn)
@@ -281,13 +337,48 @@ fun Avatar(initials: String, size: Int = 32) {
     }
 }
 
-/** The account button at the top right of each tab. Opens the account tray. */
+/** Invitations waiting, said and not offered: answering one needs its link, which a phone isn't given. */
+@Composable
+private fun Invitations(list: AccountList) {
+    val palette = LocalPalette.current
+    for (invitation in list.invitations) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) {}) {
+            Icon(Icons.Rounded.MailOutline, contentDescription = null, tint = palette.mutedForeground, modifier = Modifier.size(16.dp))
+            BasicText("${invitation.invitedByName} invited you to ${invitation.workspaceName}. Answer it on the web.", style = TypeSize.Caption.style().copy(color = palette.mutedForeground))
+        }
+    }
+}
+
+/**
+ * An account's mark: the person's initials in a circle for their own, and a workspace's initial in a rounded
+ * square, so the two never read as each other.
+ */
+@Composable
+fun AccountMark(account: AccountSummary, size: Int = 32) {
+    if (account.kind != AccountSummaryKind.Workspace) return Avatar(initials(account.name), size)
+    val palette = LocalPalette.current
+    val shape = RoundedCornerShape((size * 0.28).dp)
+    Box(Modifier.size(size.dp).background(palette.secondary, shape).border(1.dp, palette.hairline, shape), contentAlignment = Alignment.Center) {
+        BasicText(AccountWords.initial(account.name), style = TypeSize.Body.style(FontWeight.SemiBold).copy(color = palette.foreground, fontSize = androidx.compose.ui.unit.TextUnit((size * 0.4).toFloat(), androidx.compose.ui.unit.TextUnitType.Sp)))
+    }
+}
+
+/**
+ * The account button at the top right of each tab. Opens the account tray. In a workspace it is the
+ * workspace's mark, so the shape says whose credit a request will spend.
+ */
 @Composable
 fun AccountButton(account: Account, open: () -> Unit) {
     val signedIn by account.signedIn.collectAsStateWithLifecycle()
     val me by account.me.collectAsStateWithLifecycle()
+    val workspace = AccountWords.workspace(me)
+    val label = when {
+        !signedIn -> "Account, not signed in"
+        workspace != null -> "Account, ${me?.name ?: "signed in"}, working in ${workspace.name}"
+        else -> "Account, ${me?.name ?: "signed in"}"
+    }
     Box(
-        Modifier.size(48.dp).pressable(round = true, onClick = open).semantics { contentDescription = if (signedIn) "Account, ${me?.name ?: "signed in"}" else "Account, not signed in" },
+        Modifier.size(48.dp).pressable(round = true, onClick = open).semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
-    ) { Avatar(if (signedIn) initials(me?.name) else "", 34) }
+    ) { if (workspace != null && signedIn) AccountMark(workspace, 34) else Avatar(if (signedIn) initials(me?.name) else "", 34) }
 }

@@ -52,9 +52,10 @@ in `apps/web/lib/public-api/operations.ts`.
 | Settings | Add credits (an amount of their own, within the operator's limits) | `buyCredits` | Not yet: purchasing is undecided |
 | Settings | Choose, switch or cancel a plan | `changePlan` | Not yet: purchasing is undecided |
 | Settings | See usage | `getUsage` | Built (slice 6) |
-| Account menu | See the accounts you can work in, with each balance, and invitations waiting | `listAccounts` | Not on mobile: a phone works in the Personal account only (`docs/workspaces.md` §8) |
-| Account menu | Switch between your personal account and a workspace | `listAccounts` (membership is checked, then the session is repointed: `switchAccountAction`) | Not on mobile |
+| Account menu | See the accounts you can work in, with each balance, and invitations waiting | `listAccounts` | iOS and Android: the top of the account tray reads `list_accounts`. An invitation is said, not offered: it is answered on the web (`docs/mobile/plan.md` §19) |
+| Account menu | Switch between your personal account and a workspace | `listAccounts` (membership is checked, then the session is repointed: `switchAccountAction`) | iOS and Android: one tap in the account tray calls `switch_account`, which repoints the device session; the app returns to Home and reads everything again |
 | Account menu | Create a workspace | `createWorkspace` | Not on mobile |
+| Every tab (phones) | See which account the app is working in | `get_me` (`account`: the current account, with the person's role) | iOS and Android: the account button is the workspace's mark in a workspace; Settings says "Working in Northlight Studio · Admin" |
 | Settings · Workspace | See the workspace, its members with role and usage, and waiting invitations | `getWorkspace` | Not on mobile |
 | Settings · Workspace | Rename the workspace (owner, admin) | `renameWorkspace` | Not on mobile |
 | Settings · Workspace | Invite by email with a role; resend an invitation (owner, admin) | `inviteMember` | Not on mobile |
@@ -66,8 +67,8 @@ in `apps/web/lib/public-api/operations.ts`.
 | Settings · Workspace | Leave the workspace (admin, member) | `leaveWorkspace` | Not on mobile |
 | Join | Read an invitation from its link | `getInvitation` | Not on mobile |
 | Join | Join, or decline | `acceptInvitation`, `declineInvitation` | Not on mobile |
-| Settings · Usage | In a workspace: see usage by member and API key (owner, admin) | `getMemberUsage`; `getUsage` answers a member with their own entries only | Not on mobile |
-| Settings · Plan | In a workspace: see the plan and balance; only the owner buys credit or changes the plan | `getAccount`, `getCreditBalance`; `buyCreditPack`, `buyCredits`, `changePlan` refuse anyone else | Not on mobile |
+| Settings · Usage | In a workspace: see usage by member and API key (owner, admin) | `getMemberUsage`; `getUsage` answers a member with their own entries only | iOS and Android: Usage shows the workspace's totals or the member's own (`get_usage`) and says which. By member stays on the web |
+| Settings · Plan | In a workspace: see the plan and balance; only the owner buys credit or changes the plan | `getAccount`, `getCreditBalance`; `buyCreditPack`, `buyCredits`, `changePlan` refuse anyone else | iOS and Android: the workspace's balance and plan under its name (`get_account`, `get_me`), with whose they are to change. Nothing is bought on phones |
 | Developers | In a workspace: keys are listed, made and revoked by its owner and admins | `listApiKeys`, `createApiKey`, `revokeApiKey` refuse a member | Not on mobile |
 | Settings | Read who can see a job | `get_privacy` (`describePrivacy`, the instance's `privacy.retainChats`) | Built (slice 6) |
 | Settings | Delete the account | `deleteAccount` (`delete_account`: also signs out every device and forgets the person's blocks); on the web `deleteAccountAction` | Built (slice 6) |
