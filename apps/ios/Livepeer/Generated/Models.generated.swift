@@ -3,6 +3,109 @@
 
 import Foundation
 
+/// The accounts a person can work in from an app, which one they are in, and the invitations waiting for them.
+struct AccountList: Codable, Sendable, Hashable {
+    /// The id of the account every other call acts in.
+    var current: String
+    /// Personal first, then workspaces by name.
+    var accounts: [AccountSummary]
+    var invitations: [AccountInvitation]
+    /// Whether the provider has workspaces at all. When false there is only ever the personal account.
+    var workspacesSupported: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case current
+        case accounts
+        case invitations
+        case workspacesSupported = "workspaces_supported"
+    }
+}
+
+enum AccountSummaryKind: String, Codable, Sendable, Hashable, CaseIterable {
+    case personal = "personal"
+    case workspace = "workspace"
+    /// A value this build doesn't know, from a newer instance.
+    case unknown = "\u{0}unknown"
+
+    init(from decoder: Decoder) throws {
+        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+    }
+}
+
+enum AccountSummaryStatus: String, Codable, Sendable, Hashable, CaseIterable {
+    case active = "active"
+    case paused = "paused"
+    /// A value this build doesn't know, from a newer instance.
+    case unknown = "\u{0}unknown"
+
+    init(from decoder: Decoder) throws {
+        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+    }
+}
+
+/// An account the signed-in person can work in: their own, or a workspace they belong to.
+struct AccountSummary: Codable, Sendable, Hashable {
+    var id: String
+    var kind: AccountSummaryKind
+    /// The workspace's name, or the person's own for their personal account.
+    var name: String
+    /// The person's role in it. They are the owner of their personal account.
+    var role: WorkspaceRole
+    var credits: Double
+    var status: AccountSummaryStatus
+    var memberCount: Double
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case kind
+        case name
+        case role
+        case credits
+        case status
+        case memberCount = "member_count"
+    }
+}
+
+enum WorkspaceRole: String, Codable, Sendable, Hashable, CaseIterable {
+    case owner = "owner"
+    case admin = "admin"
+    case member = "member"
+    /// A value this build doesn't know, from a newer instance.
+    case unknown = "\u{0}unknown"
+
+    init(from decoder: Decoder) throws {
+        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+    }
+}
+
+enum AccountInvitationRole: String, Codable, Sendable, Hashable, CaseIterable {
+    case admin = "admin"
+    case member = "member"
+    /// A value this build doesn't know, from a newer instance.
+    case unknown = "\u{0}unknown"
+
+    init(from decoder: Decoder) throws {
+        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+    }
+}
+
+/// An invitation to a workspace, as a phone is told of it: enough to say it exists. It is answered on the web.
+struct AccountInvitation: Codable, Sendable, Hashable {
+    var id: String
+    var workspaceName: String
+    var invitedByName: String
+    var role: AccountInvitationRole
+    var expiresAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case workspaceName = "workspace_name"
+        case invitedByName = "invited_by_name"
+        case role
+        case expiresAt = "expires_at"
+    }
+}
+
 /// A language model the agent can run on: one app serving it, with what the menu needs to show.
 struct AgentModel: Codable, Sendable, Hashable {
     var app: String
@@ -1015,14 +1118,16 @@ enum MeRole: String, Codable, Sendable, Hashable, CaseIterable {
     }
 }
 
-/// The signed-in user, as the account menu shows them.
 struct Me: Codable, Sendable, Hashable {
     var id: String
     var name: String
     var email: String?
     /// Whether the person runs this instance. An app offers the console from this; the server still decides every request.
     var role: MeRole
+    /// The balance of the account they are working in.
     var balance: CreditBalance
+    /// The account they are working in: their own, or a workspace. Everything they see and make is that account's.
+    var account: AccountSummary
 }
 
 enum MediaItemSource: String, Codable, Sendable, Hashable, CaseIterable {

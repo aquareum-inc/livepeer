@@ -53,6 +53,7 @@ import {
 } from "./provider/types";
 import { NotAllowed, can, canChangeRole, canLeave, canRemoveMember, type AccountAction } from "./workspaces";
 import type {
+  AccountSummary,
   AgentModel,
   ApiKey,
   AppModel,
@@ -122,19 +123,6 @@ export interface PlanAndCredits {
 export interface Usage {
   summary: UsageSummary;
   entries: UsageEntry[];
-}
-
-/** An account the signed-in person can work in: their own, or a workspace they belong to. */
-export interface AccountSummary {
-  id: string;
-  kind: "personal" | "workspace";
-  /** The workspace's name, or the person's own for their personal account. */
-  name: string;
-  /** The person's role in it. They are the owner of their personal account. */
-  role: WorkspaceRole;
-  credits: number;
-  status: "active" | "paused";
-  member_count: number;
 }
 
 /** Where the person can work, where they are working now, and the invitations waiting for them. */

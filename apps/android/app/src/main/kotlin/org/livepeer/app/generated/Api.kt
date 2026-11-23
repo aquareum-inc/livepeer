@@ -35,6 +35,14 @@ class Api(private val transport: ApiTransport) {
     suspend fun deleteAccount(): Deleted =
         transport.send(Deleted.serializer(), "DELETE", "/me", query = emptyMap(), body = null)
 
+    /** The accounts the person can work in (their own, and the workspaces they belong to, each with their role and its balance), which one is current, and invitations waiting. Invitations are answered on the web. */
+    suspend fun listAccounts(): AccountList =
+        transport.send(AccountList.serializer(), "GET", "/accounts", query = emptyMap(), body = null)
+
+    /** From a native app: work in another of the person's accounts, their own or a workspace they belong to. Everything the app then reads and makes is that account's. */
+    suspend fun switchAccount(accountId: String): AccountList =
+        transport.send(AccountList.serializer(), "POST", "/accounts/current", query = emptyMap(), body = mapOf("account_id" to JsonPrimitive(accountId)))
+
     /** List the phones and tablets signed in to the person's account, most recently used first. */
     suspend fun listDevices(): List<DeviceSession> =
         transport.send(ListSerializer(DeviceSession.serializer()), "GET", "/devices", query = emptyMap(), body = null)

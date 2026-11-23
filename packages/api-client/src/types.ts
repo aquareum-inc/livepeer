@@ -1,3 +1,5 @@
+import type { WorkspaceRole } from "./provider/types";
+
 /**
  * Types shaped on the engine's real responses (livepeer-builder `GET /v1/offerings`,
  * `GET /v1/allowance`). See docs/research/engine.md. Amounts are decimal strings.
@@ -501,13 +503,49 @@ export interface InstanceFirebase {
 }
 
 /** The signed-in user, as the account menu shows them. */
+/** An account the signed-in person can work in: their own, or a workspace they belong to. */
+export interface AccountSummary {
+  id: string;
+  kind: "personal" | "workspace";
+  /** The workspace's name, or the person's own for their personal account. */
+  name: string;
+  /** The person's role in it. They are the owner of their personal account. */
+  role: WorkspaceRole;
+  credits: number;
+  status: "active" | "paused";
+  member_count: number;
+}
+
+/** An invitation to a workspace, as a phone is told of it: enough to say it exists. It is answered on the web. */
+export interface AccountInvitation {
+  id: string;
+  workspace_name: string;
+  invited_by_name: string;
+  role: Exclude<WorkspaceRole, "owner">;
+  expires_at: string;
+}
+
+/** The accounts a person can work in from an app, which one they are in, and the invitations waiting for them. */
+export interface AccountList {
+  /** The id of the account every other call acts in. */
+  current: string;
+  /** Personal first, then workspaces by name. */
+  accounts: AccountSummary[];
+  invitations: AccountInvitation[];
+  /** Whether the provider has workspaces at all. When false there is only ever the personal account. */
+  workspaces_supported: boolean;
+}
+
 export interface Me {
   id: string;
   name: string;
   email: string | null;
   /** Whether the person runs this instance. An app offers the console from this; the server still decides every request. */
   role: "user" | "operator";
+  /** The balance of the account they are working in. */
   balance: CreditBalance;
+  /** The account they are working in: their own, or a workspace. Everything they see and make is that account's. */
+  account: AccountSummary;
 }
 
 /** A phone or tablet signed in to the instance with its own revocable session. */

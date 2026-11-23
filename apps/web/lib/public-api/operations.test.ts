@@ -34,6 +34,7 @@ const phone: DeviceSession = { id: "dev_1", name: "Test iPhone", platform: "ios"
 const devices: DeviceAccess = {
   redeemCode: ({ code }) => (code === "good" ? { token: "aqd_test", device: phone } : null),
   list: (userId, currentId) => (userId === "usr_demo_adam" ? [{ ...phone, current: phone.id === currentId }] : []),
+  setWorkspace: vi.fn((id: string) => id === phone.id),
   revoke: (userId, id) => userId === "usr_demo_adam" && id === phone.id,
   revokeAll: vi.fn(() => 1),
 };
@@ -146,8 +147,8 @@ describe("public API operations", () => {
     for (const operation of open) expect((operation.method === "GET" || operation.name === "create_device_session" || operation.name === "create_operator_device_session") && !operation.operator, operation.name).toBe(true);
   });
 
-  it("keeps the apps' sign-in plumbing and uploads from a device away from agents", () => {
-    expect(OPERATIONS.filter((operation) => operation.mcp === false).map((operation) => operation.name).sort()).toEqual(["create_device_session", "create_operator_challenge", "create_operator_device_session", "delete_account", "delete_operator_device_session", "end_device_session", "request_upload", "unlock_operator_device_session"]);
+  it("keeps the apps' sign-in plumbing, account switching and uploads from a device away from agents", () => {
+    expect(OPERATIONS.filter((operation) => operation.mcp === false).map((operation) => operation.name).sort()).toEqual(["create_device_session", "create_operator_challenge", "create_operator_device_session", "delete_account", "delete_operator_device_session", "end_device_session", "request_upload", "switch_account", "unlock_operator_device_session"]);
   });
 
   it("says where to send a file, and refuses one it can't take with a reason a client can act on", async () => {
@@ -175,6 +176,29 @@ describe("public API operations", () => {
     expect(await run("revoke_device", { id: "dev_1" }, adam)).toEqual({ deleted: true });
     expect(await run("end_device_session", {}, adam)).toEqual({ deleted: true });
     await expect(run("end_device_session", {}, { ...adam, deviceId: null })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("says which account the person is working in, and lets an app switch to one they belong to", async () => {
+    const run = (name: string, input: Record<string, unknown>, context: Partial<Context>) => OPERATIONS.find((operation) => operation.name === name)!.run({ ...base, via: "device", account: adam, ...context }, input);
+    const inNorthlight = createApiClient({ env: { MOCK_ONLY: "1" }, provider, user: { id: "usr_demo_adam", name: "Adam Soffer" }, workspaceId: "wsp_northlight" });
+
+    expect(await run("get_me", {}, {})).toMatchObject({ account: { id: "usr_demo_adam", kind: "personal", role: "owner" }, balance: { credits: 2480 } });
+    expect(await run("get_me", {}, { client: inNorthlight })).toMatchObject({ account: { id: "wsp_northlight", kind: "workspace", name: "Northlight Studio", role: "admin" }, balance: { credits: 36660 } });
+
+    const list = (await run("list_accounts", {}, {})) as { current: string; accounts: Array<{ id: string }>; invitations: Array<Record<string, unknown>> };
+    expect(list.accounts.map((entry) => entry.id)).toEqual(["usr_demo_adam", "wsp_northlight"]);
+    // An app is told an invitation exists, never given the link that answers it.
+    expect(list.invitations).toEqual([expect.objectContaining({ workspace_name: "Harbour Films", invited_by_name: "Sam Whitfield" })]);
+    expect(list.invitations.some((invitation) => "token" in invitation)).toBe(false);
+
+    expect(await run("switch_account", { account_id: "wsp_northlight" }, {})).toMatchObject({ current: "wsp_northlight" });
+    expect(devices.setWorkspace).toHaveBeenLastCalledWith("dev_1", "wsp_northlight");
+    expect(await run("switch_account", { account_id: "usr_demo_adam" }, { client: inNorthlight })).toMatchObject({ current: "usr_demo_adam" });
+    expect(devices.setWorkspace).toHaveBeenLastCalledWith("dev_1", null);
+
+    await expect(run("switch_account", { account_id: "wsp_harbour" }, {})).rejects.toMatchObject({ status: 404, code: "not_a_member" });
+    await expect(run("switch_account", { account_id: "wsp_northlight" }, { via: "browser", account: { ...adam, deviceId: null } })).rejects.toMatchObject({ status: 400, code: "device_only" });
+    await expect(run("list_accounts", {}, { account: null })).rejects.toMatchObject({ status: 403, code: "account_required" });
   });
 
   it("describes the instance and passes the agent's model and a cast character through", async () => {

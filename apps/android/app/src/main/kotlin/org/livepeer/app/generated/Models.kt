@@ -18,6 +18,103 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
+/** The accounts a person can work in from an app, which one they are in, and the invitations waiting for them. */
+@Serializable
+data class AccountList(
+    /** The id of the account every other call acts in. */
+    @SerialName("current") val current: String,
+    /** Personal first, then workspaces by name. */
+    @SerialName("accounts") val accounts: List<AccountSummary>,
+    @SerialName("invitations") val invitations: List<AccountInvitation>,
+    /** Whether the provider has workspaces at all. When false there is only ever the personal account. */
+    @SerialName("workspaces_supported") val workspacesSupported: Boolean,
+)
+
+@Serializable(with = AccountSummaryKind.Serializer::class)
+enum class AccountSummaryKind(val value: String) {
+    Personal("personal"),
+    Workspace("workspace"),
+
+    /** A value this build doesn't know, from a newer instance. */
+    Unknown("");
+
+    object Serializer : KSerializer<AccountSummaryKind> {
+        override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("AccountSummaryKind", PrimitiveKind.STRING)
+        override fun deserialize(decoder: Decoder): AccountSummaryKind = decoder.decodeString().let { value -> entries.firstOrNull { it.value == value } ?: Unknown }
+        override fun serialize(encoder: Encoder, value: AccountSummaryKind) = encoder.encodeString(value.value)
+    }
+}
+
+@Serializable(with = AccountSummaryStatus.Serializer::class)
+enum class AccountSummaryStatus(val value: String) {
+    Active("active"),
+    Paused("paused"),
+
+    /** A value this build doesn't know, from a newer instance. */
+    Unknown("");
+
+    object Serializer : KSerializer<AccountSummaryStatus> {
+        override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("AccountSummaryStatus", PrimitiveKind.STRING)
+        override fun deserialize(decoder: Decoder): AccountSummaryStatus = decoder.decodeString().let { value -> entries.firstOrNull { it.value == value } ?: Unknown }
+        override fun serialize(encoder: Encoder, value: AccountSummaryStatus) = encoder.encodeString(value.value)
+    }
+}
+
+/** An account the signed-in person can work in: their own, or a workspace they belong to. */
+@Serializable
+data class AccountSummary(
+    @SerialName("id") val id: String,
+    @SerialName("kind") val kind: AccountSummaryKind,
+    /** The workspace's name, or the person's own for their personal account. */
+    @SerialName("name") val name: String,
+    /** The person's role in it. They are the owner of their personal account. */
+    @SerialName("role") val role: WorkspaceRole,
+    @SerialName("credits") val credits: Double,
+    @SerialName("status") val status: AccountSummaryStatus,
+    @SerialName("member_count") val memberCount: Double,
+)
+
+@Serializable(with = WorkspaceRole.Serializer::class)
+enum class WorkspaceRole(val value: String) {
+    Owner("owner"),
+    Admin("admin"),
+    Member("member"),
+
+    /** A value this build doesn't know, from a newer instance. */
+    Unknown("");
+
+    object Serializer : KSerializer<WorkspaceRole> {
+        override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("WorkspaceRole", PrimitiveKind.STRING)
+        override fun deserialize(decoder: Decoder): WorkspaceRole = decoder.decodeString().let { value -> entries.firstOrNull { it.value == value } ?: Unknown }
+        override fun serialize(encoder: Encoder, value: WorkspaceRole) = encoder.encodeString(value.value)
+    }
+}
+
+@Serializable(with = AccountInvitationRole.Serializer::class)
+enum class AccountInvitationRole(val value: String) {
+    Admin("admin"),
+    Member("member"),
+
+    /** A value this build doesn't know, from a newer instance. */
+    Unknown("");
+
+    object Serializer : KSerializer<AccountInvitationRole> {
+        override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("AccountInvitationRole", PrimitiveKind.STRING)
+        override fun deserialize(decoder: Decoder): AccountInvitationRole = decoder.decodeString().let { value -> entries.firstOrNull { it.value == value } ?: Unknown }
+        override fun serialize(encoder: Encoder, value: AccountInvitationRole) = encoder.encodeString(value.value)
+    }
+}
+
+/** An invitation to a workspace, as a phone is told of it: enough to say it exists. It is answered on the web. */
+@Serializable
+data class AccountInvitation(
+    @SerialName("id") val id: String,
+    @SerialName("workspace_name") val workspaceName: String,
+    @SerialName("invited_by_name") val invitedByName: String,
+    @SerialName("role") val role: AccountInvitationRole,
+    @SerialName("expires_at") val expiresAt: String,
+)
+
 /** A language model the agent can run on: one app serving it, with what the menu needs to show. */
 @Serializable
 data class AgentModel(
@@ -864,7 +961,6 @@ enum class MeRole(val value: String) {
     }
 }
 
-/** The signed-in user, as the account menu shows them. */
 @Serializable
 data class Me(
     @SerialName("id") val id: String,
@@ -872,7 +968,10 @@ data class Me(
     @SerialName("email") val email: String? = null,
     /** Whether the person runs this instance. An app offers the console from this; the server still decides every request. */
     @SerialName("role") val role: MeRole,
+    /** The balance of the account they are working in. */
     @SerialName("balance") val balance: CreditBalance,
+    /** The account they are working in: their own, or a workspace. Everything they see and make is that account's. */
+    @SerialName("account") val account: AccountSummary,
 )
 
 @Serializable(with = MediaItemSource.Serializer::class)

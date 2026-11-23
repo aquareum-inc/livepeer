@@ -19,6 +19,11 @@ export interface DeviceRecord {
   platform: "ios" | "android";
   /** The user's builder key, sealed with SESSION_SECRET, as the browser session cookie holds it. */
   builderKey: string | null;
+  /**
+   * The workspace the app is working in, or absent for the personal account. Only a pointer, as in the
+   * browser's session cookie: membership is asked of the provider on every request.
+   */
+  workspaceId?: string | null;
   createdAt: string;
   lastUsedAt: string;
 }

@@ -26,6 +26,8 @@ export interface DeviceSessions {
   /** The session a token belongs to, if it is still valid. Marks it used. */
   find(token: string): DeviceRecord | null;
   list(userId: string, currentId: string | null): DeviceSession[];
+  /** Points a session at a workspace, or at the personal account with null. False when there is no such session. */
+  setWorkspace(id: string, workspaceId: string | null): boolean;
   /** Ends one of the user's sessions. False when it isn't theirs or doesn't exist. */
   revoke(userId: string, id: string): boolean;
   /** Ends every session the user has, for example when they are suspended. */
@@ -114,6 +116,14 @@ export function deviceSessions(store: DeviceSessionStore, secret: string, now: (
         .sessions.filter((entry) => entry.userId === userId && !expired(entry))
         .sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt))
         .map((entry) => toDeviceSession(entry, currentId));
+    },
+
+    setWorkspace(id, workspaceId) {
+      return store.update((contents) => {
+        const stored = contents.sessions.find((entry) => entry.id === id);
+        if (stored) stored.workspaceId = workspaceId;
+        return stored !== undefined;
+      });
     },
 
     revoke(userId, id) {

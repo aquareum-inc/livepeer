@@ -96,4 +96,17 @@ describe("device sessions", () => {
     const { token } = signIn(deviceSessions(store, secret))!;
     expect(deviceSessions(store, "t".repeat(32)).find(token)).toBeNull();
   });
+
+  it("remembers which workspace a phone is working in, per phone, and nothing more about it", () => {
+    const sessions = deviceSessions(memoryStore(), secret);
+    const first = signIn(sessions)!;
+    const second = signIn(sessions, "android")!;
+    expect(sessions.find(first.token)?.workspaceId ?? null).toBeNull();
+    expect(sessions.setWorkspace(first.device.id, "wsp_northlight")).toBe(true);
+    expect(sessions.find(first.token)?.workspaceId).toBe("wsp_northlight");
+    expect(sessions.find(second.token)?.workspaceId ?? null).toBeNull();
+    expect(sessions.setWorkspace(first.device.id, null)).toBe(true);
+    expect(sessions.find(first.token)?.workspaceId).toBeNull();
+    expect(sessions.setWorkspace("dev_nope", "wsp_northlight")).toBe(false);
+  });
 });
