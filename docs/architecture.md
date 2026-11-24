@@ -210,9 +210,13 @@ database is migrated and empty so far: no state has moved into it yet.
 
 Each kind of state the instance keeps has its own store interface, asynchronous, with one method per thing
 asked of it: `DeviceSessionStore`, `OperatorDeviceStore`, `AuditStore`, `ModerationStore`, `AlertsStore` and
-`OutboxStore`, each beside the service that holds its rules. Today each has one implementation, over a
-document read and written whole (`apps/web/lib/data`: a JSON file in `DATA_DIR`, or memory in tests); the
-Postgres implementations come behind the same interfaces, so nothing above a store knows which it has. Device sessions use it, and so does
+`OutboxStore`, each beside the service that holds its rules. Each has an implementation over a document
+read and written whole (`apps/web/lib/data`: a JSON file in `DATA_DIR`, or memory in tests), and the session
+and audit stores have one over Postgres (`postgres.ts` beside each); `chosenStore` picks by whether the
+instance has a database, so nothing above a store knows which it has. One contract test suite per store runs
+against both. In Postgres a person's name and email are one sealed value per row (`lib/data/identity.ts`,
+encrypted with `SESSION_SECRET`), kept only because the provider can't yet answer `getUser`; no column reads
+as a person. The remaining stores (moderation, alerts, outbox) are files until their slices. Device sessions use it, and so does
 `apps/web/lib/moderation`: reports of shared characters, what each person blocked, and what the operator took
 down. Every character read (`list_characters`, `get_character`, the web's pages and Home's cast) filters
 through `moderation().visible(userId)`; the console's Reports page decides reports.

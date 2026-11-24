@@ -179,7 +179,6 @@ export function operatorDeviceSessions(store: OperatorDeviceStore, secret: strin
     await store.clearAlerts(unreadable);
     return targets;
   };
-  const windows = new Map<string, { start: number; count: number }>();
 
   /** A refused proof: written down, counted, and at the limit the session is revoked. */
   const refuse = async (session: OperatorDeviceRecord, operation: string, detail: string): Promise<void> => {
@@ -260,18 +259,7 @@ export function operatorDeviceSessions(store: OperatorDeviceStore, secret: strin
       return { ...record, lastUsedAt };
     },
 
-    async allow(sessionId) {
-      const minute = Math.floor(now() / 60_000);
-      const window = windows.get(sessionId);
-      if (!window || window.start !== minute) {
-        // One entry per session that asked this minute; the rest are of no further use.
-        for (const [id, entry] of windows) if (entry.start !== minute) windows.delete(id);
-        windows.set(sessionId, { start: minute, count: 1 });
-        return true;
-      }
-      window.count += 1;
-      return window.count <= REQUESTS_PER_MINUTE;
-    },
+    allow: async (sessionId) => (await store.countRequest(sessionId, Math.floor(now() / 60_000))) <= REQUESTS_PER_MINUTE,
 
     unlocked: (session) => session.unlockedUntil > now(),
 

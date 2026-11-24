@@ -1,8 +1,142 @@
+import { bigint, index, integer, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+
 /**
  * The instance's tables, as Drizzle definitions. This file is the source of the row types and of every
  * migration: change it, then run `pnpm db:generate` and commit the SQL it writes.
  *
  * No table points at a user. `user_id` and `workspace_id` are the provider's opaque ids, and the provider
- * holds the names, emails and membership behind them.
+ * holds the names, emails and membership behind them. Where a name or an email has to be kept because the
+ * provider can't yet be asked for it, it is in an `_sealed` column: encrypted with SESSION_SECRET, never in
+ * the clear. Every `_hash` column is an HMAC keyed with the same secret, so a copy of the database signs
+ * nobody in.
  */
-export {};
+
+const time = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
+
+/** A user's phone, signed in to the app. */
+export const deviceSessions = pgTable(
+  "device_sessions",
+  {
+    id: text("id").primaryKey(),
+    tokenHash: text("token_hash").notNull(),
+    userId: text("user_id").notNull(),
+    role: text("role", { enum: ["user", "operator"] }).notNull(),
+    deviceName: text("device_name").notNull(),
+    platform: text("platform", { enum: ["ios", "android"] }).notNull(),
+    builderKeySealed: text("builder_key_sealed"),
+    /** The person's name and email as the provider gave them at sign-in. */
+    identitySealed: text("identity_sealed").notNull(),
+    workspaceId: text("workspace_id"),
+    createdAt: time("created_at").notNull(),
+    lastUsedAt: time("last_used_at").notNull(),
+  },
+  (table) => [uniqueIndex("device_sessions_token_hash").on(table.tokenHash), index("device_sessions_user_id").on(table.userId)],
+);
+
+/** A finished sign-in waiting for its app to collect it. */
+export const deviceSignInCodes = pgTable(
+  "device_sign_in_codes",
+  {
+    codeHash: text("code_hash").primaryKey(),
+    challenge: text("challenge").notNull(),
+    platform: text("platform", { enum: ["ios", "android"] }).notNull(),
+    userId: text("user_id").notNull(),
+    role: text("role", { enum: ["user", "operator"] }).notNull(),
+    builderKeySealed: text("builder_key_sealed"),
+    identitySealed: text("identity_sealed").notNull(),
+    expiresAt: time("expires_at").notNull(),
+  },
+  (table) => [index("device_sign_in_codes_expires_at").on(table.expiresAt)],
+);
+
+/** An operator's phone, enrolled for the console. Kept apart from users' sessions: neither can stand in for the other. */
+export const operatorDeviceSessions = pgTable(
+  "operator_device_sessions",
+  {
+    id: text("id").primaryKey(),
+    tokenHash: text("token_hash").notNull(),
+    userId: text("user_id").notNull(),
+    identitySealed: text("identity_sealed").notNull(),
+    deviceName: text("device_name").notNull(),
+    platform: text("platform", { enum: ["ios", "android"] }).notNull(),
+    publicKey: text("public_key").notNull(),
+    createdAt: time("created_at").notNull(),
+    lastUsedAt: time("last_used_at").notNull(),
+    lastUnlockedAt: time("last_unlocked_at"),
+    /** Null while locked. */
+    unlockedUntil: time("unlocked_until"),
+    failedProofs: integer("failed_proofs").notNull().default(0),
+    /** The minute the request count below belongs to, as minutes since 1970. */
+    windowStart: bigint("window_start", { mode: "number" }).notNull().default(0),
+    windowCount: integer("window_count").notNull().default(0),
+  },
+  (table) => [uniqueIndex("operator_device_sessions_token_hash").on(table.tokenHash), index("operator_device_sessions_user_id").on(table.userId)],
+);
+
+export const operatorSignInCodes = pgTable(
+  "operator_sign_in_codes",
+  {
+    codeHash: text("code_hash").primaryKey(),
+    challenge: text("challenge").notNull(),
+    platform: text("platform", { enum: ["ios", "android"] }).notNull(),
+    userId: text("user_id").notNull(),
+    identitySealed: text("identity_sealed").notNull(),
+    expiresAt: time("expires_at").notNull(),
+  },
+  (table) => [index("operator_sign_in_codes_expires_at").on(table.expiresAt)],
+);
+
+/** A nonce a phone was given to sign. It goes with its session. */
+export const operatorChallenges = pgTable(
+  "operator_challenges",
+  {
+    nonceHash: text("nonce_hash").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => operatorDeviceSessions.id, { onDelete: "cascade" }),
+    operation: text("operation"),
+    inputHash: text("input_hash"),
+    expiresAt: time("expires_at").notNull(),
+  },
+  (table) => [index("operator_challenges_session_id").on(table.sessionId), index("operator_challenges_expires_at").on(table.expiresAt)],
+);
+
+/** Alerts on one operator's phone. A row ends with its session, however that ends, and a push token is on one phone only. */
+export const operatorPushTokens = pgTable(
+  "operator_push_tokens",
+  {
+    sessionId: text("session_id")
+      .primaryKey()
+      .references(() => operatorDeviceSessions.id, { onDelete: "cascade" }),
+    kinds: text("kinds").array().notNull(),
+    /** Sealed, not hashed: the instance has to send to it. Null once Apple or Google has said it is dead. */
+    pushSealed: text("push_sealed"),
+    pushHash: text("push_hash").notNull(),
+    environment: text("environment", { enum: ["production", "development"] }).notNull(),
+    setAt: time("set_at").notNull(),
+    lastAlertAt: time("last_alert_at"),
+    warnedAt: time("warned_at"),
+  },
+  (table) => [uniqueIndex("operator_push_tokens_push_hash").on(table.pushHash)],
+);
+
+/** What operators' phones did and were refused. Never a token, a key or a request body. */
+export const operatorAudit = pgTable(
+  "operator_audit",
+  {
+    id: text("id").primaryKey(),
+    /** The order entries were written in, which two entries in the same millisecond would not otherwise have. */
+    seq: bigint("seq", { mode: "number" }).notNull().generatedAlwaysAsIdentity(),
+    at: time("at").notNull(),
+    event: text("event", { enum: ["sign_in", "sign_out", "unlock", "change", "refused", "revoked", "alert"] }).notNull(),
+    userId: text("user_id").notNull(),
+    /** The operator's name as it was when the entry was written. */
+    actorSealed: text("actor_sealed").notNull(),
+    deviceId: text("device_id"),
+    deviceName: text("device_name"),
+    operation: text("operation"),
+    target: text("target"),
+    detail: text("detail"),
+  },
+  (table) => [uniqueIndex("operator_audit_seq").on(table.seq), index("operator_audit_device_at").on(table.deviceId, table.at)],
+);

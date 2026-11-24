@@ -1,16 +1,18 @@
 import "server-only";
 
 import { sessionSecret } from "../auth/session";
+import { chosenStore } from "../data/database";
 import { instance } from "../instance";
+import { postgresDeviceSessionStore } from "./postgres";
 import { deviceSessions, type DeviceSessions, type Platform } from "./sessions";
-import { fileDeviceSessionStore, type DeviceSessionStore } from "./store";
+import { fileDeviceSessionStore } from "./store";
 
-let store: DeviceSessionStore | null = null;
+const store = chosenStore({ postgres: postgresDeviceSessionStore, file: fileDeviceSessionStore });
 
 /** The instance's device sessions. */
 export function devices(): DeviceSessions {
-  store ??= fileDeviceSessionStore();
-  return deviceSessions(store, sessionSecret());
+  const secret = sessionSecret();
+  return deviceSessions(store(secret), secret);
 }
 
 /** Whether the instance serves the native apps at all. */

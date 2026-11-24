@@ -100,7 +100,12 @@ export interface OperatorDeviceStore {
   failedProof(id: string): Promise<number>;
   /** False when there is no such session. */
   clearFailedProofs(id: string): Promise<boolean>;
-  /** Removes sessions with the nonces waiting for them and their alerts, and answers with what it removed. */
+  /**
+   * Counts a request against a session in the minute given (minutes since 1970), and answers with how many
+   * it has made in that minute.
+   */
+  countRequest(id: string, minute: number): Promise<number>;
+  /** Removes sessions with the nonces waiting for them and their alerts, and answers with the sessions, alerts off. */
   remove(gone: OperatorSessionsGone): Promise<OperatorDeviceRecord[]>;
   /** Keeps a nonce for its session, which holds at most `keep` at once: the oldest go first. */
   putChallenge(challenge: PendingChallenge, keep: number): Promise<void>;
@@ -132,6 +137,8 @@ export function documentOperatorDeviceStore(document: StateStore<OperatorDeviceC
       for (const record of contents.sessions) if (ids.includes(record.id)) change(record);
     });
   };
+  // Request counts are of no use after their minute, so a file is not rewritten for each request to hold them.
+  const windows = new Map<string, { minute: number; count: number }>();
   const one = <R>(id: string, change: (record: OperatorDeviceRecord) => R, missing: R): R =>
     document.update((contents) => {
       const record = contents.sessions.find((entry) => entry.id === id);
@@ -192,13 +199,19 @@ export function documentOperatorDeviceStore(document: StateStore<OperatorDeviceC
         false,
       );
     },
+    async countRequest(id, minute) {
+      for (const [session, window] of windows) if (window.minute !== minute) windows.delete(session);
+      const count = (windows.get(id)?.count ?? 0) + 1;
+      windows.set(id, { minute, count });
+      return count;
+    },
     async remove(gone) {
       return document.update((contents) => {
         const removed = contents.sessions.filter((record) => gone === "all" || ("ids" in gone ? gone.ids.includes(record.id) : record.userId === gone.userId));
         const ids = new Set(removed.map((record) => record.id));
         contents.sessions = contents.sessions.filter((record) => !ids.has(record.id));
         contents.challenges = contents.challenges.filter((entry) => !ids.has(entry.sessionId));
-        return removed;
+        return removed.map((record) => ({ ...record, alerts: null }));
       });
     },
     async putChallenge(challenge, keep) {
@@ -276,6 +289,8 @@ export interface AuditStore {
   append(entry: OperatorAuditEntry, keep: number): Promise<void>;
   /** The newest entries, newest first. */
   newest(limit: number): Promise<OperatorAuditEntry[]>;
+  /** How many entries of one kind a phone has since a time, among those whose detail starts a given way. */
+  countSince(input: { event: OperatorAuditEntry["event"]; deviceId: string; detailStartsWith: string; since: string }): Promise<number>;
 }
 
 /** The audit log kept as one document: a JSON file, or memory in tests. */
@@ -289,6 +304,9 @@ export function documentAuditStore(document: StateStore<AuditContents>): AuditSt
     },
     async newest(limit) {
       return document.read().entries.slice(-limit).reverse();
+    },
+    async countSince({ event, deviceId, detailStartsWith, since }) {
+      return document.read().entries.filter((entry) => entry.event === event && entry.device_id === deviceId && entry.at >= since && (entry.detail ?? "").startsWith(detailStartsWith)).length;
     },
   };
 }

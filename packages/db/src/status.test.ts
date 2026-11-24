@@ -5,7 +5,10 @@ import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { describe, expect, it } from "vitest";
 
+import { sql } from "drizzle-orm";
+
 import { HEAD, MIGRATIONS_TABLE, schemaStatus } from "./status";
+import { testDatabase } from "./testing";
 
 const folder = path.join(import.meta.dirname, "../migrations");
 
@@ -18,9 +21,11 @@ describe("the schema's status", () => {
     expect(await schemaStatus(database)).toBe("ok");
 
     // Running them again changes nothing.
-    await migrate(drizzle(database), { migrationsFolder: folder });
     const applied = await database.query<{ total: number }>(`select count(*)::int as total from ${MIGRATIONS_TABLE}`);
-    expect(applied.rows[0]?.total).toBe(1);
+    expect(applied.rows[0]?.total).toBeGreaterThan(0);
+    await migrate(drizzle(database), { migrationsFolder: folder });
+    const again = await database.query<{ total: number }>(`select count(*)::int as total from ${MIGRATIONS_TABLE}`);
+    expect(again.rows[0]?.total).toBe(applied.rows[0]?.total);
     await database.close();
   });
 
@@ -42,6 +47,13 @@ describe("the schema's status", () => {
 
   it("is unreachable when the database can't be asked", async () => {
     expect(await schemaStatus({ query: () => Promise.reject(new Error("connect ECONNREFUSED")) })).toBe("unreachable");
+  });
+
+  it("is ok on a database the test helper made, so tests run on this release's schema", async () => {
+    const { db, close } = await testDatabase();
+    const applied = await db.execute(sql`select count(*)::int as total from drizzle.__drizzle_migrations`);
+    expect((applied as unknown as { rows: Array<{ total: number }> }).rows[0]?.total).toBeGreaterThan(1);
+    await close();
   });
 
   it("names the newest committed migration as the head", () => {

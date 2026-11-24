@@ -11,6 +11,8 @@ import { decide, quietState, type Alert, type AlertState, type Observation } fro
 
 /** Test alerts one phone may ask for in an hour. */
 export const TESTS_PER_HOUR = 3;
+/** How a test alert is named in the audit log. */
+const TEST = "test";
 /** How long a process keeps the right to run the watcher's checks without renewing it. */
 export const LEASE_MS = 150_000;
 
@@ -108,7 +110,6 @@ export interface Alerts extends AlertsAccess {
  * send is written to the audit log with the phone it went to; a push token never is.
  */
 export function alertsService({ store, sessions, audit, sender, enabled, name, now = Date.now }: AlertsDependencies): Alerts {
-  const tests = new Map<string, number[]>();
   const sending = new Set<Promise<unknown>>();
 
   /** Sends one notification to one phone and deals with the answer. True when Apple or Google took it. */
@@ -171,10 +172,9 @@ export function alertsService({ store, sessions, audit, sender, enabled, name, n
       if (alerts.state === "off") return "off";
       const [target] = await sessions().alertTargets(null, { only: [session.id] });
       if (!enabled() || !target) return "not_delivered";
-      const recent = (tests.get(session.id) ?? []).filter((at) => now() - at < 3600_000);
-      if (recent.length >= TESTS_PER_HOUR) return "limited";
-      tests.set(session.id, [...recent, now()]);
-      return (await sendAll([target], () => testNotification(name()), "test")).length > 0 ? "sent" : "not_delivered";
+      // Every test sent, or tried, is in the audit log, so the log is the count: no process has to remember it.
+      if ((await audit().alertsSince(session.id, TEST, now() - 3600_000)) >= TESTS_PER_HOUR) return "limited";
+      return (await sendAll([target], () => testNotification(name()), TEST)).length > 0 ? "sent" : "not_delivered";
     },
 
     observe,

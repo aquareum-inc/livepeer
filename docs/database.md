@@ -1,7 +1,7 @@
 # A Postgres database for the instance: plan
 
-Status: **approved on 24 November 2026 with every recommendation in section 0 as written. Slices 1 and 2 are
-built; slices 3 to 8 are not.** What slice 1 changed from the plan is listed under the slices table in section 10.
+Status: **approved on 24 November 2026 with every recommendation in section 0 as written. Slices 1 to 3 are
+built; slices 4 to 8 are not.** What slice 1 changed from the plan is listed under the slices table in section 10.
 
 The instance keeps its own state as JSON files in `DATA_DIR`, and the operator console writes
 `instance.config.json` to disk. That ties an instance to a host with a persistent disk and one server
@@ -486,11 +486,28 @@ callers won't change again), and the alerts lease and timer are untouched (slice
 by equality, as section 3 says. Sweeping of expired codes and nonces still happens when a sign-in or a
 challenge is made, through a `sweep` method on each store, until the alerts round takes it over in slice 6.
 
-**To confirm in slice 7, before the import is written.** The bundle's `.env` carries `DATA_DIR=` empty, and
-Compose passes that to the app over the image's own `DATA_DIR=/data`. Read from the code, the app would then
-write its JSON files to `.data` beside the server, not to the `app-data` volume, so today's bundle may not
-be keeping phone sessions across a rebuild at all. I have not checked this on a running bundle. If it is so,
-the import has less to bring over than section 4.4 assumes, and the fix is one line in `compose.yaml`.
+**Slice 3 as built (24 November 2026).** Tables: `device_sessions`, `device_sign_in_codes`,
+`operator_device_sessions`, `operator_sign_in_codes`, `operator_challenges`, `operator_push_tokens`,
+`operator_audit` (migration `0001_sessions`). D1 is in: `identity_sealed` and `actor_sealed`, opened only with
+`SESSION_SECRET`; with the secret changed a person is shown by their id. Differences from section 2:
+
+- `operator_audit` has a `seq` identity column, because entries written in the same millisecond need an
+  order. The log is trimmed to its newest 2,000 when an entry is written, not by the alerts round.
+- `operator_push_tokens.told_engine_down` is not there yet. It belongs to the alerts state and arrives with
+  slice 6, as a column added then.
+- `device_name` is kept in the clear, as section 2 lists it. It is what the person called their phone
+  ("Sam's iPhone"), so it often contains a first name. Sealing it too is a small change if you want it.
+- Test alerts are limited by counting the audit log (three an hour per phone), and requests by two columns
+  on the session row. Neither is held in memory any more, except request counts in JSON mode.
+- Until slice 7's import, a phone enrolled on an instance that kept sessions in files signs in again once
+  that instance gets `DATABASE_URL`.
+
+**Found while testing the bundle, and fixed.** The bundle's `.env` carries `DATA_DIR=` empty, and Compose
+passed that to the app in place of the image's own `DATA_DIR=/data`. The app then tried to write its JSON
+files beside the server, where its user may not write (checked in a running container: `mkdir` is refused).
+So in the Compose bundle nothing the instance kept in files could be written: phone sign-in, reports and
+alerts state. `compose.yaml` now sets `DATA_DIR: /data` itself. For slice 7 this means a Compose instance has
+no session files to import; the import matters for instances run some other way with `DATA_DIR` set.
 
 Slices 3, 4 and 6 are independent of each other once 2 is in; 5 is independent of all three.
 
