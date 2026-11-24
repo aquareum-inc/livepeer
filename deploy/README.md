@@ -30,9 +30,9 @@ starts, on `setup`, on `upgrade` and on a plain `docker compose up`. If a migrat
 the app is not started, and `setup` and `upgrade` say so. `./livepeer doctor` and `/api/health` report
 whether the database is reachable and whether its schema is the one this release expects.
 
-Users' and operators' phone sessions and the operators' audit log are kept in the database. Reports and
-blocks, alerts and the settings the console changes are still files in the `app-data` volume, and move in the
-slices that follow (`docs/database.md`, section 10). Names and emails are never stored in the clear: where
+Users' and operators' phone sessions, the operators' audit log, and reports, blocks and takedowns of shared
+characters are kept in the database. Alerts state and the settings the console changes are still files in the
+`app-data` volume, and move in the slices that follow (`docs/database.md`, section 10). Names and emails are never stored in the clear: where
 one has to be kept it is encrypted with `SESSION_SECRET`, so keep that secret with your backups or a restored
 database shows people by their ids only, and every phone signs in again.
 

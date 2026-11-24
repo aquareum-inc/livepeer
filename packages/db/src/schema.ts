@@ -1,4 +1,5 @@
-import { bigint, index, integer, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { bigint, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 /**
  * The instance's tables, as Drizzle definitions. This file is the source of the row types and of every
@@ -140,3 +141,44 @@ export const operatorAudit = pgTable(
   },
   (table) => [uniqueIndex("operator_audit_seq").on(table.seq), index("operator_audit_device_at").on(table.deviceId, table.at)],
 );
+
+/** A report of a shared character, for the operator to decide. */
+export const characterReports = pgTable(
+  "character_reports",
+  {
+    id: text("id").primaryKey(),
+    characterSlug: text("character_slug").notNull(),
+    characterName: text("character_name").notNull(),
+    /** The handle the character was shared under. */
+    author: text("author").notNull(),
+    reason: text("reason").notNull(),
+    note: text("note"),
+    state: text("state", { enum: ["open", "dismissed", "hidden"] }).notNull(),
+    /** Who sent it, so one person can't flood the queue. Null once their account is deleted; never sent to anyone. */
+    reporterId: text("reporter_id"),
+    createdAt: time("created_at").notNull(),
+  },
+  (table) => [
+    // One person has at most one open report of a character; a second changes the first.
+    uniqueIndex("character_reports_one_open").on(table.reporterId, table.characterSlug).where(sql`${table.state} = 'open'`),
+    index("character_reports_state_created_at").on(table.state, table.createdAt),
+    index("character_reports_character_slug").on(table.characterSlug),
+  ],
+);
+
+/** A character one person chose not to see, with its author, whose other characters go too. */
+export const characterBlocks = pgTable(
+  "character_blocks",
+  {
+    userId: text("user_id").notNull(),
+    characterSlug: text("character_slug").notNull(),
+    author: text("author").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.characterSlug] })],
+);
+
+/** A character the operator took off the instance. */
+export const hiddenCharacters = pgTable("hidden_characters", {
+  characterSlug: text("character_slug").primaryKey(),
+  hiddenAt: time("hidden_at").notNull().defaultNow(),
+});

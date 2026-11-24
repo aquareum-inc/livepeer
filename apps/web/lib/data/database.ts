@@ -37,11 +37,12 @@ export async function databaseStatus(): Promise<DatabaseStatus> {
 
 /**
  * One store per process and per place it is kept: the Postgres one while the instance has a database, the
- * file one while it doesn't. Asked for on every use, so a changed address or secret is followed.
+ * file one while it doesn't. Asked for on every use, so a changed address or secret is followed. A store
+ * that seals nothing is asked for without a secret.
  */
-export function chosenStore<T>(build: { postgres: (db: Database, secret: string) => T; file: () => T }): (secret: string) => T {
+export function chosenStore<T>(build: { postgres: (db: Database, secret: string) => T; file: () => T }): (secret?: string) => T {
   let built: { db: Database | null; secret: string; store: T } | null = null;
-  return (secret) => {
+  return (secret = "") => {
     const db = database();
     if (!built || built.db !== db || built.secret !== secret) built = { db, secret, store: db ? build.postgres(db, secret) : build.file() };
     return built.store;

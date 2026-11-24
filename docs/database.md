@@ -1,7 +1,7 @@
 # A Postgres database for the instance: plan
 
-Status: **approved on 24 November 2026 with every recommendation in section 0 as written. Slices 1 to 3 are
-built; slices 4 to 8 are not.** What slice 1 changed from the plan is listed under the slices table in section 10.
+Status: **approved on 24 November 2026 with every recommendation in section 0 as written. Slices 1 to 4 are
+built; slices 5 to 8 are not.** What slice 1 changed from the plan is listed under the slices table in section 10.
 
 The instance keeps its own state as JSON files in `DATA_DIR`, and the operator console writes
 `instance.config.json` to disk. That ties an instance to a host with a persistent disk and one server
@@ -501,6 +501,11 @@ challenge is made, through a `sweep` method on each store, until the alerts roun
   on the session row. Neither is held in memory any more, except request counts in JSON mode.
 - Until slice 7's import, a phone enrolled on an instance that kept sessions in files signs in again once
   that instance gets `DATABASE_URL`.
+
+**Slice 4 as built (24 November 2026).** Tables `character_reports`, `character_blocks` and
+`hidden_characters` (migration `0002_moderation`). One difference from section 2: `reporter_id` is nullable.
+A deleted account's reports keep no sender, and two such reports of one character would otherwise break the
+"one open report per person per character" index; the file store's `"deleted"` marker is `NULL` here.
 
 **Found while testing the bundle, and fixed.** The bundle's `.env` carries `DATA_DIR=` empty, and Compose
 passed that to the app in place of the image's own `DATA_DIR=/data`. The app then tried to write its JSON
