@@ -17,6 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@vercel/functions": "3.11.3",
     "@electric-sql/pglite": "^0.6.0",
     "drizzle-orm": "^0.45.4",
     "pg": "^8.23.1"

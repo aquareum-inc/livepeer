@@ -1,3 +1,4 @@
+import { attachDatabasePool } from "@vercel/functions";
 import pg from "pg";
 
 export type Pool = pg.Pool;
@@ -15,5 +16,7 @@ export function createPool(url: string): Pool {
   // An idle connection the server closed reports here. Without a listener it would take the process down;
   // the pool has already discarded it, and the next query opens another.
   pool.on("error", () => undefined);
+  // On Vercel a suspended function must drop idle connections. Elsewhere this is a no-op.
+  if (process.env.VERCEL) attachDatabasePool(pool);
   return pool;
 }
