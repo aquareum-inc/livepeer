@@ -24,6 +24,9 @@ nonisolated struct DeviceKey: Sendable {
 
     /// What the phone unlocks with, in words: "Face ID", "Touch ID" or "Optic ID"; nil when nothing is enrolled.
     static var biometry: String? {
+        #if targetEnvironment(simulator)
+        if skipsMatch { return "Face ID" }
+        #endif
         let context = LAContext()
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) else { return nil }
         switch context.biometryType {
@@ -35,6 +38,14 @@ nonisolated struct DeviceKey: Sendable {
     }
 
     #if targetEnvironment(simulator)
+    /// For showing the console to someone from the simulator, where there is no face to match and every prompt
+    /// would otherwise need a command typed in a terminal. Off unless the simulator is told so:
+    /// `xcrun simctl spawn <udid> defaults write <bundle id> ConsoleSkipsFaceID -bool YES`, or the launch
+    /// argument `-ConsoleSkipsFaceID YES`. With it on, the simulator's key signs without asking. That key was
+    /// never behind a face in the first place (see `protection`), so nothing real is weakened, and like the rest
+    /// of the simulator's path this is never compiled into a build for a device.
+    static var skipsMatch: Bool { UserDefaults.standard.bool(forKey: "ConsoleSkipsFaceID") }
+
     /// The simulator has no Secure Enclave to hold a key behind a face, and refuses to make one. There the key
     /// is made without that condition and `sign` asks for the match itself, so the console runs as it does on a
     /// phone. This is never compiled into a build for a device.
@@ -75,14 +86,16 @@ nonisolated struct DeviceKey: Sendable {
             let context = LAContext()
             context.localizedReason = reason
             #if targetEnvironment(simulator)
-            do {
-                try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason)
-            } catch let error as LAError where [.userCancel, .appCancel, .systemCancel].contains(error.code) {
-                throw Failure.cancelled
-            } catch let error as LAError where [.biometryNotEnrolled, .biometryNotAvailable].contains(error.code) {
-                throw Failure.unavailable
-            } catch {
-                throw Failure.failed
+            if !Self.skipsMatch {
+                do {
+                    try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason)
+                } catch let error as LAError where [.userCancel, .appCancel, .systemCancel].contains(error.code) {
+                    throw Failure.cancelled
+                } catch let error as LAError where [.biometryNotEnrolled, .biometryNotAvailable].contains(error.code) {
+                    throw Failure.unavailable
+                } catch {
+                    throw Failure.failed
+                }
             }
             #endif
             let query: [String: Any] = [
