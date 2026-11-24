@@ -7,7 +7,8 @@ import release from "../../../../../release.config.json";
 import { alerts } from "@/lib/alerts";
 import { env } from "@/lib/env";
 import { mobileConsoleEnabled, operatorAudit, operatorDevices } from "@/lib/operator-devices";
-import { revokeAllOperatorPhonesAction, revokeOperatorPhoneAction } from "@/lib/operator/actions";
+import { getSession } from "@/lib/auth/session";
+import { revokeAllOperatorPhonesAction, revokeOperatorPhoneAction, seeNewPhonesAction } from "@/lib/operator/actions";
 import { operatorApi } from "@/lib/operator/client";
 import { runDoctor } from "@/lib/operator/doctor";
 import { pushSetup } from "@/lib/push";
@@ -36,6 +37,9 @@ export default async function SystemPage() {
   } catch {
     healthError = "The engine didn't answer.";
   }
+  // The phones added in the last two days, as this operator stands with each: tagged in the list below.
+  const session = await getSession();
+  const recent = session ? await operatorDevices().newPhones(session.userId) : { announced: [], dismissed: [], marked: [] };
   const mockOnly = isMockOnly({ MOCK_ONLY: env("MOCK_ONLY") });
   const resolve = (source: DataSource): DataSource => (mockOnly ? "mock" : source);
   const dataSources = [
@@ -51,7 +55,7 @@ export default async function SystemPage() {
       checks={await runDoctor()}
       dataSources={dataSources}
       sources={[{ name: "getEngineHealth", source: healthSource }]}
-      phones={{ phones: await operatorDevices().list(), offered: await mobileConsoleEnabled(), revoke: revokeOperatorPhoneAction, revokeAll: revokeAllOperatorPhonesAction }}
+      phones={{ phones: await operatorDevices().list(), added: [...recent.announced, ...recent.dismissed].map((phone) => phone.id), unseen: recent.marked.length, seen: seeNewPhonesAction, offered: await mobileConsoleEnabled(), revoke: revokeOperatorPhoneAction, revokeAll: revokeAllOperatorPhonesAction }}
       phoneActivity={await operatorAudit().list(200)}
       alerts={await mobileConsoleEnabled() ? await alertConnections() : null}
     />

@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { OperatorAuditEntry } from "@livepeer/api-client";
-import { and, count, desc, eq, gte, inArray, like, lte, ne, schema, sql, type Database } from "@livepeer/db";
+import { and, count, desc, eq, gte, inArray, isNull, like, lte, ne, schema, sql, type Database } from "@livepeer/db";
 
 import { identitySeal } from "../data/identity";
 import type { AuditStore, OperatorDeviceRecord, OperatorDeviceStore, PendingOperatorCode } from "./store";
@@ -164,11 +164,17 @@ export function postgresOperatorDeviceStore(db: Database, secret: string): Opera
       // Chosen from the sessions that are there, so a phone revoked a moment ago is passed over, not refused.
       await db
         .insert(dismissals)
-        .select(db.select({ userId: sql<string>`${userId}`.as("user_id"), sessionId: sessions.id, dismissedAt: sql<Date>`${new Date(at)}::timestamptz`.as("dismissed_at") }).from(sessions).where(inArray(sessions.id, [...sessionIds])))
+        .select(db.select({ userId: sql<string>`${userId}`.as("user_id"), sessionId: sessions.id, dismissedAt: sql<Date>`${new Date(at)}::timestamptz`.as("dismissed_at"), seenAt: sql<Date | null>`null::timestamptz`.as("seen_at") }).from(sessions).where(inArray(sessions.id, [...sessionIds])))
         .onConflictDoNothing();
     },
     async noticesDismissedBy(userId) {
       return (await db.select({ sessionId: dismissals.sessionId }).from(dismissals).where(eq(dismissals.userId, userId))).map((row) => row.sessionId);
+    },
+    async noticesUnseenBy(userId) {
+      return (await db.select({ sessionId: dismissals.sessionId }).from(dismissals).where(and(eq(dismissals.userId, userId), isNull(dismissals.seenAt)))).map((row) => row.sessionId);
+    },
+    async markNoticesSeen(userId, at) {
+      await db.update(dismissals).set({ seenAt: new Date(at) }).where(and(eq(dismissals.userId, userId), isNull(dismissals.seenAt)));
     },
     async sweep(now) {
       await db.delete(codes).where(lte(codes.expiresAt, new Date(now)));

@@ -179,8 +179,9 @@ holds it:
   (`operator_audit`), shown with the enrolled phones on the web console's System page, where
   phones are revoked. For two days after a phone is enrolled every console page says so to each operator,
   the one who enrolled it included, until that operator dismisses it; from then System carries a dot in the
-  sidebar for the rest of the two days. A dismissal is one row of `operator_phone_notice_dismissals` (the
-  operator's id and the session's), and goes with the session.
+  sidebar until that operator opens System, where the phone is tagged "New" in the list for the two days. A
+  dismissal is one row of `operator_phone_notice_dismissals` (the operator's id and the session's, and when
+  they next saw it on System), and goes with the session.
 - *Clients.* `pnpm api:openapi` writes these operations with `x-operator` and `x-mobile`;
   `packages/mobile-codegen` generates them into a separate `OperatorAPI` (Swift) and `OperatorApi` (Kotlin)
   that take an operator transport, and every change takes an `OperatorProof` argument.

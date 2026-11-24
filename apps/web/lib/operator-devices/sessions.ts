@@ -82,9 +82,12 @@ export interface OperatorDeviceSessions {
   list(): Promise<OperatorPhone[]>;
   /**
    * The phones enrolled in the last two days, newest first, as one operator sees them on the web console:
-   * `announced` are those whose notice they haven't closed, `dismissed` those they have.
+   * `announced` are those whose notice they haven't closed, `dismissed` those they have, and `marked` those
+   * of the dismissed they haven't looked at on System since, which is what System's dot stands for.
    */
-  newPhones(userId: string): Promise<{ announced: OperatorPhone[]; dismissed: OperatorPhone[] }>;
+  newPhones(userId: string): Promise<{ announced: OperatorPhone[]; dismissed: OperatorPhone[]; marked: OperatorPhone[] }>;
+  /** The operator opened System, where the phones are listed: the phones whose notice they closed stop being marked. */
+  seeNewPhones(userId: string): Promise<void>;
   /** An operator closes the notice for these phones. It closes for them only, and for these phones only. */
   dismissNewPhones(userId: string, phoneIds: readonly string[]): Promise<void>;
   /** Where alerts stand on a phone. */
@@ -318,10 +321,12 @@ export function operatorDeviceSessions(store: OperatorDeviceStore, secret: strin
     async newPhones(userId) {
       const since = now() - NEW_PHONE_HOURS * 3_600_000;
       const fresh = (await list()).filter((phone) => Date.parse(phone.created_at) > since).sort((a, b) => b.created_at.localeCompare(a.created_at));
-      if (fresh.length === 0) return { announced: [], dismissed: [] };
-      const closed = new Set(await store.noticesDismissedBy(userId));
-      return { announced: fresh.filter((phone) => !closed.has(phone.id)), dismissed: fresh.filter((phone) => closed.has(phone.id)) };
+      if (fresh.length === 0) return { announced: [], dismissed: [], marked: [] };
+      const [closed, unseen] = await Promise.all([store.noticesDismissedBy(userId), store.noticesUnseenBy(userId)]);
+      return { announced: fresh.filter((phone) => !closed.includes(phone.id)), dismissed: fresh.filter((phone) => closed.includes(phone.id)), marked: fresh.filter((phone) => unseen.includes(phone.id)) };
     },
+
+    seeNewPhones: (userId) => store.markNoticesSeen(userId, new Date(now()).toISOString()),
 
     dismissNewPhones: (userId, phoneIds) => store.dismissNotice(userId, phoneIds, new Date(now()).toISOString()),
 

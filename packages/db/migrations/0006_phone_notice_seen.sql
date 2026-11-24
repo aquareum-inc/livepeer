@@ -1,0 +1,1 @@
+ALTER TABLE "operator_phone_notice_dismissals" ADD COLUMN "seen_at" timestamp with time zone;

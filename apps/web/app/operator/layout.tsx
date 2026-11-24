@@ -22,10 +22,11 @@ export default async function OperatorLayout({ children }: { children: ReactNode
   if (!session) redirect("/sign-in?next=/operator");
   // Hidden from users: to anyone who isn't an operator the console doesn't exist.
   if (session.role !== "operator") notFound();
-  // New phones are announced to each operator until they close the notice; after that System carries a dot.
-  const { announced, dismissed } = await operatorDevices().newPhones(session.userId);
+  // New phones are announced to each operator until they close the notice. After that System carries a dot
+  // until they open it, where the phone is listed and tagged as new.
+  const { announced, marked } = await operatorDevices().newPhones(session.userId);
   const marks: Record<string, string> = {};
-  if (dismissed.length > 0) marks["/operator/system"] = dismissed.length === 1 ? "an operator phone was added in the last two days" : `${dismissed.length} operator phones were added in the last two days`;
+  if (marked.length > 0) marks["/operator/system"] = marked.length === 1 ? "an operator phone was added in the last two days" : `${marked.length} operator phones were added in the last two days`;
   return (
     <>
       <Console brand={brandOf(config)} appAvailable={surfaces.app} marks={marks}>

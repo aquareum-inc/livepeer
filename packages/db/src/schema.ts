@@ -133,6 +133,8 @@ export const operatorPhoneNoticeDismissals = pgTable(
       .notNull()
       .references(() => operatorDeviceSessions.id, { onDelete: "cascade" }),
     dismissedAt: time("dismissed_at").notNull(),
+    /** When that operator next opened System, where the phone is listed. Null until then: System carries a dot. */
+    seenAt: time("seen_at"),
   },
   (table) => [primaryKey({ columns: [table.userId, table.sessionId] }), index("operator_phone_notice_dismissals_session_id").on(table.sessionId)],
 );
