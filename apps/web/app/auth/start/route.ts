@@ -22,15 +22,15 @@ const METHODS: SignInMethod[] = ["email", "passkey", "google", "apple", "discord
  */
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
-  const origin = publicOrigin(request);
-  const native = nativeStart(params);
+  const origin = await publicOrigin(request);
+  const native = await nativeStart(params);
   if (native && "refusal" in native) return native.refusal;
 
   const method = METHODS.find((entry) => entry === params.get("method"));
-  const offered: string[] = signInMethods();
+  const offered: string[] = await signInMethods();
   const forConsole = native?.flow.purpose === "operator";
   // The development operator sign-in is for the console: on the web, or in the app when it asks for the console.
-  const allowed = method === "operator" ? authProvider().id === "mock" && (!native || forConsole) : method !== undefined && offered.includes(method);
+  const allowed = method === "operator" ? (await authProvider()).id === "mock" && (!native || forConsole) : method !== undefined && offered.includes(method);
   if (!method || !allowed) {
     if (native) return native.fail("method");
     // No method, or one this instance doesn't offer: go to the sign-in screen to choose.
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
   const state = randomBytes(16).toString("base64url");
   const codeVerifier = randomBytes(32).toString("base64url");
   const redirectUri = new URL("/auth/callback", origin).toString();
-  const target = await authProvider().authorizationUrl({ redirectUri, state, codeVerifier, method, ...(email ? { email } : {}), ...(forConsole ? { fresh: true } : {}) });
+  const target = await (await authProvider()).authorizationUrl({ redirectUri, state, codeVerifier, method, ...(email ? { email } : {}), ...(forConsole ? { fresh: true } : {}) });
   const response = NextResponse.redirect(new URL(target, origin));
   const flow: { state: string; codeVerifier: string; next: string; native?: NativeFlow } = {
     state,

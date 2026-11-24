@@ -103,7 +103,7 @@ async function sharedCharacter(slug: string): Promise<{ userId: string; characte
   const session = await getSession();
   if (!session) redirect("/sign-in");
   const character = (await (await api()).getCharacter(slug)).data;
-  if (!character || character.mine || !moderation().visible(session.userId)(character)) throw new Error("Character not found");
+  if (!character || character.mine || !(await moderation().visible(session.userId))(character)) throw new Error("Character not found");
   return { userId: session.userId, character };
 }
 
@@ -116,7 +116,7 @@ export async function reportCharacterAction(slug: string, reason: ReportReason, 
 /** Hides a shared character and everything by its author from the person (`block_character`). */
 export async function blockCharacterAction(slug: string): Promise<CharacterBlock> {
   const { userId, character } = await sharedCharacter(slug);
-  const blocked = moderation().block(userId, character);
+  const blocked = await moderation().block(userId, character);
   revalidatePath("/characters");
   return blocked;
 }
@@ -126,8 +126,8 @@ export async function deleteAccountAction(): Promise<void> {
   const session = await getSession();
   if (!session) redirect("/sign-in");
   await (await api()).deleteAccount();
-  devices().revokeAll(session.userId);
-  moderation().forget(session.userId);
+  await devices().revokeAll(session.userId);
+  await moderation().forget(session.userId);
   await clearSession();
   redirect("/");
 }
@@ -174,14 +174,14 @@ export async function listMediaAction(): Promise<MediaItem[]> {
 /** The characters a user can put in a video: their own first, then public ones, mature only if shown. */
 export async function listCastableCharactersAction(): Promise<Character[]> {
   const api = await client();
-  if (!charactersEnabled()) return [];
+  if (!await charactersEnabled()) return [];
   const { shown } = await adultContent(api);
   const [mine, shared] = await Promise.all([
     api.listCharacters({ scope: "mine", includeMature: shown }),
     api.listCharacters({ scope: "public", includeMature: shown }),
   ]);
   const own = new Set(mine.data.map((entry) => entry.slug));
-  const visible = moderation().visible((await getSession())?.userId ?? null);
+  const visible = await moderation().visible((await getSession())?.userId ?? null);
   return [...mine.data, ...shared.data.filter((entry) => !own.has(entry.slug))].filter(visible);
 }
 

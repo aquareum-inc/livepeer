@@ -15,13 +15,16 @@ export interface LoadOptions {
 
 export interface LoadedConfig {
   config: InstanceConfig;
-  /** Absolute path of the file read, or null when the "full" preset was used. */
+  /** Absolute path of the file read, or null when the config came from the environment or the "full" preset. */
   file: string | null;
+  /** Where the config came from. */
+  source: "file" | "environment" | "preset";
 }
 
 /**
- * Reads the instance config: INSTANCE_CONFIG if set, else ./instance.config.json, else the
- * "full" preset. ENGINE_URL overrides `engine.url`.
+ * Reads the instance config: INSTANCE_CONFIG_JSON (the config itself, for hosts with no file to mount) if
+ * set, else the file INSTANCE_CONFIG names, else ./instance.config.json, else the "full" preset. ENGINE_URL
+ * overrides `engine.url`.
  */
 export function loadConfig(options: LoadOptions = {}): LoadedConfig {
   const env = options.env ?? process.env;
@@ -31,7 +34,16 @@ export function loadConfig(options: LoadOptions = {}): LoadedConfig {
 
   let config: InstanceConfig;
   let source: string | null = file;
-  if (existsSync(/* turbopackIgnore: true */ file)) {
+  if (env.INSTANCE_CONFIG_JSON) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(env.INSTANCE_CONFIG_JSON);
+    } catch (error) {
+      throw new ConfigError([{ path: "", message: `INSTANCE_CONFIG_JSON is not valid JSON (${(error as Error).message})` }]);
+    }
+    config = validateConfig(parsed);
+    source = null;
+  } else if (existsSync(/* turbopackIgnore: true */ file)) {
     let parsed: unknown;
     try {
       parsed = JSON.parse(readFileSync(/* turbopackIgnore: true */ file, "utf8"));
@@ -47,5 +59,5 @@ export function loadConfig(options: LoadOptions = {}): LoadedConfig {
   }
 
   if (env.ENGINE_URL) config.engine = { ...config.engine, url: env.ENGINE_URL };
-  return { config, file: source };
+  return { config, file: source, source: source ? "file" : env.INSTANCE_CONFIG_JSON ? "environment" : "preset" };
 }

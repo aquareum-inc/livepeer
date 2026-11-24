@@ -10,11 +10,11 @@ import { isDev } from "@/lib/env";
 export const metadata: Metadata = { title: "Models" };
 
 export default async function ModelsPage() {
-  const { surfaces } = instance();
+  const { surfaces } = await instance();
   const offerings = await (await api()).listOfferings();
   return (
     <DevelopersLayout current="/developers/models" available={developerTabs(surfaces)} surfaces={surfaces}>
-      <ModelsScreen entries={catalogue(offerings.data)} />
+      <ModelsScreen entries={await catalogue(offerings.data)} />
       {isDev ? <DataSourceBadge sources={[{ name: "listOfferings", source: offerings.source }]} /> : null}
     </DevelopersLayout>
   );

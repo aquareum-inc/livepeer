@@ -36,8 +36,8 @@ function same(a: string, b: string): boolean {
 }
 
 /** Answers for a guest: the instance's default account, with no one signed in. */
-export function guest(): Caller {
-  return { via: "guest", client: apiFor(null), operator: null, account: null, operatorDevice: null };
+export async function guest(): Promise<Caller> {
+  return { via: "guest", client: await apiFor(null), operator: null, account: null, operatorDevice: null };
 }
 
 /**
@@ -57,29 +57,29 @@ export async function authenticate(request: NextRequest): Promise<Caller | null>
   if (token) {
     const operatorToken = env("OPERATOR_API_TOKEN");
     if (operatorToken && same(token, operatorToken)) {
-      return { via: "operator_token", client: apiFor(null), operator: buildOperatorClient(), account: null, operatorDevice: null };
+      return { via: "operator_token", client: await apiFor(null), operator: await buildOperatorClient(), account: null, operatorDevice: null };
     }
     if (token.startsWith(OPERATOR_DEVICE_TOKEN_PREFIX)) {
-      if (!mobileConsoleEnabled()) throw new ApiError(403, "This service doesn't offer its console on phones.", "mobile_console_off");
-      const session = operatorDevices().find(token);
+      if (!await mobileConsoleEnabled()) throw new ApiError(403, "This service doesn't offer its console on phones.", "mobile_console_off");
+      const session = await operatorDevices().find(token);
       if (!session) return null;
       const user = { id: session.userId, name: session.name, email: session.email };
-      return { via: "operator_device", client: apiFor(user), operator: buildOperatorClient(), account: { user, role: "operator", deviceId: null }, operatorDevice: session };
+      return { via: "operator_device", client: await apiFor(user), operator: await buildOperatorClient(), account: { user, role: "operator", deviceId: null }, operatorDevice: session };
     }
     if (token.startsWith(DEVICE_TOKEN_PREFIX)) {
-      if (!mobileEnabled()) throw new ApiError(403, "This service doesn't offer its app on phones right now.", "mobile_off");
-      const device = devices().find(token);
+      if (!await mobileEnabled()) throw new ApiError(403, "This service doesn't offer its app on phones right now.", "mobile_off");
+      const device = await devices().find(token);
       if (!device) return null;
       const user = { id: device.userId, name: device.name, email: device.email };
       // The app works in the account the device session names, if the person still belongs to it.
       const workspaceId = await workspaceOf({ userId: device.userId, workspaceId: device.workspaceId ?? null });
       // Always `operator: null`, whatever the role: a user's device session never does operator work.
-      return { via: "device", client: apiFor(user, "offered", workspaceId), operator: null, account: { user, role: device.role ?? "user", deviceId: device.id }, operatorDevice: null };
+      return { via: "device", client: await apiFor(user, "offered", workspaceId), operator: null, account: { user, role: device.role ?? "user", deviceId: device.id }, operatorDevice: null };
     }
-    const key = (await apiFor(null).verifyApiKey(token)).data;
+    const key = (await (await apiFor(null)).verifyApiKey(token)).data;
     if (!key) return null;
     // A workspace's key works in that workspace: its credit, its library.
-    return { via: "api_key", client: apiFor(null, "offered", key.workspace_id, key.workspace_id !== null), operator: null, account: null, operatorDevice: null };
+    return { via: "api_key", client: await apiFor(null, "offered", key.workspace_id, key.workspace_id !== null), operator: null, account: null, operatorDevice: null };
   }
 
   const session = readSessionValue(request.cookies.get(SESSION_COOKIE)?.value);
@@ -88,8 +88,8 @@ export async function authenticate(request: NextRequest): Promise<Caller | null>
   return {
     via: "browser",
     // As the web's own pages do: the account the session is working in.
-    client: apiFor(user, "offered", await workspaceOf(session)),
-    operator: session.role === "operator" ? buildOperatorClient() : null,
+    client: await apiFor(user, "offered", await workspaceOf(session)),
+    operator: session.role === "operator" ? await buildOperatorClient() : null,
     account: { user, role: session.role, deviceId: null },
     operatorDevice: null,
   };
@@ -102,6 +102,6 @@ export function carriesDeviceToken(request: NextRequest): boolean {
 }
 
 /** Everything an operation is given besides its caller, built once per request. */
-export function requestContext(request: NextRequest, caller: Caller): Context {
-  return { ...caller, devices: devices(), operatorDevices: operatorDevices(), audit: operatorAudit(), alerts: alerts(), moderation: moderation(), instance: describeInstance(requestOrigin(request)), labels: capabilityLabels, agentModelMenu, studioMediums, privacy: privacyDescription, quote: quoteCredits };
+export async function requestContext(request: NextRequest, caller: Caller): Promise<Context> {
+  return { ...caller, devices: devices(), operatorDevices: operatorDevices(), audit: operatorAudit(), alerts: alerts(), moderation: moderation(), instance: await describeInstance(requestOrigin(request)), labels: capabilityLabels, agentModelMenu, studioMediums, privacy: privacyDescription, quote: quoteCredits };
 }

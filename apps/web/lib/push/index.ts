@@ -1,31 +1,33 @@
 import "server-only";
 
 import { mockMode } from "../auth/session";
-import { jsonFileStore } from "../data/json-file";
+import { storeOver } from "../data/database";
 import { env } from "../env";
 import { instance } from "../instance";
 import { apnsSender } from "./apns";
 import { readApnsCredentials, readFcmCredentials } from "./credentials";
 import { fcmSender } from "./fcm";
-import { recordingSender, type OutboxContents } from "./recording";
+import { postgresOutboxStore } from "./postgres";
+import { recordingSender } from "./recording";
 import type { PushPlatform, PushSender } from "./types";
 
 /** Where a platform stands: able to send, not set up (which is fine: alerts are optional), or set up wrongly. */
 export type PushSetup = { state: "ready"; detail: string } | { state: "none"; detail: string } | { state: "problem"; detail: string };
 
-export const fileOutbox = () => jsonFileStore<OutboxContents>("push-outbox.json", (value) => ({ sent: value.sent ?? [] }));
+/** Where mock-only mode writes down what it would have sent. */
+const outbox = storeOver(postgresOutboxStore);
 
 /**
  * Whether the instance can send to each platform, in words safe to show an operator. iPhone needs the APNs key
  * and an app named in the config; Android needs the service account and the project's public values in the
  * config, for the same project.
  */
-export function pushSetup(): Record<PushPlatform, PushSetup> {
+export async function pushSetup(): Promise<Record<PushPlatform, PushSetup>> {
   if (mockMode()) {
     const recorded: PushSetup = { state: "ready", detail: "recorded, not sent (mock-only mode)" };
     return { ios: recorded, android: recorded };
   }
-  const apps = instance().mobile;
+  const apps = (await instance()).mobile;
   const apns = readApnsCredentials(env);
   const fcm = readFcmCredentials(env);
   const firebase = apps?.android?.firebase;
@@ -56,16 +58,16 @@ let built: { key: string; sender: PushSender } | null = null;
  * Apple and Google with the publisher's own credentials, for whichever platforms are set up. One per process,
  * rebuilt when the credentials or the named apps change.
  */
-export function pushSender(): PushSender {
-  const apps = instance().mobile;
+export async function pushSender(): Promise<PushSender> {
+  const apps = (await instance()).mobile;
   const key = JSON.stringify([mockMode(), env("APNS_KEY"), env("APNS_KEY_ID"), env("APNS_TEAM_ID"), env("FCM_SERVICE_ACCOUNT"), apps?.ios?.bundleId, apps?.android?.firebase?.projectId]);
   if (built?.key === key) return built.sender;
 
   let sender: PushSender;
   if (mockMode()) {
-    sender = recordingSender(fileOutbox());
+    sender = recordingSender(outbox());
   } else {
-    const setup = pushSetup();
+    const setup = await pushSetup();
     const apns = readApnsCredentials(env);
     const fcm = readFcmCredentials(env);
     const senders: Partial<Record<PushPlatform, PushSender>> = {

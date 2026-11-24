@@ -30,7 +30,7 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
   const bearer = request.headers.has("authorization");
   // With the API surface off, the instance still answers its native apps: their device sessions, and what
   // a guest can see before signing in.
-  if (!instance().surfaces.api && !(carriesDeviceToken(request) || (!bearer && match?.operation.public))) return error(404, "Not found");
+  if (!(await instance()).surfaces.api && !(carriesDeviceToken(request) || (!bearer && match?.operation.public))) return error(404, "Not found");
 
   let caller: Caller | null;
   try {
@@ -40,7 +40,7 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
     throw cause;
   }
   // A guest can call what a guest can see on the web; it runs as the instance's default account.
-  caller ??= match?.operation.public && !bearer ? guest() : null;
+  caller ??= match?.operation.public && !bearer ? await guest() : null;
   if (!caller) return error(401, bearer ? "That token isn't valid, or it has been revoked." : "Send an API key as a bearer token: Authorization: Bearer <key>", "signed_out");
   if (!match) return error(404, "No such operation. GET /api/v1 lists them.");
 
@@ -62,7 +62,7 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
   if (missing.length > 0) return error(400, `Missing: ${missing.join(", ")}`);
 
   try {
-    const value = await runOperation(match.operation, requestContext(request, caller), input, request.headers.get("x-operator-proof"));
+    const value = await runOperation(match.operation, await requestContext(request, caller), input, request.headers.get("x-operator-proof"));
     return request.method === "GET" ? read(request, value) : NextResponse.json(value);
   } catch (cause) {
     if (cause instanceof ApiError) return error(cause.status, cause.message, cause.code);

@@ -4,6 +4,8 @@
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  const { openEmbeddedDatabase } = await import("./lib/data/database");
+  await openEmbeddedDatabase();
   const { startAlertWatcher } = await import("./lib/alerts/watcher");
   startAlertWatcher();
 }

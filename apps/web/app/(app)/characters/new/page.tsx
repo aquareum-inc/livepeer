@@ -8,7 +8,7 @@ import { adultContent, charactersEnabled } from "@/lib/content";
 export const metadata: Metadata = { title: "New character" };
 
 export default async function NewCharacterPage() {
-  if (!charactersEnabled()) notFound();
+  if (!await charactersEnabled()) notFound();
   const { shown } = await adultContent(await api());
   return <NewCharacter matureAllowed={shown} />;
 }

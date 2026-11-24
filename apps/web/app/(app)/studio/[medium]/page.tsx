@@ -21,9 +21,9 @@ export default async function StudioPage({
 }) {
   const [{ medium }, { prompt }] = await Promise.all([params, searchParams]);
   if (!isMedium(medium)) notFound();
-  const [offerings, session] = await Promise.all([apiFor(null, "network").listOfferings(), getSession()]);
+  const [offerings, session] = await Promise.all([(await apiFor(null, "network")).listOfferings(), getSession()]);
   // What the network offers, and of that what this instance offers in the studio.
-  const offered = studioOfferings(offerings.data);
+  const offered = await studioOfferings(offerings.data);
   const withdrawn = withdrawnModes(offerings.data, offered);
   // A medium the operator has taken every mode out of isn't offered: open the first one that is.
   if (studioModes(medium, withdrawn).length === 0) {

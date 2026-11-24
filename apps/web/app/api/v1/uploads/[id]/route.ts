@@ -28,7 +28,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
   }
   if (!caller) return error(401, "Sign in to add to your library.", "signed_out");
   if (caller.via === "operator_device" || caller.via === "operator_token") return error(403, "The console's session can't do this. Use the app itself.", "operator_session");
-  if (caller.via === "api_key" && !instance().surfaces.api) return error(404, "Not found");
+  if (caller.via === "api_key" && !(await instance()).surfaces.api) return error(404, "Not found");
   // A browser sends its session by cookie, so the file must come from this instance's own pages.
   if (caller.via === "browser" && request.headers.get("origin") !== requestOrigin(request)) return error(403, "Send the file from this site.");
 

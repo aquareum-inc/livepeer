@@ -110,6 +110,10 @@ describe("operator client, mock data", () => {
     await client.updateCapabilitySetting("chat", { markup: null });
     expect(capabilities.read("chat").markup).toBeNull();
     await expect(client.updateCapabilitySetting("chat", { markup: 0.5 })).rejects.toThrow();
+    // Resetting forgets what was changed here, and nothing the store started with.
+    expect((await client.resetCapabilitySettings()).data).toBe(true);
+    expect(capabilities.read("text-to-video")).toEqual({ enabled: true, markup: null, surfaces: null });
+    expect(capabilities.read("chat").markup).toBe(2);
   });
 
   it("lists workspaces with their owner, plan and budget", async () => {

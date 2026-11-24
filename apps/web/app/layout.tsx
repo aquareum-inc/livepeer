@@ -8,8 +8,8 @@ import type { ReactNode } from "react";
 
 import { instance } from "@/lib/instance";
 
-export function generateMetadata(): Metadata {
-  const { name } = instance();
+export async function generateMetadata(): Promise<Metadata> {
+  const { name } = await instance();
   return {
     title: { default: name, template: `%s · ${name}` },
     description: "Generate, edit, understand and interact with video on an open network.",

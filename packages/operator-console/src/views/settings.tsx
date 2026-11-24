@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Chip, Field, Input, Sheet, Switch } from "@livepeer/ui";
+import { Badge, Button, Chip, Field, Input, Sheet, Switch } from "@livepeer/ui";
 import { useState, type FormEvent } from "react";
 
 import { BrandPreview, ColourInput, MarkRow } from "../components/appearance";
@@ -29,9 +29,15 @@ export interface SettingsViewProps {
   initial: InstanceSettings;
   /** Whether the config names an iOS or Android app built for this instance; the phone switch means nothing without one. */
   phoneAppsNamed: boolean;
-  /** Where the config is stored, shown so operators know what a save changes. */
-  file: string | null;
+  /** What the instance was deployed with: a file's path, or words for an environment variable or the preset. A save never changes it. */
+  source: string;
+  /** Whether something has been saved here over the deployed config. */
+  overridden: boolean;
+  /** What was saved no longer makes a valid config, so the instance is running without it. */
+  ignored: boolean;
   save: (settings: InstanceSettings) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Forgets what was saved here, and answers with the deployed config's own settings. */
+  reset: () => Promise<InstanceSettings>;
 }
 
 const SIGN_UP: Array<{ value: InstanceSettings["signUp"]; label: string }> = [
@@ -82,9 +88,13 @@ function Section({ title, description, children }: { title: string; description:
   );
 }
 
-export function SettingsView({ initial, phoneAppsNamed, file, save }: SettingsViewProps) {
+export function SettingsView({ initial, phoneAppsNamed, source, overridden, ignored, save, reset }: SettingsViewProps) {
   const [value, setValue] = useState(initial);
-  const [state, setState] = useState<{ kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "error"; message: string }>({ kind: "idle" });
+  const [state, setState] = useState<{ kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "reset" } | { kind: "error"; message: string }>({ kind: "idle" });
+  // Whether there is anything saved here to forget, and whether what was saved is being left out.
+  const [kept, setKept] = useState({ saved: overridden, ignored });
+  const [resetting, setResetting] = useState(false);
+  const deployed = source.includes("/") ? <span className="font-mono">{source.split("/").pop()}</span> : source;
   const set = (patch: Partial<InstanceSettings>) => {
     setValue((current) => ({ ...current, ...patch }));
     setState({ kind: "idle" });
@@ -100,8 +110,25 @@ export function SettingsView({ initial, phoneAppsNamed, file, save }: SettingsVi
     setReviewing(false);
     setState({ kind: "saving" });
     const result = await save(value).catch(() => ({ ok: false as const, error: "The settings didn't save." }));
-    if (result.ok) setSaved(value);
+    if (result.ok) {
+      setSaved(value);
+      setKept({ saved: true, ignored: false });
+    }
     setState(result.ok ? { kind: "saved" } : { kind: "error", message: result.error });
+  };
+
+  const forget = async () => {
+    setResetting(false);
+    setState({ kind: "saving" });
+    try {
+      const settings = await reset();
+      setValue(settings);
+      setSaved(settings);
+      setKept({ saved: false, ignored: false });
+      setState({ kind: "reset" });
+    } catch {
+      setState({ kind: "error", message: "The settings weren't reset." });
+    }
   };
 
   // Switching a surface off takes it away from people straight away, so that save is reviewed first.
@@ -114,6 +141,12 @@ export function SettingsView({ initial, phoneAppsNamed, file, save }: SettingsVi
   return (
     <ConsolePage title="Instance settings" description="What this instance is called, who can join, what it serves and what it allows.">
       <form onSubmit={submit}>
+        {kept.ignored ? (
+          <div role="status" className="mb-2 flex max-w-[920px] items-start gap-3 rounded-card border border-hairline bg-card px-4 py-3 text-[13px]">
+            <Badge tone="warn" className="shrink-0 whitespace-nowrap">Not applied</Badge>
+            <p className="text-muted-foreground">What was saved here no longer makes a valid config in this version, so the instance is running on {deployed} as deployed. Save again to replace it, or reset.</p>
+          </div>
+        ) : null}
         <div className="max-w-[920px] divide-y divide-hairline">
           <Section title="Identity" description="What the instance is called, and where it lives.">
             <div className="flex flex-col gap-4 rounded-card border border-hairline bg-card p-4">
@@ -183,13 +216,22 @@ export function SettingsView({ initial, phoneAppsNamed, file, save }: SettingsVi
           </Section>
         </div>
 
-        <div className="sticky bottom-0 -mx-4 flex items-center gap-3 border-t border-hairline bg-panel px-4 py-3 md:-mx-6 md:px-6">
+        <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-hairline bg-panel px-4 py-3 md:-mx-6 md:px-6">
           <Button type="submit" variant="primary" disabled={!dirty || state.kind === "saving"}>{state.kind === "saving" ? "Saving…" : "Save changes"}</Button>
-          <p role="status" className={`text-[13px] ${state.kind === "error" ? "text-destructive" : "text-muted-foreground"}`}>
-            {state.kind === "saved" ? "Saved. Changes apply on the next request." : state.kind === "error" ? state.message : dirty ? "Unsaved changes." : <>Saves to <span className="font-mono">{file ? file.split("/").pop() : "instance.config.json"}</span>, checked against the config schema.</>}
+          {/* On a narrow screen the two buttons share a row and what they did reads underneath. */}
+          <p role="status" className={`order-last basis-full text-[13px] sm:order-none sm:min-w-0 sm:flex-1 sm:basis-0 ${state.kind === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+            {state.kind === "saved" ? "Saved. It applies everywhere within 10 seconds." : state.kind === "reset" ? <>Reset. The instance runs on {deployed} as deployed.</> : state.kind === "error" ? state.message : dirty ? "Unsaved changes." : kept.ignored ? "What was saved here isn't being applied." : kept.saved ? <>Saved here over {deployed}, which is left as it is.</> : <>Running on {deployed} as deployed. A save is kept by this instance and leaves that config as it is.</>}
           </p>
+          {kept.saved ? <Button type="button" variant="ghost" className="ml-auto" disabled={state.kind === "saving"} onClick={() => setResetting(true)}>Reset to deployed config</Button> : null}
         </div>
       </form>
+
+      <Sheet open={resetting} onOpenChange={setResetting} title="Reset settings to the deployed config?" description="Everything saved on this page is forgotten, and the instance goes back to the config it was deployed with within 10 seconds. That can switch a surface on or off. Capabilities keep their own settings.">
+        <div className="flex gap-2">
+          <Button className="flex-1" onClick={() => setResetting(false)}>Keep what's saved</Button>
+          <Button variant="destructive" className="flex-1" onClick={() => void forget()}>Reset</Button>
+        </div>
+      </Sheet>
 
       <Sheet
         open={reviewing}

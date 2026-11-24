@@ -10,18 +10,53 @@
 # pinned Git build context; `docker compose pull` is used once images exist, `build` until then.
 name: livepeer
 
+# The app and the one-shot migration run from the same image. The database address is the bundle's own Postgres
+# unless .env sets DATABASE_URL to another one; it is given here, not written to .env, so the same .env still
+# runs `pnpm dev` with no database.
+x-app: &app
+  image: ${REGISTRY}/${ORG}/livepeer:${APP_VERSION:-local}
+  build: { context: .., dockerfile: Dockerfile }
+  env_file: [{ path: "${INSTANCE_DIR:-..}/.env", required: true }]
+
+x-database-url: &database-url ${DATABASE_URL:-postgres://livepeer:${POSTGRES_PASSWORD:-}@db:5432/livepeer}
+
 services:
   app:
-    image: ${REGISTRY}/${ORG}/livepeer:${APP_VERSION:-local}
-    build: { context: .., dockerfile: Dockerfile }
-    env_file: [{ path: "${INSTANCE_DIR:-..}/.env", required: true }]
+    <<: *app
     environment:
       INSTANCE_CONFIG: /config/instance.config.json
+      DATABASE_URL: *database-url
+      # Named here because .env carries DATA_DIR empty, which would otherwise replace the image's own value
+      # and leave the app nowhere it is allowed to write.
+      DATA_DIR: /data
     volumes:
       - ${INSTANCE_DIR:-..}/instance.config.json:/config/instance.config.json:ro
       - app-data:/data
     ports: ["127.0.0.1:${APP_PORT:-3000}:3000"]
+    # The app starts only on a migrated database: a failed migration stops it here.
+    depends_on: { migrate: { condition: service_completed_successfully } }
     restart: unless-stopped
+
+  # The instance's own state. No published port: only the app and the migration reach it.
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: livepeer
+      POSTGRES_DB: livepeer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set. Run ./livepeer setup, which generates it}
+    volumes: [db-data:/var/lib/postgresql/data]
+    healthcheck: { test: [CMD-SHELL, "pg_isready -U livepeer -d livepeer"], interval: 5s, timeout: 3s, retries: 12 }
+    restart: unless-stopped
+
+  # Brings the database to this release's schema, then exits. It runs on every `up`, so setup, upgrade and a
+  # plain restart all apply what is pending and nothing else has to remember to.
+  migrate:
+    <<: *app
+    command: [node, migrate.cjs, migrations]
+    environment:
+      DATABASE_URL: *database-url
+    depends_on: { db: { condition: service_healthy } }
+    restart: "no"
 
   engine:
     profiles: [network]
@@ -97,5 +132,6 @@ services:
 
 volumes:
   app-data:
+  db-data:
   engine-data:
   paid-state:

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { roundStatus } from "@/lib/alerts/round";
+import { databaseStatus } from "@/lib/data/database";
 import { env } from "@/lib/env";
 import { instance } from "@/lib/instance";
 
@@ -7,7 +9,10 @@ export const dynamic = "force-dynamic";
 
 /** Liveness and a quick readiness summary for the bundle's health check and `doctor`. */
 export async function GET() {
-  const config = instance();
+  // The config can need the database. If neither it nor a last-known copy can be had, say so plainly: this
+  // is what a load balancer and `doctor` ask, and it must answer when the database doesn't.
+  const config = await instance().catch(() => null);
+  if (!config) return NextResponse.json({ status: "degraded", database: await databaseStatus() }, { status: 503 });
   const mockOnly = env("MOCK_ONLY") === "1" || env("MOCK_ONLY") === "true";
   const engineUrl = config.engine?.url ?? env("ENGINE_URL");
   let engine: "ok" | "unreachable" | "skipped" = "skipped";
@@ -19,9 +24,14 @@ export async function GET() {
       engine = "unreachable";
     }
   }
-  const ok = engine !== "unreachable";
+  // "behind" is a database that hasn't had this release's migrations: the app must not serve on it.
+  const database = await databaseStatus();
+  const ok = engine !== "unreachable" && database !== "unreachable" && database !== "behind";
+  // Whether anything is running the checks behind operators' alerts. Said here for `doctor`; it doesn't make
+  // the instance unhealthy, since everything else works without them.
+  const alerts = database === "unreachable" ? "unknown" : (await roundStatus().catch(() => ({ status: "unknown" as const }))).status;
   return NextResponse.json(
-    { status: ok ? "ok" : "degraded", instance: config.name, mode: mockOnly ? "mock-only" : "live", surfaces: config.surfaces, engine },
+    { status: ok ? "ok" : "degraded", instance: config.name, mode: mockOnly ? "mock-only" : "live", surfaces: config.surfaces, engine, database, alerts },
     { status: ok ? 200 : 503 },
   );
 }

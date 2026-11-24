@@ -1,6 +1,5 @@
 import "server-only";
 
-import type { StateStore } from "../data/store";
 import { apnsPayload } from "./apns";
 import { fcmMessage } from "./fcm";
 import type { PushSender, PushTarget } from "./types";
@@ -17,11 +16,11 @@ export interface RecordedPush {
   payload: Record<string, unknown>;
 }
 
-export interface OutboxContents {
-  sent: RecordedPush[];
+/** Where the recording sender writes down what it would have sent. */
+export interface OutboxStore {
+  /** Adds a notification, and keeps only the newest `keep`. */
+  record(push: RecordedPush, keep: number): Promise<void>;
 }
-
-export type OutboxStore = StateStore<OutboxContents>;
 
 /**
  * The sender for mock-only mode, tests and CI: it contacts nobody and writes down what it would have sent.
@@ -32,9 +31,7 @@ export function recordingSender(store: OutboxStore, now: () => number = Date.now
     offers: () => true,
     async send(target, notification) {
       const payload = target.platform === "ios" ? apnsPayload(notification) : fcmMessage("<push token>", notification);
-      store.update((contents) => {
-        contents.sent = [...contents.sent, { at: new Date(now()).toISOString(), platform: target.platform, environment: target.environment, payload }].slice(-OUTBOX_LIMIT);
-      });
+      await store.record({ at: new Date(now()).toISOString(), platform: target.platform, environment: target.environment, payload }, OUTBOX_LIMIT);
       return { outcome: "sent", detail: null };
     },
   };

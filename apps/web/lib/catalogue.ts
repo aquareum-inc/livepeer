@@ -19,8 +19,8 @@ const KIND_LABEL = {
 } as const;
 
 /** The capabilities this instance offers, each with where it is presented. */
-export function catalogue(offerings: Offering[]): CatalogueEntry[] {
-  const { capabilities } = instance();
+export async function catalogue(offerings: Offering[]): Promise<CatalogueEntry[]> {
+  const { capabilities } = await instance();
   return filterCapabilities(offerings, capabilities).map((offering) => {
     const placement = placeCapability(offering, capabilities?.overrides);
     return {
@@ -32,22 +32,22 @@ export function catalogue(offerings: Offering[]): CatalogueEntry[] {
 }
 
 /** Capabilities the composer can hand a request to: those placed in chat (generation, language, understanding). */
-export function composerOfferings(offerings: Offering[]): Offering[] {
-  const { capabilities } = instance();
+export async function composerOfferings(offerings: Offering[]): Promise<Offering[]> {
+  const { capabilities } = await instance();
   return capabilitiesFor("chat", filterCapabilities(offerings, capabilities), capabilities?.overrides);
 }
 
 /** Capabilities offered as actions on existing media. */
-export function mediaActions(offerings: Offering[]): Offering[] {
-  const { capabilities } = instance();
+export async function mediaActions(offerings: Offering[]): Promise<Offering[]> {
+  const { capabilities } = await instance();
   return filterCapabilities(offerings, capabilities).filter(
     (offering) => placeCapability(offering, capabilities?.overrides).mediaAction && offering.modes.includes("single-shot"),
   );
 }
 
 /** Capabilities the studio runs: those offered and placed in the studio. */
-export function studioOfferings(offerings: Offering[]): Offering[] {
-  const { capabilities } = instance();
+export async function studioOfferings(offerings: Offering[]): Promise<Offering[]> {
+  const { capabilities } = await instance();
   return capabilitiesFor("studio", filterCapabilities(offerings, capabilities), capabilities?.overrides);
 }
 

@@ -13,7 +13,7 @@ export default async function DevicesPage() {
   if (!session) redirect("/sign-in");
   return (
     <SettingsLayout current="/settings/devices">
-      <DevicesSettings devices={devices().list(session.userId, null)} revoke={revokeDeviceAction} />
+      <DevicesSettings devices={await devices().list(session.userId, null)} revoke={revokeDeviceAction} />
     </SettingsLayout>
   );
 }

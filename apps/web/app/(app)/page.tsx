@@ -14,8 +14,8 @@ type Props = { searchParams: Promise<{ with?: string | string[] }> };
 export default async function HomePage({ searchParams }: Props) {
   const client = await api();
   const session = await getSession();
-  const { home } = instance();
-  const characters = charactersEnabled();
+  const { home } = await instance();
+  const characters = await charactersEnabled();
   // `?with=<slug>` arrives from a character's page and puts them in the composer.
   const slug = (await searchParams).with;
   const [starters, offerings, agentModels, character] = await Promise.all([
@@ -24,9 +24,9 @@ export default async function HomePage({ searchParams }: Props) {
     client.listAgentModels(),
     characters && typeof slug === "string" ? client.getCharacter(slug) : null,
   ]);
-  const offered = composerOfferings(offerings.data);
+  const offered = await composerOfferings(offerings.data);
   const found = character?.data ?? null;
-  const cast = found && (!found.mature || (await adultContent(client)).shown) && moderation().visible(session?.userId ?? null)(found) ? { slug: found.slug, name: found.name, image: found.image } : null;
+  const cast = found && (!found.mature || (await adultContent(client)).shown) && (await moderation().visible(session?.userId ?? null))(found) ? { slug: found.slug, name: found.name, image: found.image } : null;
   return (
     <>
       <Home starters={starters.data} offerings={offered} agentModels={agentModels.data} signedIn={session !== null} characters={characters} cast={cast} backdrop={{ video: home?.backgroundVideo ?? null, poster: home?.backgroundPoster ?? null, image: home?.backgroundImage ?? null, aurora: home?.aurora ?? false }} />

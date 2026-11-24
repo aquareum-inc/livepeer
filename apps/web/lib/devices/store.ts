@@ -1,8 +1,5 @@
 import "server-only";
 
-import { jsonFileStore } from "../data/json-file";
-import type { StateStore } from "../data/store";
-
 /** A device session as the instance keeps it. The token itself is never stored, only a keyed hash. */
 export interface DeviceRecord {
   id: string;
@@ -42,14 +39,23 @@ export interface PendingCode {
   expiresAt: number;
 }
 
-export interface Contents {
-  sessions: DeviceRecord[];
-  codes: PendingCode[];
-}
-
-/** Where device sessions live: revocation needs state. It holds sessions and pending sign-ins only, never balances. */
-export type DeviceSessionStore = StateStore<Contents>;
-
-export function fileDeviceSessionStore(): DeviceSessionStore {
-  return jsonFileStore<Contents>("device-sessions.json", (value) => ({ sessions: value.sessions ?? [], codes: value.codes ?? [] }));
+/**
+ * Where device sessions live: revocation needs state. It holds sessions and pending sign-ins only, never
+ * balances. One method per thing the sessions need of it, so a database can answer each with one statement.
+ */
+export interface DeviceSessionStore {
+  putCode(code: PendingCode): Promise<void>;
+  /** Hands a pending sign-in over and forgets it, so it can only ever be collected once. */
+  takeCode(codeHash: string): Promise<PendingCode | null>;
+  createSession(record: DeviceRecord): Promise<void>;
+  findByTokenHash(tokenHash: string): Promise<DeviceRecord | null>;
+  /** Notes when a session was last used. */
+  touch(id: string, at: string): Promise<void>;
+  listForUser(userId: string): Promise<DeviceRecord[]>;
+  /** False when there is no such session. */
+  setWorkspace(id: string, workspaceId: string | null): Promise<boolean>;
+  /** Ends one of a user's sessions, or all of them. Answers with how many ended. */
+  remove(by: { id: string; userId: string } | { userId: string }): Promise<number>;
+  /** Drops sign-ins nobody collected by `now` and sessions not used since `idleSince`. */
+  sweep(input: { now: number; idleSince: string }): Promise<void>;
 }

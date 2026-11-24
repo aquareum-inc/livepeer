@@ -9,5 +9,5 @@ export const metadata: Metadata = { title: "Reports" };
 
 export default async function ReportsPage() {
   await requireOperator();
-  return <ReportsView reports={moderation().reports()} resolve={resolveReportAction} />;
+  return <ReportsView reports={await moderation().reports()} resolve={resolveReportAction} />;
 }

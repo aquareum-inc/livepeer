@@ -16,7 +16,7 @@ const cache = new Map<string, { at: number; model: AppModel | null; source: Data
  * leave it. Cached for a few minutes, since runners change slowly; a failed read names nothing.
  */
 export async function describeApps(apps: ReadonlyArray<string>): Promise<Sourced<AppModel[]>> {
-  const client = buildOperatorClient();
+  const client = await buildOperatorClient();
   const found = await Promise.all(
     [...new Set(apps)].map(async (app) => {
       const cached = cache.get(app);
@@ -37,6 +37,6 @@ export async function describeApps(apps: ReadonlyArray<string>): Promise<Sourced
 
 /** The models behind the apps on offer, for the studio picker and the agent's steps. Media tools run no model. */
 export async function appModels(offerings: ReadonlyArray<Offering>): Promise<Sourced<AppModel[]>> {
-  const { capabilities } = instance();
+  const { capabilities } = await instance();
   return describeApps(offerings.filter((offering) => placeCapability(offering, capabilities?.overrides).kind !== "media-action").map((offering) => offering.app));
 }

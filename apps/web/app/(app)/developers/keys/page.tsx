@@ -11,7 +11,7 @@ import { isDev } from "@/lib/env";
 export const metadata: Metadata = { title: "API keys" };
 
 export default async function KeysPage() {
-  const { surfaces } = instance();
+  const { surfaces } = await instance();
   const current = await currentAccount();
   if (current && !can(current.role, "manage_keys")) {
     return (

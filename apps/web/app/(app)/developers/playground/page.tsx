@@ -11,7 +11,7 @@ import { origin } from "@/lib/origin";
 export const metadata: Metadata = { title: "Playground" };
 
 export default async function PlaygroundPage() {
-  const { surfaces } = instance();
+  const { surfaces } = await instance();
   // API code: served only with the API on. The proxy checks this too.
   if (!surfaces.api) notFound();
   return (

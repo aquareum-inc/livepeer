@@ -13,25 +13,27 @@ export const DEVICE_TOKEN_PREFIX = "aqd_";
 export const IDLE_DAYS = 90;
 /** How long a finished sign-in waits for its app to collect it. */
 export const CODE_SECONDS = 60;
-/** Last-used times are written at most this often, so every request doesn't rewrite the file. */
+/** Last-used times are written at most this often, so most requests write nothing. */
 const TOUCH_MS = 60 * 60 * 1000;
 
 export type Platform = DeviceRecord["platform"];
 
 export interface DeviceSessions {
   /** Called at the end of a native sign-in: holds the identity for the app to collect with its verifier. */
-  issueCode(input: { identity: Identity; builderKey: string | null; challenge: string; platform: Platform }): string;
+  issueCode(input: { identity: Identity; builderKey: string | null; challenge: string; platform: Platform }): Promise<string>;
   /** The app collects its sign-in. Null when the code is unknown, used, expired or the verifier doesn't match. */
-  redeemCode(input: { code: string; verifier: string; deviceName: string; platform: Platform }): DeviceToken | null;
+  redeemCode(input: { code: string; verifier: string; deviceName: string; platform: Platform }): Promise<DeviceToken | null>;
   /** The session a token belongs to, if it is still valid. Marks it used. */
-  find(token: string): DeviceRecord | null;
-  list(userId: string, currentId: string | null): DeviceSession[];
+  find(token: string): Promise<DeviceRecord | null>;
+  list(userId: string, currentId: string | null): Promise<DeviceSession[]>;
   /** Points a session at a workspace, or at the personal account with null. False when there is no such session. */
-  setWorkspace(id: string, workspaceId: string | null): boolean;
+  setWorkspace(id: string, workspaceId: string | null): Promise<boolean>;
   /** Ends one of the user's sessions. False when it isn't theirs or doesn't exist. */
-  revoke(userId: string, id: string): boolean;
+  revoke(userId: string, id: string): Promise<boolean>;
   /** Ends every session the user has, for example when they are suspended. */
-  revokeAll(userId: string): number;
+  revokeAll(userId: string): Promise<number>;
+  /** Drops sign-ins nobody collected and sessions idle past their end. */
+  sweep(): Promise<void>;
 }
 
 const base64url = (bytes: Buffer) => bytes.toString("base64url");
@@ -50,96 +52,72 @@ export function toDeviceSession(record: DeviceRecord, currentId: string | null):
 /**
  * Device sessions for the native apps. Tokens and codes are stored as an HMAC keyed with the session
  * secret, so the store alone can't be used to sign in, and rotating SESSION_SECRET ends every session, as
- * it does for browser sessions.
+ * it does for browser sessions. A stored hash is looked up by equality: it is keyed, so how long the lookup
+ * takes tells a caller nothing about a token they don't hold.
  */
 export function deviceSessions(store: DeviceSessionStore, secret: string, now: () => number = Date.now): DeviceSessions {
   const hash = (value: string) => createHmac("sha256", secret).update(value).digest("base64url");
   const expired = (record: DeviceRecord) => Date.parse(record.lastUsedAt) + IDLE_DAYS * 86_400_000 <= now();
+  /** What has lapsed goes whenever a sign-in starts or finishes, so nothing has to run between requests for it. */
+  const sweep = () => store.sweep({ now: now(), idleSince: new Date(now() - IDLE_DAYS * 86_400_000).toISOString() });
 
   return {
-    issueCode({ identity, builderKey, challenge, platform }) {
+    async issueCode({ identity, builderKey, challenge, platform }) {
       const code = base64url(randomBytes(32));
-      store.update((contents) => {
-        contents.codes = contents.codes.filter((entry) => entry.expiresAt > now());
-        contents.codes.push({ codeHash: hash(code), challenge, platform, userId: identity.userId, name: identity.name, email: identity.email, role: identity.role, builderKey, expiresAt: now() + CODE_SECONDS * 1000 });
-      });
+      await sweep();
+      await store.putCode({ codeHash: hash(code), challenge, platform, userId: identity.userId, name: identity.name, email: identity.email, role: identity.role, builderKey, expiresAt: now() + CODE_SECONDS * 1000 });
       return code;
     },
 
-    redeemCode({ code, verifier, deviceName, platform }) {
-      return store.update((contents) => {
-        const codeHash = hash(code);
-        const pending = contents.codes.find((entry) => same(entry.codeHash, codeHash));
-        // A code is single use: it goes whether or not the exchange succeeds.
-        contents.codes = contents.codes.filter((entry) => entry !== pending && entry.expiresAt > now());
-        if (!pending || pending.expiresAt <= now() || pending.platform !== platform) return null;
-        if (!same(base64url(sha256(verifier)), pending.challenge)) return null;
+    async redeemCode({ code, verifier, deviceName, platform }) {
+      // A code is single use: it goes whether or not the exchange succeeds.
+      const pending = await store.takeCode(hash(code));
+      await sweep();
+      if (!pending || pending.expiresAt <= now() || pending.platform !== platform) return null;
+      if (!same(base64url(sha256(verifier)), pending.challenge)) return null;
 
-        const token = `${DEVICE_TOKEN_PREFIX}${base64url(randomBytes(32))}`;
-        const stamp = new Date(now()).toISOString();
-        const record: DeviceRecord = {
-          id: `dev_${base64url(randomBytes(9))}`,
-          tokenHash: hash(token),
-          userId: pending.userId,
-          name: pending.name,
-          email: pending.email,
-          role: pending.role ?? "user",
-          deviceName: deviceName.trim().slice(0, 80) || (platform === "ios" ? "iPhone" : "Android phone"),
-          platform,
-          builderKey: pending.builderKey,
-          createdAt: stamp,
-          lastUsedAt: stamp,
-        };
-        contents.sessions = contents.sessions.filter((entry) => !expired(entry));
-        contents.sessions.push(record);
-        return { token, device: toDeviceSession(record, record.id) };
-      });
+      const token = `${DEVICE_TOKEN_PREFIX}${base64url(randomBytes(32))}`;
+      const stamp = new Date(now()).toISOString();
+      const record: DeviceRecord = {
+        id: `dev_${base64url(randomBytes(9))}`,
+        tokenHash: hash(token),
+        userId: pending.userId,
+        name: pending.name,
+        email: pending.email,
+        role: pending.role ?? "user",
+        deviceName: deviceName.trim().slice(0, 80) || (platform === "ios" ? "iPhone" : "Android phone"),
+        platform,
+        builderKey: pending.builderKey,
+        createdAt: stamp,
+        lastUsedAt: stamp,
+      };
+      await store.createSession(record);
+      return { token, device: toDeviceSession(record, record.id) };
     },
 
-    find(token) {
+    async find(token) {
       if (!token.startsWith(DEVICE_TOKEN_PREFIX)) return null;
-      const tokenHash = hash(token);
-      const record = store.read().sessions.find((entry) => same(entry.tokenHash, tokenHash));
+      const record = await store.findByTokenHash(hash(token));
       if (!record || expired(record)) return null;
       if (now() - Date.parse(record.lastUsedAt) < TOUCH_MS) return record;
       const lastUsedAt = new Date(now()).toISOString();
-      store.update((contents) => {
-        const stored = contents.sessions.find((entry) => entry.id === record.id);
-        if (stored) stored.lastUsedAt = lastUsedAt;
-      });
+      await store.touch(record.id, lastUsedAt);
       return { ...record, lastUsedAt };
     },
 
-    list(userId, currentId) {
-      return store
-        .read()
-        .sessions.filter((entry) => entry.userId === userId && !expired(entry))
+    async list(userId, currentId) {
+      return (await store.listForUser(userId))
+        .filter((entry) => !expired(entry))
         .sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt))
         .map((entry) => toDeviceSession(entry, currentId));
     },
 
-    setWorkspace(id, workspaceId) {
-      return store.update((contents) => {
-        const stored = contents.sessions.find((entry) => entry.id === id);
-        if (stored) stored.workspaceId = workspaceId;
-        return stored !== undefined;
-      });
-    },
+    setWorkspace: (id, workspaceId) => store.setWorkspace(id, workspaceId),
 
-    revoke(userId, id) {
-      return store.update((contents) => {
-        const before = contents.sessions.length;
-        contents.sessions = contents.sessions.filter((entry) => !(entry.id === id && entry.userId === userId));
-        return contents.sessions.length < before;
-      });
-    },
+    revoke: async (userId, id) => (await store.remove({ id, userId })) > 0,
 
-    revokeAll(userId) {
-      return store.update((contents) => {
-        const before = contents.sessions.length;
-        contents.sessions = contents.sessions.filter((entry) => entry.userId !== userId);
-        return before - contents.sessions.length;
-      });
-    },
+    revokeAll: (userId) => store.remove({ userId }),
+
+    sweep,
   };
 }

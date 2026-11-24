@@ -32,8 +32,8 @@ export function requestOrigin(request: { headers: Headers; nextUrl: { origin: st
  * The instance's public address: its configured domain, or else where the request arrived. Sign-in builds
  * its callback from this, so a phone that reached a development server at another address comes back to it.
  */
-export function publicOrigin(request: { headers: Headers; nextUrl: { origin: string; protocol: string } }): string {
-  const domain = instance().domain;
+export async function publicOrigin(request: { headers: Headers; nextUrl: { origin: string; protocol: string } }): Promise<string> {
+  const domain = (await instance()).domain;
   return domain ? `https://${domain}` : requestOrigin(request);
 }
 
@@ -41,8 +41,8 @@ export function publicOrigin(request: { headers: Headers; nextUrl: { origin: str
  * This instance as it describes itself to clients. `origin` is where the request arrived, used to make
  * paths absolute when the config has no public domain.
  */
-export function describeInstance(origin: string): InstanceDescription {
-  const config = instance();
+export async function describeInstance(origin: string): Promise<InstanceDescription> {
+  const config = await instance();
   const base = config.domain ? `https://${config.domain}` : origin;
   const absolute = (value: string | undefined): string | null => (value ? (/^(https?:|data:)/.test(value) ? value : new URL(value, base).toString()) : null);
   return {
@@ -63,7 +63,7 @@ export function describeInstance(origin: string): InstanceDescription {
           }
         : null,
     },
-    sign_in: { methods: signInMethods().filter((method): method is SignInMethodName => method !== "operator"), sign_up: config.auth?.signUp ?? "open" },
+    sign_in: { methods: (await signInMethods()).filter((method): method is SignInMethodName => method !== "operator"), sign_up: config.auth?.signUp ?? "open" },
     content: { characters: config.content?.characters ?? false, adult_content: config.content?.adultContent ?? false },
     home: {
       background_image: absolute(config.home?.backgroundImage),

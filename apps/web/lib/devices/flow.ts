@@ -34,11 +34,11 @@ export function returnToApp(callback: string, values: Record<string, string>): N
  * Reads a native start: `client`, `challenge`, `state` and, for the console, `purpose=operator`. Null for a browser sign-in. A request naming an
  * app the instance doesn't know is refused outright: there is nowhere safe to send the result.
  */
-export function nativeStart(params: URLSearchParams): { flow: NativeFlow; fail: (reason: NativeFailure) => NextResponse } | { refusal: NextResponse } | null {
+export async function nativeStart(params: URLSearchParams): Promise<{ flow: NativeFlow; fail: (reason: NativeFailure) => NextResponse } | { refusal: NextResponse } | null> {
   const client = params.get("client");
   if (client === null) return null;
   const platform = client === "ios" || client === "android" ? client : null;
-  const callback = platform ? appCallback(platform) : null;
+  const callback = platform ? await appCallback(platform) : null;
   if (!platform || !callback) return { refusal: new NextResponse("This instance has no app for that platform.", { status: 400 }) };
 
   const state = params.get("state") ?? "";
@@ -48,6 +48,6 @@ export function nativeStart(params: URLSearchParams): { flow: NativeFlow; fail: 
   if (!/^[\w-]{43}$/.test(challenge) || !/^[\w-]{16,128}$/.test(state)) return { refusal: new NextResponse("A native sign-in needs a challenge and a state.", { status: 400 }) };
   const purpose = params.get("purpose") === "operator" ? "operator" : "user";
   // Each kind of session has its own switch; neither sign-in starts while its own is off.
-  if (purpose === "operator" ? !mobileConsoleEnabled() : !mobileEnabled()) return { refusal: fail(purpose === "operator" ? "mobile_console_off" : "mobile_off") };
+  if (!(purpose === "operator" ? await mobileConsoleEnabled() : await mobileEnabled())) return { refusal: fail(purpose === "operator" ? "mobile_console_off" : "mobile_off") };
   return { flow: { platform, purpose, challenge, state }, fail };
 }

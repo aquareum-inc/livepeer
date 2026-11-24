@@ -1,12 +1,12 @@
 import "server-only";
 
-import { jsonFileStore } from "../data/json-file";
-import { moderation as build, type Moderation, type ModerationContents } from "./moderation";
+import { storeOver } from "../data/database";
+import { moderation as build, type Moderation } from "./moderation";
+import { postgresModerationStore } from "./postgres";
 
-let instance: Moderation | null = null;
+const store = storeOver(postgresModerationStore);
 
 /** The instance's reports, blocks and characters taken down. */
 export function moderation(): Moderation {
-  instance ??= build(jsonFileStore<ModerationContents>("moderation.json", (value) => ({ reports: value.reports ?? [], blocks: value.blocks ?? [], hidden: value.hidden ?? [] })));
-  return instance;
+  return build(store());
 }

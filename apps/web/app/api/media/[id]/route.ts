@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * `<img>` on the web and an image view in the apps load it without a token.
  */
 export async function GET(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const file = (await apiFor(null).readMediaFile((await context.params).id)).data;
+  const file = (await (await apiFor(null)).readMediaFile((await context.params).id)).data;
   if (!file) return new NextResponse(null, { status: 404 });
   return new NextResponse(Buffer.from(file.bytes), {
     headers: { "Content-Type": file.content_type, "Cache-Control": "private, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff" },

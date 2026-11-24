@@ -21,19 +21,19 @@ export type Via = "guest" | "operator_token" | "browser" | "api_key" | "device" 
 
 /** The instance's device sessions, as the operations use them. */
 export interface DeviceAccess {
-  redeemCode(input: { code: string; verifier: string; deviceName: string; platform: "ios" | "android" }): DeviceToken | null;
-  list(userId: string, currentId: string | null): DeviceSession[];
+  redeemCode(input: { code: string; verifier: string; deviceName: string; platform: "ios" | "android" }): Promise<DeviceToken | null>;
+  list(userId: string, currentId: string | null): Promise<DeviceSession[]>;
   /** Points a device session at a workspace, or at the personal account with null. */
-  setWorkspace(id: string, workspaceId: string | null): boolean;
-  revoke(userId: string, id: string): boolean;
+  setWorkspace(id: string, workspaceId: string | null): Promise<boolean>;
+  revoke(userId: string, id: string): Promise<boolean>;
   /** Ends every device session a user has. */
-  revokeAll(userId: string): number;
+  revokeAll(userId: string): Promise<number>;
 }
 
 /** The instance's alerts to operators' phones, as the operations use them. */
 export interface AlertsAccess {
   /** Whether the instance can send to a platform at all: it holds that platform's push credentials. */
-  offered(platform: "ios" | "android"): boolean;
+  offered(platform: "ios" | "android"): Promise<boolean>;
   /** Whether a push token looks like one of that platform's. */
   accepts(platform: "ios" | "android", pushToken: string): boolean;
   /** A new report was filed, and this many are waiting now. Phones are told without holding up the answer. */
@@ -72,7 +72,7 @@ export interface Context {
   /** The studio's mediums and modes, as the interface shows them. */
   studioMediums: () => Promise<StudioMedium[]>;
   /** Who can see a job on this instance, in the words every surface uses. */
-  privacy: () => PrivacyDescription;
+  privacy: () => Promise<PrivacyDescription>;
   /** What one result of a draft would cost, in credits, as the web's studio quotes it. */
   quote: (request: GenerationRequest) => number;
 }
@@ -158,8 +158,8 @@ export const ALERT_CHOICES: ReadonlyArray<{ kind: OperatorAlertKind; label: stri
 ];
 
 /** A phone's alerts as its Alerts page reads them. It never holds the push token. */
-const alertsOf = (context: Context, session: OperatorDeviceRecord, state: PhoneAlertState): OperatorAlerts => ({
-  offered: context.alerts.offered(session.platform),
+const alertsOf = async (context: Context, session: OperatorDeviceRecord, state: PhoneAlertState): Promise<OperatorAlerts> => ({
+  offered: await context.alerts.offered(session.platform),
   state: state.state,
   kinds: ALERT_CHOICES.map((choice) => ({ ...choice, on: state.kinds.includes(choice.kind) })),
   until: state.until,
@@ -210,7 +210,7 @@ function preferencesPatch(input: Record<string, unknown>): Partial<Preferences> 
 /** A character this caller may see: not for adults only, not taken down, not blocked. */
 async function character(context: Context, slug: string): Promise<Character> {
   const value = (await context.client.getCharacter(slug)).data;
-  if (!value || value.mature || !context.moderation.visible(context.account?.user.id ?? null)(value)) throw new ApiError(404, "Character not found");
+  if (!value || value.mature || !(await context.moderation.visible(context.account?.user.id ?? null))(value)) throw new ApiError(404, "Character not found");
   return value;
 }
 
@@ -238,7 +238,7 @@ export const OPERATIONS: Operation[] = [
     mcp: false,
     input: object({ code: text("The code from the sign-in callback"), verifier: text("The PKCE verifier whose challenge started the sign-in"), platform: { enum: ["ios", "android"] }, device_name: text("The device's own name, shown in the list of devices") }, ["code", "verifier", "platform"]),
     run: async ({ devices }, input) => {
-      const token = devices.redeemCode({ code: str(input, "code"), verifier: str(input, "verifier"), deviceName: str(input, "device_name"), platform: input.platform === "android" ? "android" : "ios" });
+      const token = await devices.redeemCode({ code: str(input, "code"), verifier: str(input, "verifier"), deviceName: str(input, "device_name"), platform: input.platform === "android" ? "android" : "ios" });
       if (!token) throw new ApiError(400, "That sign-in expired or was already used. Sign in again.", "sign_in_expired");
       return token;
     },
@@ -254,7 +254,7 @@ export const OPERATIONS: Operation[] = [
     run: async (context) => {
       const { user, deviceId } = signedIn(context);
       if (!deviceId) throw new ApiError(400, "Only a device session can sign itself out here.");
-      return { deleted: context.devices.revoke(user.id, deviceId) };
+      return { deleted: await context.devices.revoke(user.id, deviceId) };
     },
   },
   {
@@ -296,7 +296,7 @@ export const OPERATIONS: Operation[] = [
       const list = (await context.client.listAccounts()).data;
       // An app moves into the workspace it just joined, as the web does.
       const deviceId = context.via === "device" ? context.account?.deviceId : null;
-      const moved = deviceId ? context.devices.setWorkspace(deviceId, workspace.id) : false;
+      const moved = deviceId ? await context.devices.setWorkspace(deviceId, workspace.id) : false;
       return accountList(moved ? { ...list, current: workspace.id } : list);
     },
   },
@@ -328,7 +328,7 @@ export const OPERATIONS: Operation[] = [
       const list = (await context.client.listAccounts()).data;
       const target = list.accounts.find((entry) => entry.id === input.account_id);
       if (!target) throw new ApiError(404, "You don't belong to that account.", "not_a_member");
-      if (!context.devices.setWorkspace(deviceId, target.kind === "workspace" ? target.id : null)) throw new ApiError(401, "This device is no longer signed in.");
+      if (!await context.devices.setWorkspace(deviceId, target.kind === "workspace" ? target.id : null)) throw new ApiError(401, "This device is no longer signed in.");
       return accountList({ ...list, current: target.id });
     },
   },
@@ -341,7 +341,7 @@ export const OPERATIONS: Operation[] = [
     output: "Deleted",
     input: object({ id: text("Device session id, from list_devices") }, ["id"]),
     run: async (context, input) => {
-      if (!context.devices.revoke(signedIn(context).user.id, str(input, "id"))) throw new ApiError(404, "Device not found");
+      if (!await context.devices.revoke(signedIn(context).user.id, str(input, "id"))) throw new ApiError(404, "Device not found");
       return { deleted: true };
     },
   },
@@ -356,7 +356,7 @@ export const OPERATIONS: Operation[] = [
     input: object({ code: text("The code from the sign-in callback"), verifier: text("The PKCE verifier whose challenge started the sign-in"), platform: { enum: ["ios", "android"] }, device_name: text("The phone's own name, shown in the list of operator phones"), public_key: text("The phone's P-256 public key, base64: the uncompressed point (iOS) or its SubjectPublicKeyInfo (Android)") }, ["code", "verifier", "platform", "public_key"]),
     run: async ({ operatorDevices, instance, alerts }, input) => {
       if (!instance.surfaces.mobile_console) throw new ApiError(403, "This service doesn't offer its console on phones.", "mobile_console_off");
-      const token = operatorDevices.redeemCode({ code: str(input, "code"), verifier: str(input, "verifier"), deviceName: str(input, "device_name"), platform: input.platform === "android" ? "android" : "ios", publicKey: str(input, "public_key") });
+      const token = await operatorDevices.redeemCode({ code: str(input, "code"), verifier: str(input, "verifier"), deviceName: str(input, "device_name"), platform: input.platform === "android" ? "android" : "ios", publicKey: str(input, "public_key") });
       if (!token) throw new ApiError(400, "That sign-in expired, was already used, or came without a usable key. Sign in again.", "sign_in_expired");
       // Enrolling needs nothing from the web console, so every other operator's phone is told.
       alerts.phoneAdded(token.device.id);
@@ -371,7 +371,7 @@ export const OPERATIONS: Operation[] = [
     output: "Deleted",
     mcp: false,
     input: object({}),
-    run: async (context) => ({ deleted: context.operatorDevices.end(operatorPhone(context)) }),
+    run: async (context) => ({ deleted: await context.operatorDevices.end(operatorPhone(context)) }),
   },
   {
     name: "create_operator_challenge",
@@ -401,7 +401,7 @@ export const OPERATIONS: Operation[] = [
     mcp: false,
     input: object({ nonce: text("The nonce from create_operator_challenge"), signature: text("The phone key's signature, base64url DER, over \"livepeer-operator-unlock\\n<nonce>\"") }, ["nonce", "signature"]),
     run: async (context, input) => {
-      const unlocked = context.operatorDevices.unlock(operatorPhone(context), str(input, "nonce"), str(input, "signature"));
+      const unlocked = await context.operatorDevices.unlock(operatorPhone(context), str(input, "nonce"), str(input, "signature"));
       if (!unlocked) throw new ApiError(401, "That wasn't this phone's signature over a fresh nonce.", "proof_required");
       return unlocked;
     },
@@ -514,7 +514,7 @@ export const OPERATIONS: Operation[] = [
     public: true,
     input: object({ query: text("Filter by name, role or subject") }),
     run: async (context, input) => {
-      const visible = context.moderation.visible(context.account?.user.id ?? null);
+      const visible = await context.moderation.visible(context.account?.user.id ?? null);
       return (await context.client.listCharacters(input.query ? { query: str(input, "query") } : {})).data.filter(visible);
     },
   },
@@ -557,11 +557,11 @@ export const OPERATIONS: Operation[] = [
       const found = await shared(context, str(input, "slug"));
       const reason = REPORT_REASONS.find((entry) => entry === input.reason);
       if (!reason) throw new ApiError(400, `reason is one of ${REPORT_REASONS.join(", ")}.`);
-      const waiting = () => context.moderation.reports().filter((entry) => entry.state === "open").length;
-      const before = waiting();
-      const report = context.moderation.report(user.id, found, reason, str(input, "note").trim().slice(0, 500) || null);
+      const waiting = async () => (await context.moderation.reports()).filter((entry) => entry.state === "open").length;
+      const before = await waiting();
+      const report = await context.moderation.report(user.id, found, reason, str(input, "note").trim().slice(0, 500) || null);
       // Changing one's own open report is not a new report, and tells nobody.
-      const after = waiting();
+      const after = await waiting();
       if (after > before) context.alerts.reportFiled(after);
       return report;
     },
@@ -610,9 +610,9 @@ export const OPERATIONS: Operation[] = [
     run: async (context) => {
       const { user } = signedIn(context);
       await context.client.deleteAccount();
-      context.devices.revokeAll(user.id);
-      context.operatorDevices.revokeUser(user.id, "account deleted");
-      context.moderation.forget(user.id);
+      await context.devices.revokeAll(user.id);
+      await context.operatorDevices.revokeUser(user.id, "account deleted");
+      await context.moderation.forget(user.id);
       return { deleted: true };
     },
   },
@@ -676,8 +676,8 @@ export const OPERATIONS: Operation[] = [
       const ok = (await operator(context).setActorStatus(str(input, "application_id") || "default", str(input, "id"), paused ? "paused" : "active")).data;
       // A suspended user's apps sign out on their next request.
       if (ok && paused) {
-        context.devices.revokeAll(str(input, "id"));
-        context.operatorDevices.revokeUser(str(input, "id"), "suspended");
+        await context.devices.revokeAll(str(input, "id"));
+        await context.operatorDevices.revokeUser(str(input, "id"), "suspended");
       }
       return { ok };
     },
@@ -718,7 +718,7 @@ export const OPERATIONS: Operation[] = [
     run: async (context, input) => {
       operator(context);
       if (input.outcome !== "dismissed" && input.outcome !== "hidden") throw new ApiError(400, "outcome is dismissed or hidden.");
-      return found(context.moderation.resolve(str(input, "id"), input.outcome === "hidden" ? "hidden" : "dismissed"), "Report");
+      return found(await context.moderation.resolve(str(input, "id"), input.outcome === "hidden" ? "hidden" : "dismissed"), "Report");
     },
   },
   { name: "operator_list_grants", description: "Operator: grants and their funding.", method: "GET", path: "/operator/grants", output: ["Grant"], input: object({}), operator: true, mobile: "read", run: async (context) => operator(context).provider.budgets.listGrants() },
@@ -726,6 +726,7 @@ export const OPERATIONS: Operation[] = [
   { name: "operator_list_plans", description: "Operator: the provider's plans and allowances.", method: "GET", path: "/operator/plans", output: ["Plan"], input: object({}), operator: true, mobile: "read", run: async (context) => operator(context).provider.plans.listPlans() },
   { name: "operator_list_keys", description: "Operator: engine access keys.", method: "GET", path: "/operator/keys", input: object({}), operator: true, run: async (context) => (await operator(context).listAccessKeys()).data },
   { name: "operator_set_capability", description: "Operator: enable or disable a capability, set its markup or the surfaces it appears in.", method: "PATCH", path: "/operator/capabilities", input: object({ app: text("Capability name"), enabled: { type: "boolean" }, markup: { type: ["number", "null"] }, surfaces: { type: ["array", "null"], items: { type: "string" } } }, ["app"]), operator: true, run: async (context, input) => (await operator(context).updateCapabilitySetting(str(input, "app"), { ...(typeof input.enabled === "boolean" ? { enabled: input.enabled } : {}), ...(input.markup === null || typeof input.markup === "number" ? { markup: input.markup } : {}), ...(input.surfaces === null || Array.isArray(input.surfaces) ? { surfaces: input.surfaces === null ? null : input.surfaces.map(String) } : {}) })).data },
+  { name: "operator_reset_capabilities", description: "Operator: put every capability back as this instance was deployed with it, forgetting what was enabled, disabled, priced or placed since.", method: "DELETE", path: "/operator/capabilities", output: "Deleted", input: object({}), operator: true, run: async (context) => ({ deleted: (await operator(context).resetCapabilitySettings()).data }) },
   { name: "operator_list_compute", description: "Operator: the compute operators that ran this instance's recent jobs, with their runners, failures and median response time.", method: "GET", path: "/operator/compute", output: ["ComputeOperator"], input: object({}), operator: true, mobile: "read", run: async (context) => (await operator(context).listComputeOperators()).data },
   {
     name: "operator_list_capabilities",
@@ -786,12 +787,12 @@ export const OPERATIONS: Operation[] = [
       const asked = Array.isArray(input.kinds) ? input.kinds : null;
       const kinds = ALERT_CHOICES.map((choice) => choice.kind).filter((kind) => asked?.includes(kind));
       if (!asked || kinds.length !== asked.length) throw new ApiError(400, `kinds is a list of ${ALERT_CHOICES.map((choice) => choice.kind).join(", ")}, each once.`);
-      if (kinds.length === 0) return alertsOf(context, session, context.operatorDevices.setAlerts(session, { kinds: [], pushToken: null, environment: "production" }));
-      if (!context.alerts.offered(session.platform)) throw new ApiError(409, "This service hasn't set up alerts for this kind of phone.", "alerts_not_offered");
+      if (kinds.length === 0) return alertsOf(context, session, await context.operatorDevices.setAlerts(session, { kinds: [], pushToken: null, environment: "production" }));
+      if (!await context.alerts.offered(session.platform)) throw new ApiError(409, "This service hasn't set up alerts for this kind of phone.", "alerts_not_offered");
       const pushToken = str(input, "push_token");
       if (!context.alerts.accepts(session.platform, pushToken)) throw new ApiError(400, "push_token isn't an address Apple or Google gives a phone.");
       const environment = session.platform === "ios" && input.environment === "development" ? "development" : "production";
-      return alertsOf(context, session, context.operatorDevices.setAlerts(session, { kinds, pushToken, environment }));
+      return alertsOf(context, session, await context.operatorDevices.setAlerts(session, { kinds, pushToken, environment }));
     },
   },
   {
@@ -823,11 +824,11 @@ export const OPERATIONS: Operation[] = [
     operator: true,
     run: async (context, input) => {
       operator(context);
-      if (!context.operatorDevices.revoke(str(input, "id"), revoker(context))) throw new ApiError(404, "Operator phone not found");
+      if (!await context.operatorDevices.revoke(str(input, "id"), revoker(context))) throw new ApiError(404, "Operator phone not found");
       return { deleted: true };
     },
   },
-  { name: "operator_revoke_all_devices", description: "Operator: revoke every operator phone at once. Each operator signs in again on their phone to get the console back.", method: "DELETE", path: "/operator/devices", output: "Deleted", input: object({}), operator: true, run: async (context) => { operator(context); return { deleted: context.operatorDevices.revokeAll(revoker(context)) > 0 }; } },
+  { name: "operator_revoke_all_devices", description: "Operator: revoke every operator phone at once. Each operator signs in again on their phone to get the console back.", method: "DELETE", path: "/operator/devices", output: "Deleted", input: object({}), operator: true, run: async (context) => { operator(context); return { deleted: await context.operatorDevices.revokeAll(revoker(context)) > 0 }; } },
   { name: "operator_list_audit", description: "Operator: what operators' phones did, were refused and were told, newest first: sign-ins, unlocks, changes, refusals, revocations and each alert sent.", method: "GET", path: "/operator/audit", output: ["OperatorAuditEntry"], input: object({ limit: { type: "number", default: 100 } }), operator: true, run: async (context, input) => { operator(context); return context.audit.list(Math.trunc(Number(input.limit)) || 100); } },
 ];
 
@@ -859,7 +860,7 @@ async function status(client: OperatorClient, moderation: Moderation, now: numbe
   const [health, overview, jobs] = await Promise.all([client.getEngineHealth(), client.getOverview(), client.listJobs(JOBS_WINDOW)]);
   const service = health.data;
   const failedLastHour = failedInLastHour(jobs.data, now);
-  const waiting = moderation.reports().filter((report) => report.state === "open").length;
+  const waiting = (await moderation.reports()).filter((report) => report.state === "open").length;
   const syncedAgo = service.cost_sync_at ? now - Date.parse(service.cost_sync_at) : null;
   const attention: OperatorAttention[] = [];
   if (!service.ready) attention.push({ kind: "engine_not_ready", message: ATTENTION.engineNotReady, count: null, opens: "status" });

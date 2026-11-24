@@ -72,6 +72,7 @@ apps/ios                  Native iOS app (Swift, SwiftUI): a client of an instan
 apps/android              Native Android app (Kotlin, Compose): a client of an instance's /api/v1
 packages/api-client       Types and one function per operation (live + mock), data-source map
 packages/config           Instance config schema, generated types, presets, capability and surface rules
+packages/db               The instance's Postgres: schema, connection, migrations and the migration runner
 packages/ui               Theme tokens, primitives, motion
 packages/user-app         User-app screens
 packages/operator-console Operator console screens
@@ -94,8 +95,9 @@ bundle identifier, instance URL); theme, sign-in methods and features come from 
 Phones are a surface an operator switches on (`surfaces.mobile`, off in both presets), naming the apps built
 for the instance in `mobile.ios.bundleId` and `mobile.android.applicationId`: sign-in hands a session only to
 those. The apps sign in in the system's own browser session and get a revocable device session of their own;
-the instance keeps sessions, and reports and blocks of shared characters, in `DATA_DIR` (`.data` in
-development, a volume in Docker).
+the instance keeps sessions, and reports and blocks of shared characters, in its Postgres database. The
+Compose bundle runs one; with no `DATABASE_URL`, as in `pnpm dev`, the app runs a Postgres inside itself and
+keeps it in `.data/`, so there is nothing to install.
 
 The operator console on phones is a second switch (`surfaces.mobileConsole`, also off in both presets). The
 server side is built: an operator's phone gets its own short-lived session, bound to a key in the phone's
@@ -118,6 +120,10 @@ The apps' design tokens, API models and client are generated (`packages/mobile-c
 fails when the generated files are out of date.
 
 ## Instance config and presets
+
+What the console's Settings and Capabilities pages change is kept by the instance itself, laid over this
+config; the config is never written by the app, and "Reset to deployed config" on either page goes back to
+it. On a host with no file to mount, give the config itself in `INSTANCE_CONFIG_JSON`.
 
 An instance is one file, `instance.config.json`, validated against
 [`packages/config/schema/instance.schema.json`](packages/config/schema/instance.schema.json), plus

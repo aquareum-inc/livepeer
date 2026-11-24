@@ -13,7 +13,7 @@ import { isDev } from "@/lib/env";
 import { brandOf, instance } from "@/lib/instance";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  const config = instance();
+  const config = await instance();
   if (!config.surfaces.app) notFound();
   const session = await getSession();
   const pathname = (await headers()).get("x-pathname") ?? "";

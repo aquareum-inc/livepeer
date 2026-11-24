@@ -14,7 +14,7 @@ export default async function CallPage({
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ mode?: string }>;
 }) {
-  if (!charactersEnabled()) notFound();
+  if (!await charactersEnabled()) notFound();
   const client = await api();
   const [{ slug }, { mode }] = await Promise.all([params, searchParams]);
   const character = await client.getCharacter(slug);

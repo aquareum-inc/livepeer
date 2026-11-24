@@ -6,11 +6,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { memoryStore } from "../data/store";
+import { rowsOf, testDatabase, useTestDatabase } from "../data/testing";
 import { apnsSender } from "./apns";
 import { readApnsCredentials, readFcmCredentials } from "./credentials";
 import { fcmSender } from "./fcm";
-import { OUTBOX_LIMIT, recordingSender, type OutboxContents } from "./recording";
+import { postgresOutboxStore } from "./postgres";
+import { OUTBOX_LIMIT, recordingSender } from "./recording";
 import { validPushToken, type PushNotification, type PushTarget } from "./types";
 
 const notification: PushNotification = { title: "Livepeer", body: "The engine isn't ready", kind: "engine_not_ready", opens: "status", collapse: "console-engine_not_ready", lifeSeconds: 3600, channel: "console_service", urgent: true };
@@ -291,15 +292,19 @@ describe("sending to Google", () => {
 });
 
 describe("the recording sender", () => {
+  useTestDatabase();
+  type Recorded = { at: Date; platform: string; payload: Record<string, unknown> };
+  /** What was written down, oldest first. */
+  const recorded = async () => (await rowsOf<Recorded & { seq: number }>("push_outbox")).sort((a, b) => a.seq - b.seq);
+
   it("contacts nobody, offers both platforms, and writes down what it would have sent without the push token", async () => {
-    const outbox = memoryStore<OutboxContents>({ sent: [] });
-    const sender = recordingSender(outbox, () => Date.parse("2026-11-21T09:00:00Z"));
+    const sender = recordingSender(postgresOutboxStore(testDatabase()), () => Date.parse("2026-11-21T09:00:00Z"));
     expect([sender.offers("ios"), sender.offers("android")]).toEqual([true, true]);
     expect(await sender.send(iphone, notification)).toEqual({ outcome: "sent", detail: null });
     expect(await sender.send(android, notification)).toEqual({ outcome: "sent", detail: null });
 
-    const { sent } = outbox.read();
-    expect(sent.map((entry) => [entry.platform, entry.at])).toEqual([["ios", "2026-11-21T09:00:00.000Z"], ["android", "2026-11-21T09:00:00.000Z"]]);
+    const sent = await recorded();
+    expect(sent.map((entry) => [entry.platform, new Date(entry.at).toISOString()])).toEqual([["ios", "2026-11-21T09:00:00.000Z"], ["android", "2026-11-21T09:00:00.000Z"]]);
     // The iOS entry is the payload itself, as `xcrun simctl push` takes it.
     expect(sent[0]?.payload).toMatchObject({ aps: { alert: { body: "The engine isn't ready" } }, opens: "status" });
     const text = JSON.stringify(sent);
@@ -308,10 +313,10 @@ describe("the recording sender", () => {
   });
 
   it("keeps only the latest", async () => {
-    const outbox = memoryStore<OutboxContents>({ sent: [] });
-    const sender = recordingSender(outbox);
+    const sender = recordingSender(postgresOutboxStore(testDatabase()));
     for (let index = 0; index < OUTBOX_LIMIT + 5; index += 1) await sender.send(iphone, { ...notification, body: `${index + 1} jobs failed in the last hour` });
-    expect(outbox.read().sent).toHaveLength(OUTBOX_LIMIT);
-    expect(outbox.read().sent.at(-1)?.payload).toMatchObject({ aps: { alert: { body: `${OUTBOX_LIMIT + 5} jobs failed in the last hour` } } });
+    const sent = await recorded();
+    expect(sent).toHaveLength(OUTBOX_LIMIT);
+    expect(sent.at(-1)?.payload).toMatchObject({ aps: { alert: { body: `${OUTBOX_LIMIT + 5} jobs failed in the last hour` } } });
   });
 });

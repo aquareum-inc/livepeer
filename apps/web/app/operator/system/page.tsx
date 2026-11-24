@@ -13,9 +13,9 @@ import { runDoctor } from "@/lib/operator/doctor";
 import { pushSetup } from "@/lib/push";
 
 /** Whether alerts can be sent to each kind of phone, and whether Apple or Google last refused the instance's credentials. */
-function alertConnections(): Array<{ to: string; detail: string }> {
-  const setup = pushSetup();
-  const refused = alerts().refusals();
+async function alertConnections(): Promise<Array<{ to: string; detail: string }>> {
+  const setup = await pushSetup();
+  const refused = await alerts().refusals();
   return ([["ios", "iPhone"], ["android", "Android"]] as const).map(([platform, to]) => {
     const refusal = refused[platform];
     return { to, detail: refusal ? `credentials refused ${new Date(refusal.at).toISOString().slice(0, 16).replace("T", " ")} UTC (${refusal.detail})` : setup[platform].state === "none" ? "not set up" : setup[platform].detail };
@@ -51,9 +51,9 @@ export default async function SystemPage() {
       checks={await runDoctor()}
       dataSources={dataSources}
       sources={[{ name: "getEngineHealth", source: healthSource }]}
-      phones={{ phones: operatorDevices().list(), offered: mobileConsoleEnabled(), revoke: revokeOperatorPhoneAction, revokeAll: revokeAllOperatorPhonesAction }}
-      phoneActivity={operatorAudit().list(200)}
-      alerts={mobileConsoleEnabled() ? alertConnections() : null}
+      phones={{ phones: await operatorDevices().list(), offered: await mobileConsoleEnabled(), revoke: revokeOperatorPhoneAction, revokeAll: revokeAllOperatorPhonesAction }}
+      phoneActivity={await operatorAudit().list(200)}
+      alerts={await mobileConsoleEnabled() ? await alertConnections() : null}
     />
   );
 }

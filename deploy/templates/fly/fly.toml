@@ -1,9 +1,21 @@
-# Fly.io: the app only. Run from the repository root:
+# Fly.io: the app only, with a Postgres you give it. Run from the repository root:
 #   fly launch --copy-config --config deploy/templates/fly/fly.toml --no-deploy
-#   fly secrets set SESSION_SECRET=$(openssl rand -base64 32) ENGINE_URL=… ENGINE_READER_TOKEN=… ENGINE_ADMIN_TOKEN=…
+#   fly secrets set SESSION_SECRET=$(openssl rand -base64 32) DATABASE_URL=… ENGINE_URL=… ENGINE_READER_TOKEN=… ENGINE_ADMIN_TOKEN=…
 #   fly deploy --config deploy/templates/fly/fly.toml
 # Without engine secrets, set MOCK_ONLY=1 instead.
+#
+# DATABASE_URL is the Postgres the instance keeps its state in: a machine's own disk doesn't outlive it. If it
+# is a pooled address, also set DATABASE_URL_UNPOOLED to the direct one, which migrations need.
+#
+# Alerts to operators' phones are sent by a check the server runs each minute. With machines allowed to stop
+# when idle, as below, nothing runs it while they are stopped: set min_machines_running = 1 if you offer the
+# console on phones.
 primary_region = "iad"
+
+# Brings the database to this release's schema before the new version takes traffic. A failed migration
+# changes nothing and stops the deploy.
+[deploy]
+  release_command = "node migrate.cjs migrations"
 
 [build]
   dockerfile = "../../../Dockerfile"

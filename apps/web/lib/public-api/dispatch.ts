@@ -26,35 +26,35 @@ export async function runOperation(operation: Operation, context: Context, input
   if (!session) throw new ApiError(401, "That token isn't valid, or it has been revoked.", "signed_out");
   const actor = { userId: session.userId, name: session.name, deviceId: session.id, deviceName: session.deviceName };
   /** Writes the refusal down and answers with the error to throw. */
-  const refusal = (status: number, message: string, code: string): ApiError => {
-    context.audit.write("refused", actor, { operation: operation.name, target: target(input), detail: code });
+  const refusal = async (status: number, message: string, code: string): Promise<ApiError> => {
+    await context.audit.write("refused", actor, { operation: operation.name, target: target(input), detail: code });
     return new ApiError(status, message, code);
   };
 
   if (!context.instance.surfaces.mobile_console) throw new ApiError(403, "This service doesn't offer its console on phones.", "mobile_console_off");
-  if (!context.operatorDevices.allow(session.id)) throw refusal(429, "Too many requests from this phone. Wait a minute.", "rate_limited");
+  if (!(await context.operatorDevices.allow(session.id))) throw await refusal(429, "Too many requests from this phone. Wait a minute.", "rate_limited");
 
   if (!operation.operator) {
-    if (!OPEN_TO_OPERATOR_DEVICES.includes(operation.name)) throw refusal(403, "The console's session can't do this. Use the app itself.", "operator_session");
+    if (!OPEN_TO_OPERATOR_DEVICES.includes(operation.name)) throw await refusal(403, "The console's session can't do this. Use the app itself.", "operator_session");
     return operation.run(context, input);
   }
-  if (!operation.mobile) throw refusal(403, "This is done on the web console, not on a phone.", "web_only");
+  if (!operation.mobile) throw await refusal(403, "This is done on the web console, not on a phone.", "web_only");
 
   if (operation.mobile === "read") {
-    if (!context.operatorDevices.unlocked(session)) throw refusal(401, "The console is locked on this phone.", "locked");
+    if (!context.operatorDevices.unlocked(session)) throw await refusal(401, "The console is locked on this phone.", "locked");
     return operation.run(context, input);
   }
 
-  if (!proof) throw refusal(401, "This change needs its own confirmation from this phone.", "proof_required");
+  if (!proof) throw await refusal(401, "This change needs its own confirmation from this phone.", "proof_required");
   // A proof that is presented and wrong is written down and counted where it is checked.
-  if (!context.operatorDevices.prove(session, operation.name, input, proof)) throw new ApiError(401, "That confirmation wasn't valid for this change. Confirm it again.", "proof_required");
+  if (!(await context.operatorDevices.prove(session, operation.name, input, proof))) throw new ApiError(401, "That confirmation wasn't valid for this change. Confirm it again.", "proof_required");
 
   try {
     const value = await operation.run(context, input);
-    context.audit.write("change", actor, { operation: operation.name, target: target(input), detail: describeChange(operation.name, input) });
+    await context.audit.write("change", actor, { operation: operation.name, target: target(input), detail: describeChange(operation.name, input) });
     return value;
   } catch (cause) {
-    context.audit.write("change", actor, { operation: operation.name, target: target(input), detail: `failed: ${cause instanceof Error ? cause.message : "unknown"}`.slice(0, 200) });
+    await context.audit.write("change", actor, { operation: operation.name, target: target(input), detail: `failed: ${cause instanceof Error ? cause.message : "unknown"}`.slice(0, 200) });
     throw cause;
   }
 }

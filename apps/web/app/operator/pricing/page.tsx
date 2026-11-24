@@ -17,7 +17,7 @@ export default async function PricingPage() {
       plans={plans}
       packs={packs}
       topUp={topUp}
-      markup={pricing()}
+      markup={await pricing()}
       savePlan={savePlanAction}
       savePack={saveCreditPackAction}
       saveTopUp={saveTopUpRangeAction}

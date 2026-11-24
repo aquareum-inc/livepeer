@@ -2,15 +2,16 @@
 
 import type { AccessKey, BillingSettings, CharacterReport, CapabilitySetting, CreditPack, EngineJob, Grant, OperatorPhone, Payment, Plan, TopUpRange } from "@livepeer/api-client";
 import { EngineError } from "@livepeer/api-client";
-import type { InstanceSettings } from "@livepeer/operator-console";
+import type { CapabilityRow, InstanceSettings } from "@livepeer/operator-console";
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "../auth/session";
 import { devices } from "../devices";
 import { moderation } from "../moderation";
 import { operatorDevices } from "../operator-devices";
+import { capabilityRows } from "./capability-rows";
 import { operatorApi, requireOperator } from "./client";
-import { saveSettings } from "./settings";
+import { currentSettings, resetSettings, saveSettings } from "./settings";
 
 const usd = (amount: number) => ({ amount: amount.toFixed(2), currency: "USD" });
 
@@ -34,8 +35,8 @@ export async function setUserStatusAction(applicationId: string, actorId: string
   }
   // A suspended user's apps sign out on their next request, and so does the console on any phone of theirs.
   if (status === "paused") {
-    devices().revokeAll(actorId);
-    operatorDevices().revokeUser(actorId, "suspended");
+    await devices().revokeAll(actorId);
+    await operatorDevices().revokeUser(actorId, "suspended");
   }
   revalidatePath("/operator/users", "layout");
 }
@@ -43,7 +44,7 @@ export async function setUserStatusAction(applicationId: string, actorId: string
 export async function setUserRoleAction(userId: string, role: "user" | "operator"): Promise<void> {
   await (await operatorApi()).provider.identity.setUserRole(userId, role);
   // The role is read when a phone signs in, so taking it away ends the console sessions it opened.
-  if (role === "user") operatorDevices().revokeUser(userId, "operator role removed");
+  if (role === "user") await operatorDevices().revokeUser(userId, "operator role removed");
   revalidatePath("/operator/users", "layout");
 }
 
@@ -144,9 +145,25 @@ export async function setOperatorBlockedAction(orchestratorUrl: string, blocked:
 
 export async function saveInstanceSettingsAction(settings: InstanceSettings): Promise<{ ok: true } | { ok: false; error: string }> {
   await operatorApi();
-  const result = saveSettings(settings);
+  const result = await saveSettings(settings);
   if (result.ok) revalidatePath("/", "layout");
   return result;
+}
+
+/** Forgets what the Settings page saved, and answers with the settings the instance was deployed with. */
+export async function resetInstanceSettingsAction(): Promise<InstanceSettings> {
+  await operatorApi();
+  await resetSettings("settings");
+  revalidatePath("/", "layout");
+  return (await currentSettings()).settings;
+}
+
+/** Puts every capability back as the instance was deployed with it, and answers with the page's rows as they then are. */
+export async function resetCapabilitiesAction(): Promise<CapabilityRow[]> {
+  await (await operatorApi()).resetCapabilitySettings();
+  revalidatePath("/", "layout");
+  // A new client: it reads the config as it is now, where the one that reset still holds what it started with.
+  return (await capabilityRows(await operatorApi())).rows;
 }
 
 export async function issueKeyAction(input: { actor_id: string; label: string; kind: AccessKey["kind"] }): Promise<{ key: AccessKey; token: string | null } | { error: string }> {
@@ -164,7 +181,7 @@ export async function revokeKeyAction(keyId: string): Promise<AccessKey | null> 
 /** The operator's decision on a report; answers with every report, as the queue shows them. */
 export async function resolveReportAction(id: string, outcome: "dismissed" | "hidden"): Promise<CharacterReport[]> {
   await requireOperator();
-  moderation().resolve(id, outcome);
+  await moderation().resolve(id, outcome);
   return moderation().reports();
 }
 
@@ -177,14 +194,14 @@ async function revoker() {
 
 /** Revokes one operator phone; answers with the phones still enrolled. */
 export async function revokeOperatorPhoneAction(id: string): Promise<OperatorPhone[]> {
-  operatorDevices().revoke(id, await revoker());
+  await operatorDevices().revoke(id, await revoker());
   revalidatePath("/operator", "layout");
   return operatorDevices().list();
 }
 
 /** Revokes every operator phone; answers with the phones still enrolled. */
 export async function revokeAllOperatorPhonesAction(): Promise<OperatorPhone[]> {
-  operatorDevices().revokeAll(await revoker());
+  await operatorDevices().revokeAll(await revoker());
   revalidatePath("/operator", "layout");
   return operatorDevices().list();
 }

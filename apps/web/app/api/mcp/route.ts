@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
         result(rpc.id, {
           protocolVersion: typeof rpc.params?.protocolVersion === "string" ? rpc.params.protocolVersion : PROTOCOL,
           capabilities: { tools: {} },
-          serverInfo: { name: instance().name, version: "0.1.0" },
+          serverInfo: { name: (await instance()).name, version: "0.1.0" },
           instructions: "Generate, edit and understand video on this instance. Start with list_capabilities; generation is asynchronous, so poll get_generation.",
         }),
       );
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       const operation = TOOLS.find((entry) => entry.name === rpc.params?.name);
       if (!operation) return NextResponse.json(failure(rpc.id, -32602, `Unknown tool: ${String(rpc.params?.name)}`));
       try {
-        const value = await runOperation(operation, requestContext(request, caller), (rpc.params?.arguments as Record<string, unknown> | undefined) ?? {}, null);
+        const value = await runOperation(operation, await requestContext(request, caller), (rpc.params?.arguments as Record<string, unknown> | undefined) ?? {}, null);
         return NextResponse.json(result(rpc.id, { content: [{ type: "text", text: JSON.stringify(value, null, 2) }], structuredContent: Array.isArray(value) ? { items: value } : value }));
       } catch (cause) {
         return NextResponse.json(result(rpc.id, { isError: true, content: [{ type: "text", text: cause instanceof Error ? cause.message : "The tool failed." }] }));

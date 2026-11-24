@@ -42,7 +42,11 @@ curl -fsS http://localhost:3000/api/health
 ```
 
 `/api/health` answers 200 with `{"status":"ok",…}`, or 503 with `"status":"degraded"` when the engine is
-configured but unreachable. `doctor` exits 0 when every check passes and 1 otherwise; each failed check
+configured but unreachable, or when its `database` field is `"unreachable"` or `"behind"` (the schema lacks
+this release's migrations; `./livepeer upgrade` applies them). `"embedded"` means no `DATABASE_URL` was
+given and the app is running a Postgres of its own in `DATA_DIR`, as `pnpm dev` does. Its `alerts` field is `"overdue"` when the
+console is offered on phones and nothing has run the checks behind alerts for five minutes; that doesn't
+make the answer 503, and `doctor` reports it with a fix. `doctor` exits 0 when every check passes and 1 otherwise; each failed check
 carries a `fix`.
 
 ## Configure
@@ -53,6 +57,10 @@ carries a `fix`.
 - Connect a real engine: set `ENGINE_URL`, `ENGINE_READER_TOKEN` (an auditor key) and `ENGINE_ADMIN_TOKEN`
   (an admin key) in `.env`, then run `./livepeer setup` again. `MOCK_ONLY` is cleared automatically.
 - Restart after editing either file: `./livepeer setup`.
+- The console's Settings and Capabilities pages never write the config file. What they save is kept by the
+  instance (in its database) and laid over the file; `DELETE /api/v1/operator/capabilities`
+  (`operator_reset_capabilities`) forgets every capability change. A field the console has saved wins over
+  the same field in the file until it is reset there.
 
 ## Upgrade
 

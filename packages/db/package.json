@@ -1,0 +1,32 @@
+{
+  "name": "@livepeer/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./migrate": "./src/migrate.ts",
+    "./testing": "./src/testing.ts",
+    "./embedded": "./src/embedded.ts"
+  },
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "bundle": "esbuild src/cli.ts --bundle --platform=node --format=cjs --external:pg-native --outfile=dist/migrate.cjs --log-level=warning",
+    "migrate": "pnpm run bundle && node --env-file-if-exists=../../.env dist/migrate.cjs migrations",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.6.0",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.28.2",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

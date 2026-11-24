@@ -6,10 +6,10 @@ import { instance } from "@/lib/instance";
 
 export const metadata: Metadata = { title: "Privacy" };
 
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
   return (
     <SettingsLayout current="/settings/privacy">
-      <PrivacySettings description={describePrivacy(instance().privacy?.retainChats ?? false)} />
+      <PrivacySettings description={describePrivacy((await instance()).privacy?.retainChats ?? false)} />
     </SettingsLayout>
   );
 }

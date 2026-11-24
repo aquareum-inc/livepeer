@@ -12,13 +12,51 @@ INSTANCE_DIR=$PWD docker compose -f deploy/compose.yaml --env-file .env up -d
 | Service | Profile | What it is |
 |---------|---------|------------|
 | `app` | always | This repository: user app, operator console, API, MCP |
+| `db` | always | Postgres 17, the instance's own database. No published port |
+| `migrate` | always | The app image, run once on every `up`: applies pending migrations, then exits |
 | `engine` | `network` | The pinned livepeer-builder engine (`lpb serve`) |
 | `discovery` | `network` | The engine's discovery reader (`lpb discovery`) |
 | `clearinghouse` | `network` | Clearinghouse Batteries, the payment provider |
 | `signer` | `network` | The livepeer/node remote signer |
 
-Without the `network` profile only the app starts, in mock-only mode or pointed at an engine you already run
-(`ENGINE_URL`).
+Without the `network` profile only the app and its database start, in mock-only mode or pointed at an engine
+you already run (`ENGINE_URL`).
+
+## Database
+
+The bundle runs its own Postgres, with its data in the `db-data` volume and a password `./livepeer setup`
+generates (`POSTGRES_PASSWORD`). The `migrate` service brings it to the release's schema before the app
+starts, on `setup`, on `upgrade` and on a plain `docker compose up`. If a migration fails nothing is changed,
+the app is not started, and `setup` and `upgrade` say so. `./livepeer doctor` and `/api/health` report
+whether the database is reachable and whether its schema is the one this release expects.
+
+Everything the instance keeps is in the database: users' and operators' phone sessions, the operators' audit
+log, reports, blocks and takedowns of shared characters, what alerts have noticed and said, and what the
+console's Settings and Capabilities pages change. The console never writes `instance.config.json`, which
+stays mounted read-only: what it saves is laid over that file, and "Reset to deployed config" goes back to
+it. The `app-data` volume is no longer written to.
+
+Names and emails are never stored in the clear: where one has to be kept it is encrypted with
+`SESSION_SECRET`. Keep that secret with your backups, or a restored database shows people by their ids only
+and every phone signs in again.
+
+Back up and restore:
+
+```bash
+docker compose -f deploy/compose.yaml --env-file .env exec -T db pg_dump -U livepeer livepeer > backup.sql
+docker compose -f deploy/compose.yaml --env-file .env exec -T db psql -U livepeer livepeer < backup.sql
+```
+
+To use a Postgres you already run, set `DATABASE_URL` in `.env`: the app and `migrate` use it instead. If it
+is a pooled address, also set `DATABASE_URL_UNPOOLED` to the direct one, which migrations need. The bundled
+`db` still starts and sits idle; to leave it out, add an override file with `-f` after `compose.yaml`:
+
+```yaml
+services:
+  db: !reset null
+  migrate:
+    depends_on: !reset []
+```
 
 ## Running the network profile
 
@@ -60,8 +98,11 @@ credentials the console on phones works as before and says alerts aren't set up.
   `FCM_SERVICE_ACCOUNT` (its JSON file as base64 on one line).
 - The server must be able to reach `api.push.apple.com`, `api.sandbox.push.apple.com` (development builds),
   `fcm.googleapis.com` and `oauth2.googleapis.com` on port 443.
-- Alerts need the long-running server this bundle starts: one watcher inside it asks the engine whether it
-  is ready once a minute. An instance that is down sends nothing, so watch the instance itself from outside.
+- Alerts are sent by a round of checks each minute. This bundle's server runs them itself, with a timer, and
+  there is nothing more to set up. On a host with no server between requests (Vercel), set `CRON_SECRET` and
+  have a scheduler call `/api/cron/alerts` each minute with it as a bearer token; that also stops the timer,
+  so don't set it here. `./livepeer doctor` and the System page say when nothing has run the checks for five
+  minutes. An instance that is down sends nothing, so watch the instance itself from outside.
 - `./livepeer doctor` says, for each platform, whether alerts are set up and what is wrong if they are half
   set. The web console's System page says the same, and whether Apple or Google last refused the credentials.
 
