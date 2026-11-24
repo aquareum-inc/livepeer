@@ -13,7 +13,7 @@ async function main(): Promise<number> {
   }
   const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
   if (!url) {
-    process.stderr.write("migrate: DATABASE_URL is not set, so there is no database to migrate. Without one the instance keeps its state in files (development and tests only).\n");
+    process.stderr.write("migrate: DATABASE_URL is not set, so there is no database server to migrate. Without one the app runs a Postgres inside itself and migrates it as it starts.\n");
     return 1;
   }
   try {

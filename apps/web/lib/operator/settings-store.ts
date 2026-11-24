@@ -2,9 +2,7 @@ import "server-only";
 
 import { eq, schema, type Database } from "@livepeer/db";
 
-import { chosenStore } from "../data/database";
-import { jsonFileStore } from "../data/json-file";
-import type { StateStore } from "../data/store";
+import { storeOver } from "../data/database";
 import type { SavedCapability } from "../instance-overrides";
 
 /** What the console has saved over the config the instance was deployed with. */
@@ -22,31 +20,6 @@ export interface SettingsStore {
   saveCapability(app: string, saved: SavedCapability): Promise<void>;
   /** Forgets what was saved for one section, so the config the instance was deployed with applies again. */
   reset(section: "settings" | "capabilities"): Promise<void>;
-}
-
-/** The console's changes kept as one document: a JSON file, or memory in tests. */
-export function documentSettingsStore(document: StateStore<SavedOverrides>): SettingsStore {
-  return {
-    async read() {
-      return document.read();
-    },
-    async saveSettings(settings) {
-      document.update((contents) => {
-        contents.settings = settings;
-      });
-    },
-    async saveCapability(app, saved) {
-      document.update((contents) => {
-        contents.capabilities[app] = saved;
-      });
-    },
-    async reset(section) {
-      document.update((contents) => {
-        if (section === "settings") contents.settings = null;
-        else contents.capabilities = {};
-      });
-    },
-  };
 }
 
 const { instanceSettings, capabilitySettings } = schema;
@@ -75,8 +48,5 @@ export function postgresSettingsStore(db: Database): SettingsStore {
   };
 }
 
-export const fileSettingsStore = (): SettingsStore =>
-  documentSettingsStore(jsonFileStore<SavedOverrides>("instance-settings.json", (value) => ({ settings: value.settings ?? null, capabilities: value.capabilities ?? {} })));
-
-/** The instance's own: Postgres while it has a database, a file in DATA_DIR while it doesn't. */
-export const settingsStore = chosenStore({ postgres: postgresSettingsStore, file: fileSettingsStore });
+/** The instance's own. */
+export const settingsStore = storeOver(postgresSettingsStore);

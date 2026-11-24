@@ -4,12 +4,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 vi.mock("server-only", () => ({}));
 
-import { memoryStore } from "../data/store";
 import { auditLog } from "./audit";
 import { postgresAuditStore, postgresOperatorDeviceStore } from "./postgres";
 import { confirmMessage, inputHash, unlockMessage } from "./proof";
 import { operatorDeviceSessions } from "./sessions";
-import { documentAuditStore, documentOperatorDeviceStore, type AuditContents, type AuditStore, type OperatorDeviceContents, type OperatorDeviceRecord, type OperatorDeviceStore, type PendingChallenge, type PhoneAlerts } from "./store";
+import type { AuditStore, OperatorDeviceRecord, OperatorDeviceStore, PendingChallenge, PhoneAlerts } from "./store";
 import { TEST_CHALLENGE, TEST_SECRET, TEST_VERIFIER, testPhone } from "./testing";
 
 const T0 = Date.parse("2026-11-21T09:00:00Z");
@@ -32,25 +31,6 @@ interface Opened {
 
 const implementations: Array<[string, () => Promise<Opened>]> = [
   [
-    "a document",
-    async () => {
-      let documents = { sessions: memoryStore<OperatorDeviceContents>({ sessions: [], codes: [], challenges: [] }), audit: memoryStore<AuditContents>({ entries: [] }) };
-      const opened: Opened = {
-        store: documentOperatorDeviceStore(documents.sessions),
-        audit: documentAuditStore(documents.audit),
-        kept: async () => JSON.stringify([documents.sessions.read(), documents.audit.read()]),
-        reset: async () => {
-          documents = { sessions: memoryStore<OperatorDeviceContents>({ sessions: [], codes: [], challenges: [] }), audit: memoryStore<AuditContents>({ entries: [] }) };
-          opened.store = documentOperatorDeviceStore(documents.sessions);
-          opened.audit = documentAuditStore(documents.audit);
-        },
-        close: async () => undefined,
-        db: null,
-      };
-      return opened;
-    },
-  ],
-  [
     "Postgres",
     async () => {
       const { db, close } = await testDatabase();
@@ -69,7 +49,7 @@ const implementations: Array<[string, () => Promise<Opened>]> = [
   ],
 ];
 
-describe.each(implementations)("the operator device store over %s", (kind, open) => {
+describe.each(implementations)("the operator device store over %s", (_kind, open) => {
   let opened: Opened;
   beforeAll(async () => {
     opened = await open();
@@ -264,14 +244,12 @@ describe.each(implementations)("the operator device store over %s", (kind, open)
     expect((await log.list(10)).map((written) => written.event)).toEqual(["revoked", "refused", "unlock", "sign_in"]);
     expect((await log.list(10))[0]).toMatchObject({ user_name: "Rae Lindqvist", target: "usr_sam", device_name: "Sam's iPhone" });
 
-    if (kind === "Postgres") {
-      const kept = await opened.kept();
-      expect(kept).toContain("usr_rae");
-      for (const secret of ["Sam Whitfield", "Rae Lindqvist", "sam@example.test", token, code, unlocking.nonce, forChange, "ab".repeat(32)]) expect(kept, secret).not.toContain(secret);
-    }
+    const kept = await opened.kept();
+    expect(kept).toContain("usr_rae");
+    for (const secret of ["Sam Whitfield", "Rae Lindqvist", "sam@example.test", token, code, unlocking.nonce, forChange, "ab".repeat(32)]) expect(kept, secret).not.toContain(secret);
   });
 
-  it.runIf(kind === "Postgres")("keeps no name and no email where they can be read, and opens them for nobody once the secret has changed", async () => {
+  it("keeps no name and no email where they can be read, and opens them for nobody once the secret has changed", async () => {
     await opened.store.createSession(session());
     await opened.store.putCode({ codeHash: "code-1", challenge: "c", platform: "ios", userId: "usr_sam", name: "Sam Whitfield", email: "sam@example.test", expiresAt: T0 + 60_000 });
     await opened.audit.append(entry("aud_1"), 100);

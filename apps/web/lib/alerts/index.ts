@@ -2,19 +2,14 @@ import "server-only";
 
 import { after } from "next/server";
 
-import { chosenStore } from "../data/database";
-import { jsonFileStore } from "../data/json-file";
+import { storeOver } from "../data/database";
 import { instance } from "../instance";
 import { mobileConsoleEnabled, operatorAudit, operatorDevices } from "../operator-devices";
 import { pushSender } from "../push";
-import { quietState } from "./decide";
 import { postgresAlertsStore } from "./postgres";
-import { alertsService, documentAlertsStore, type Alerts, type AlertsContents } from "./service";
+import { alertsService, type Alerts } from "./service";
 
-const store = chosenStore({
-  postgres: postgresAlertsStore,
-  file: () => documentAlertsStore(jsonFileStore<AlertsContents>("operator-alerts.json", (value) => ({ round: value.round ?? { claimedAt: null, jobsReadAt: null }, state: value.state ?? quietState(), refused: value.refused ?? {} }))),
-});
+const store = storeOver(postgresAlertsStore);
 
 let built: { store: ReturnType<typeof store>; alerts: Alerts } | null = null;
 

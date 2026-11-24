@@ -1,22 +1,24 @@
 import "server-only";
 
+import { existsSync } from "node:fs";
+import path from "node:path";
+
 import { createPool, database as queries, schemaStatus, type Database, type Pool, type SchemaStatus } from "@livepeer/db";
+import { openEmbedded, type Embedded } from "@livepeer/db/embedded";
 
 import { env } from "../env";
 
-/** "none" is an instance with no DATABASE_URL: it keeps its state in files, for development and tests only. */
-export type DatabaseStatus = SchemaStatus | "none";
-
-// Kept on the global object so a development reload reuses the connections instead of leaking a pool each time.
-const held = globalThis as typeof globalThis & { livepeerDatabase?: { url: string; pool: Pool; db: Database } };
-
 /**
- * The instance's database, or null when it has none. Whether DATABASE_URL is set is the one thing that decides
- * where the instance keeps its state, mock-only or not: a host with no disk needs a database either way.
+ * Where the instance's database stands. "embedded" is the Postgres the app runs inside itself when it was
+ * given none to connect to: it is always at this release's schema, since the app migrates it as it opens.
  */
-export function database(): Database | null {
-  return connection()?.db ?? null;
-}
+export type DatabaseStatus = SchemaStatus | "embedded";
+
+// Kept on the global object so a development reload reuses what is open instead of opening it again, and so
+// every part of the server (the proxy, pages, routes, the alerts timer) shares the one database.
+const held = globalThis as typeof globalThis & { livepeerDatabase?: { url: string; pool: Pool; db: Database }; livepeerEmbedded?: Embedded; livepeerEmbeddedOpening?: Promise<Embedded> };
+
+const root = () => path.join(/* turbopackIgnore: true */ process.cwd(), "../..");
 
 function connection(): { pool: Pool; db: Database } | null {
   const url = env("DATABASE_URL");
@@ -29,22 +31,50 @@ function connection(): { pool: Pool; db: Database } | null {
   return held.livepeerDatabase;
 }
 
-/** Whether the database can be reached and has every migration this release expects. */
-export async function databaseStatus(): Promise<DatabaseStatus> {
-  const pool = connection()?.pool;
-  return pool ? schemaStatus(pool) : "none";
+/**
+ * The instance's database. Everything the instance keeps is in it, on every host: the Postgres DATABASE_URL
+ * names, or with none set, one the app runs inside itself and keeps in DATA_DIR. So development, tests and a
+ * first look need nothing installed, and run the same statements production does.
+ */
+export function database(): Database {
+  const db = connection()?.db ?? held.livepeerEmbedded?.db;
+  if (!db) throw new Error("The instance's database isn't open. With no DATABASE_URL the server opens one of its own as it starts (apps/web/instrumentation.ts); a test opens one with useTestDatabase().");
+  return db;
 }
 
 /**
- * One store per process and per place it is kept: the Postgres one while the instance has a database, the
- * file one while it doesn't. Asked for on every use, so a changed address or secret is followed. A store
- * that seals nothing is asked for without a secret.
+ * Opens the app's own database for an instance that was given none to connect to, and brings it to this
+ * release's schema. Called once as the server starts, before it answers anything, so everything after can
+ * ask for the database without waiting. It lives in DATA_DIR (`.data` at the repository root by default),
+ * which one server process may have open at a time.
  */
-export function chosenStore<T>(build: { postgres: (db: Database, secret: string) => T; file: () => T }): (secret?: string) => T {
-  let built: { db: Database | null; secret: string; store: T } | null = null;
+export async function openEmbeddedDatabase(): Promise<void> {
+  if (env("DATABASE_URL") || held.livepeerEmbedded) return;
+  const inRepository = path.join(/* turbopackIgnore: true */ root(), "packages/db/migrations");
+  const dir = path.resolve(/* turbopackIgnore: true */ root(), env("DATA_DIR") || ".data", "postgres");
+  held.livepeerEmbeddedOpening ??= openEmbedded({ dir, migrations: existsSync(/* turbopackIgnore: true */ inRepository) ? inRepository : path.join(/* turbopackIgnore: true */ root(), "migrations") }).catch((cause: unknown) => {
+    delete held.livepeerEmbeddedOpening;
+    throw new Error(`The instance has no DATABASE_URL and couldn't open a database of its own in ${dir}. On a host with no disk to write to, set DATABASE_URL to a Postgres database.`, { cause });
+  });
+  held.livepeerEmbedded = await held.livepeerEmbeddedOpening;
+}
+
+/** Whether the database can be reached and has every migration this release expects. */
+export async function databaseStatus(): Promise<DatabaseStatus> {
+  const pool = connection()?.pool;
+  if (pool) return schemaStatus(pool);
+  return held.livepeerEmbedded ? "embedded" : "unreachable";
+}
+
+/**
+ * One store per process over the instance's database. Asked for on every use, so a changed address or
+ * secret is followed. A store that seals nothing is asked for without a secret.
+ */
+export function storeOver<T>(build: (db: Database, secret: string) => T): (secret?: string) => T {
+  let built: { db: Database; secret: string; store: T } | null = null;
   return (secret = "") => {
     const db = database();
-    if (!built || built.db !== db || built.secret !== secret) built = { db, secret, store: db ? build.postgres(db, secret) : build.file() };
+    if (!built || built.db !== db || built.secret !== secret) built = { db, secret, store: build(db, secret) };
     return built.store;
   };
 }

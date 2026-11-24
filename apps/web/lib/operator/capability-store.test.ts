@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
+import { useTestDatabase } from "../data/testing";
 import { apiFor } from "../api";
 import { studioOfferings } from "../catalogue";
 import { instance } from "../instance";
@@ -18,10 +19,11 @@ const deployed = JSON.stringify({ name: "Test", surfaces: { app: true, console: 
 const offering = (app: string) => ({ app, modes: ["single-shot"] }) as never;
 const store = async () => configCapabilityStore(await instance());
 
+useTestDatabase();
+
 beforeAll(() => {
   writeFileSync(file, deployed);
   vi.stubEnv("INSTANCE_CONFIG", file);
-  vi.stubEnv("DATA_DIR", path.join(dir, "data"));
   vi.stubEnv("DATABASE_URL", "");
   vi.stubEnv("MOCK_ONLY", "1");
 });

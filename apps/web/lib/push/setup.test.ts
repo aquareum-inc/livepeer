@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
+import { useTestDatabase } from "../data/testing";
 const captured = vi.hoisted(() => ({ clients: [] as Array<{ engine?: { url: string; reader?: string; admin?: string } }> }));
 vi.mock("@livepeer/api-client", async (original) => {
   const actual = await original<typeof import("@livepeer/api-client")>();
@@ -42,9 +43,10 @@ const set = (values: Partial<Record<keyof typeof credentials, string>>) => {
   for (const name of Object.keys(credentials) as Array<keyof typeof credentials>) vi.stubEnv(name, values[name] ?? "");
 };
 
+useTestDatabase();
+
 beforeAll(async () => {
   vi.stubEnv("INSTANCE_CONFIG", configFile);
-  vi.stubEnv("DATA_DIR", path.join(dir, "data"));
   vi.stubEnv("MOCK_ONLY", "");
   vi.stubEnv("ENGINE_URL", "http://engine.test");
   vi.stubEnv("ENGINE_READER_TOKEN", "a-reader-token");

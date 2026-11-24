@@ -5,10 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { memoryModerationStore, moderation } from "../moderation/moderation";
+import { openTestDatabase, testDatabase } from "../data/testing";
+import { moderation } from "../moderation/moderation";
+import { postgresModerationStore } from "../moderation/postgres";
 import { auditLog } from "../operator-devices/audit";
 import { operatorDeviceSessions } from "../operator-devices/sessions";
-import { TEST_SECRET, emptyAudit, emptyOperatorDevices } from "../operator-devices/testing";
+import { TEST_SECRET, testAudit, testOperatorDevices } from "../operator-devices/testing";
 import { ApiError, OPERATIONS, matchOperation, type Account, type AlertsAccess, type Context, type DeviceAccess } from "./operations";
 
 const provider = createMockProvider();
@@ -39,10 +41,11 @@ const devices: DeviceAccess = {
 };
 const agentModelMenu = async () => [];
 const studioMediums = async () => describeStudio([]);
-const desk = moderation(memoryModerationStore());
-const audit = auditLog(emptyAudit());
+await openTestDatabase();
+const desk = moderation(postgresModerationStore(testDatabase()));
+const audit = auditLog(testAudit());
 const alerts: AlertsAccess = { offered: async () => true, accepts: () => true, reportFiled: vi.fn(), phoneAdded: vi.fn(), test: async () => "sent" };
-const base: Context = { via: "api_key", client, operator: null, account: null, devices, operatorDevice: null, operatorDevices: operatorDeviceSessions(emptyOperatorDevices(), TEST_SECRET, audit), audit, alerts, moderation: desk, privacy: async () => describePrivacy(false), instance, labels, agentModelMenu, studioMediums, quote: quoteCredits };
+const base: Context = { via: "api_key", client, operator: null, account: null, devices, operatorDevice: null, operatorDevices: operatorDeviceSessions(testOperatorDevices(), TEST_SECRET, audit), audit, alerts, moderation: desk, privacy: async () => describePrivacy(false), instance, labels, agentModelMenu, studioMediums, quote: quoteCredits };
 const adam: Account = { user: { id: "usr_demo_adam", name: "Adam Soffer", email: "adam@example.test" }, role: "user", deviceId: "dev_1" };
 
 describe("public API operations", () => {

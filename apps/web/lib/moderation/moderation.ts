@@ -2,8 +2,6 @@ import { randomUUID } from "node:crypto";
 
 import type { Character, CharacterBlock, CharacterReport, ReportReason } from "@livepeer/api-client";
 
-import { memoryStore, type StateStore } from "../data/store";
-
 export interface StoredReport extends CharacterReport {
   /** Who reported it, so one person can't flood the queue. Never sent to anyone. */
   reporter: string;
@@ -11,13 +9,6 @@ export interface StoredReport extends CharacterReport {
 
 export interface StoredBlock extends CharacterBlock {
   userId: string;
-}
-
-export interface ModerationContents {
-  reports: StoredReport[];
-  blocks: StoredBlock[];
-  /** Characters the operator took off the instance, by slug. */
-  hidden: string[];
 }
 
 /** Where reports, blocks and takedowns are kept. One method per thing moderation needs of it. */
@@ -41,59 +32,6 @@ export interface ModerationStore {
   /** Removes a person's blocks and takes their id off their reports. */
   forget(userId: string): Promise<void>;
 }
-
-/** Moderation kept as one document: a JSON file, or memory in tests. */
-export function documentModerationStore(document: StateStore<ModerationContents>): ModerationStore {
-  return {
-    async fileReport(report) {
-      return document.update((contents) => {
-        const open = contents.reports.find((entry) => entry.reporter === report.reporter && entry.character_slug === report.character_slug && entry.state === "open");
-        if (!open) {
-          contents.reports.push(report);
-          return report;
-        }
-        open.reason = report.reason;
-        open.note = report.note;
-        return open;
-      });
-    },
-    async reports() {
-      return document.read().reports;
-    },
-    async resolve(id, outcome) {
-      return document.update((contents) => {
-        const report = contents.reports.find((entry) => entry.id === id);
-        if (!report) return null;
-        report.state = outcome;
-        if (outcome === "hidden") {
-          if (!contents.hidden.includes(report.character_slug)) contents.hidden.push(report.character_slug);
-          for (const other of contents.reports) if (other.character_slug === report.character_slug && other.state === "open") other.state = "hidden";
-        }
-        return report;
-      });
-    },
-    async block(block) {
-      document.update((contents) => {
-        if (!contents.blocks.some((entry) => entry.userId === block.userId && entry.character_slug === block.character_slug)) contents.blocks.push(block);
-      });
-    },
-    async blocksOf(userId) {
-      return document.read().blocks.filter((entry) => entry.userId === userId);
-    },
-    async hidden() {
-      return document.read().hidden;
-    },
-    async forget(userId) {
-      document.update((contents) => {
-        contents.blocks = contents.blocks.filter((entry) => entry.userId !== userId);
-        for (const report of contents.reports) if (report.reporter === userId) report.reporter = "deleted";
-      });
-    },
-  };
-}
-
-/** An empty store in memory, for tests. */
-export const memoryModerationStore = (): ModerationStore => documentModerationStore(memoryStore<ModerationContents>({ reports: [], blocks: [], hidden: [] }));
 
 /** Reports, blocks and characters taken down: what the stores require of an app with characters people share. */
 export interface Moderation {

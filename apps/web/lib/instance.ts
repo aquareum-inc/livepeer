@@ -48,7 +48,9 @@ const valid = (config: InstanceConfig): InstanceConfig | null => {
 
 async function read(): Promise<EffectiveInstance> {
   const base = loadConfig({ cwd: root(), env: { INSTANCE_CONFIG: env("INSTANCE_CONFIG"), INSTANCE_CONFIG_JSON: env("INSTANCE_CONFIG_JSON"), ENGINE_URL: env("ENGINE_URL") } });
-  const overrides = await settingsStore().read();
+  // While the app is being built there is no database to ask, and the few pages rendered then (the "not
+  // found" page) carry the deployed config's name. Everything served afterwards reads what the console saved.
+  const overrides = process.env.NEXT_PHASE === "phase-production-build" ? { settings: null, capabilities: {} } : await settingsStore().read();
   const saved = { settings: overrides.settings !== null, capabilities: Object.keys(overrides.capabilities).length > 0 };
 
   // Each layer is kept only if the config is still valid with it. A saved change the schema has since moved

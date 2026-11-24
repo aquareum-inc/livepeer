@@ -4,10 +4,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 vi.mock("server-only", () => ({}));
 
-import { memoryStore } from "../data/store";
 import { postgresDeviceSessionStore } from "./postgres";
 import { deviceSessions } from "./sessions";
-import { documentDeviceSessionStore, type Contents, type DeviceRecord, type DeviceSessionStore, type PendingCode } from "./store";
+import type { DeviceRecord, DeviceSessionStore, PendingCode } from "./store";
 
 const SECRET = "s".repeat(32);
 const T0 = Date.parse("2026-11-20T09:00:00Z");
@@ -27,22 +26,6 @@ interface Opened {
 
 const implementations: Array<[string, () => Promise<Opened>]> = [
   [
-    "a document",
-    async () => {
-      let document = memoryStore<Contents>({ sessions: [], codes: [] });
-      const opened: Opened = {
-        store: documentDeviceSessionStore(document),
-        kept: async () => JSON.stringify(document.read()),
-        reset: async () => {
-          document = memoryStore<Contents>({ sessions: [], codes: [] });
-          opened.store = documentDeviceSessionStore(document);
-        },
-        close: async () => undefined,
-      };
-      return opened;
-    },
-  ],
-  [
     "Postgres",
     async () => {
       const { db, close } = await testDatabase();
@@ -59,7 +42,7 @@ const implementations: Array<[string, () => Promise<Opened>]> = [
   ],
 ];
 
-describe.each(implementations)("the device session store over %s", (kind, open) => {
+describe.each(implementations)("the device session store over %s", (_kind, open) => {
   let opened: Opened;
   beforeAll(async () => {
     opened = await open();
@@ -151,7 +134,7 @@ describe.each(implementations)("the device session store over %s", (kind, open) 
     expect(await sessions.find(token)).toBeNull();
   });
 
-  it.runIf(kind === "Postgres")("keeps no name and no email where they can be read", async () => {
+  it("keeps no name and no email where they can be read", async () => {
     await opened.store.putCode(code());
     await opened.store.createSession(session());
     const kept = await opened.kept();

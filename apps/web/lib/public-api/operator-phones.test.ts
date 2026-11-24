@@ -3,12 +3,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { NextRequest } from "next/server";
+import { sql } from "@livepeer/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
 import { POST as mcp } from "../../app/api/mcp/route";
 import { alerts } from "../alerts";
+import { everythingKept, rowsOf, testDatabase, useTestDatabase } from "../data/testing";
 import { roundStatus, runAlertRound } from "../alerts/round";
 import { seal } from "../auth/seal";
 import { SESSION_COOKIE } from "../auth/session";
@@ -40,9 +42,10 @@ function configure(surfaces: { mobile: boolean; mobileConsole: boolean; api?: bo
 }
 configure.count = 0;
 
+useTestDatabase();
+
 beforeAll(async () => {
   vi.stubEnv("INSTANCE_CONFIG", configFile);
-  vi.stubEnv("DATA_DIR", path.join(dir, "data"));
   vi.stubEnv("MOCK_ONLY", "1");
   vi.stubEnv("SESSION_SECRET", "a-session-secret-for-the-operator-phone-tests");
   vi.stubEnv("OPERATOR_API_TOKEN", "");
@@ -311,15 +314,9 @@ describe("an operator device session", () => {
 
 describe("alerts on an operator's phone", () => {
   const PUSH = "5a".repeat(32);
-  const dataFile = (name: string) => path.join(dir, "data", name);
-  const outbox = (): Array<{ platform: string; payload: { aps?: { alert?: { body?: string } } } }> => {
-    try {
-      return (JSON.parse(readFileSync(dataFile("push-outbox.json"), "utf8")) as { sent: Array<{ platform: string; payload: { aps?: { alert?: { body?: string } } } }> }).sent;
-    } catch {
-      return [];
-    }
-  };
-  const bodies = () => outbox().map((entry) => entry.payload.aps?.alert?.body);
+  /** What mock-only mode wrote down instead of sending, oldest first. */
+  const outbox = async () => (await rowsOf<{ seq: number; platform: string; payload: { aps?: { alert?: { body?: string } } } }>("push_outbox")).sort((first, second) => first.seq - second.seq);
+  const bodies = async () => (await outbox()).map((entry) => entry.payload.aps?.alert?.body);
   /** Turns alerts on as the app does: a proof for exactly these kinds and this push token. */
   const turnOn = async (device: { token: string; phone: TestPhone }, kinds: string[], pushToken = PUSH) => {
     const input = { kinds, push_token: pushToken, environment: "development" };
@@ -388,7 +385,7 @@ describe("alerts on an operator's phone", () => {
     expect(test.body).toEqual({ ok: true });
     await alerts().settled();
     for (const answer of [on, read, test]) expect(answer.text).not.toMatch(/token|secret|private|public_?key/i);
-    for (const name of ["operator-device-sessions.json", "operator-audit.json", "operator-alerts.json", "push-outbox.json"]) expect(readFileSync(dataFile(name), "utf8"), name).not.toContain(PUSH);
+    expect(await everythingKept()).not.toContain(PUSH);
     // And the web's list of phones says only where alerts stand.
     expect(JSON.stringify(await operatorDevices().list())).not.toContain(PUSH);
   });
@@ -424,29 +421,29 @@ describe("alerts on an operator's phone", () => {
   it("tell the phone when a report is filed, and every other phone when one is added", async () => {
     const device = await enrol();
     await turnOn(device, ["reports_waiting"]);
-    const before = bodies().length;
+    const before = (await bodies()).length;
 
     // An ordinary user reports a shared character from the app.
     const code = await devices().issueCode({ identity: { userId: "usr_demo_adam", name: "Adam Soffer", email: "adam@example.test", role: "user" }, builderKey: null, challenge: TEST_CHALLENGE, platform: "ios" });
     const adam = (await devices().redeemCode({ code, verifier: TEST_VERIFIER, deviceName: "Adam's iPhone", platform: "ios" }))!;
     const shared = ((await call("list_characters", { token: adam.token })).body as Array<{ slug: string; mine: boolean }>).filter((entry) => !entry.mine);
-    const waiting = () => (operatorDevices(), JSON.parse(readFileSync(dataFile("moderation.json"), "utf8")) as { reports: Array<{ state: string }> }).reports.filter((entry) => entry.state === "open").length;
+    const waiting = async () => (await rowsOf<{ state: string }>("character_reports")).filter((entry) => entry.state === "open").length;
     expect((await call("report_character", { token: adam.token, input: { slug: shared[0]!.slug, reason: "spam", note: "selling something" } })).status).toBe(200);
     await alerts().settled();
-    const count = waiting();
-    expect(bodies().slice(before)).toEqual([count === 1 ? "1 report is waiting" : `${count} reports are waiting`]);
+    const count = await waiting();
+    expect((await bodies()).slice(before)).toEqual([count === 1 ? "1 report is waiting" : `${count} reports are waiting`]);
 
     // Saying more about the same report is not a new report.
     expect((await call("report_character", { token: adam.token, input: { slug: shared[0]!.slug, reason: "other", note: "on second thoughts" } })).status).toBe(200);
     await alerts().settled();
-    expect(bodies().slice(before)).toHaveLength(1);
+    expect((await bodies()).slice(before)).toHaveLength(1);
 
     // A second phone enrols through the API: the first is told, in words that name nobody.
     const phone = testPhone();
     const pending = (await operatorDevices().issueCode({ identity: sam, challenge: TEST_CHALLENGE, platform: "ios" }))!;
     expect((await call("create_operator_device_session", { input: { code: pending, verifier: TEST_VERIFIER, platform: "ios", device_name: "Sam's other iPhone", public_key: phone.rawPublicKey } })).status).toBe(200);
     await alerts().settled();
-    expect(bodies().slice(before + 1)).toEqual(["A phone was added to the console"]);
+    expect((await bodies()).slice(before + 1)).toEqual(["A phone was added to the console"]);
     expect((await operatorAudit().list(1))[0]).toMatchObject({ event: "alert", device_id: device.id, detail: "phone_added: sent" });
   });
 
@@ -458,11 +455,11 @@ describe("alerts on an operator's phone", () => {
     const off = await call("operator_test_alert", { token: device.token, proof: await proofFor(device, "operator_test_alert", {}) });
     expect([off.status, off.code]).toEqual([409, "alerts_off"]);
     await turnOn(device, ["engine_not_ready"]);
-    const before = bodies().length;
+    const before = (await bodies()).length;
     for (let attempt = 0; attempt < 3; attempt += 1) expect((await call("operator_test_alert", { token: device.token, proof: await proofFor(device, "operator_test_alert", {}) })).body).toEqual({ ok: true });
     const fourth = await call("operator_test_alert", { token: device.token, proof: await proofFor(device, "operator_test_alert", {}) });
     expect([fourth.status, fourth.code]).toEqual([429, "rate_limited"]);
-    expect(bodies().slice(before)).toEqual(["Alerts reach this phone.", "Alerts reach this phone.", "Alerts reach this phone."]);
+    expect((await bodies()).slice(before)).toEqual(["Alerts reach this phone.", "Alerts reach this phone.", "Alerts reach this phone."]);
   });
 
   it("stop with the phone: revoked from the web, it is sent nothing more", async () => {
@@ -474,11 +471,14 @@ describe("alerts on an operator's phone", () => {
   });
 
   /** What the instance keeps about its rounds. */
-  const round = () => (JSON.parse(readFileSync(dataFile("operator-alerts.json"), "utf8")) as { round: { claimedAt: number | null; jobsReadAt: number | null }; state: { engine: { down: boolean } } });
+  const round = async () => {
+    const [row] = await rowsOf<{ round_claimed_at: Date | null; jobs_read_at: Date | null; engine_down: boolean }>("alert_state");
+    const time = (value: Date | null | undefined) => (value ? new Date(value).getTime() : null);
+    return { round: { claimedAt: time(row?.round_claimed_at), jobsReadAt: time(row?.jobs_read_at) }, state: { engine: { down: row?.engine_down ?? false } } };
+  };
   /** Moves what the instance remembers of its rounds into the past, as if that long had gone by since. */
-  const later = (ms: number) => {
-    const kept = round();
-    writeFileSync(dataFile("operator-alerts.json"), JSON.stringify({ ...kept, round: { claimedAt: kept.round.claimedAt === null ? null : kept.round.claimedAt - ms, jobsReadAt: kept.round.jobsReadAt === null ? null : kept.round.jobsReadAt - ms } }));
+  const later = async (ms: number) => {
+    await testDatabase().execute(sql.raw(`update alert_state set round_claimed_at = round_claimed_at - interval '${ms} milliseconds', jobs_read_at = jobs_read_at - interval '${ms} milliseconds'`));
   };
 
   it("are watched for by a round of checks that only reads, started by one caller at a time", async () => {
@@ -487,19 +487,19 @@ describe("alerts on an operator's phone", () => {
     // Two callers at once, as a timer and a scheduler would be: one round runs.
     expect((await Promise.all([runAlertRound(), runAlertRound()])).sort()).toEqual([false, true]);
     expect(await runAlertRound()).toBe(false);
-    const first = round().round;
+    const first = (await round()).round;
     expect(first.jobsReadAt).not.toBeNull();
 
-    later(60_000);
+    await later(60_000);
     expect(await runAlertRound()).toBe(true);
     // The mock engine is ready on both checks, so nobody is told it isn't.
-    expect(round().state.engine.down).toBe(false);
-    expect(bodies()).not.toContain("The engine isn't ready");
+    expect((await round()).state.engine.down).toBe(false);
+    expect(await bodies()).not.toContain("The engine isn't ready");
     // Recent jobs were read on the first round and are not read again a minute later.
-    expect(round().round.jobsReadAt).toBe((first.jobsReadAt ?? 0) - 60_000);
-    later(5 * 60_000);
+    expect((await round()).round.jobsReadAt).toBe((first.jobsReadAt ?? 0) - 60_000);
+    await later(5 * 60_000);
     expect(await runAlertRound()).toBe(true);
-    expect(round().round.jobsReadAt).toBeGreaterThan((first.jobsReadAt ?? 0) - 60_000);
+    expect((await round()).round.jobsReadAt).toBeGreaterThan((first.jobsReadAt ?? 0) - 60_000);
 
     expect(await roundStatus()).toMatchObject({ status: "running" });
     // With no round for five minutes, nothing is running the checks. A server that runs them itself and has
@@ -513,18 +513,18 @@ describe("alerts on an operator's phone", () => {
   it("send nothing while the console is off on phones, though the round still runs and tidies up", async () => {
     const device = await enrol();
     await turnOn(device, ["reports_waiting"]);
-    const before = bodies().length;
+    const before = (await bodies()).length;
     configure({ mobile: true, mobileConsole: false });
     try {
       alerts().reportFiled(9);
       alerts().phoneAdded("opd_someone");
       await alerts().settled();
-      later(10 * 60_000);
-      const jobsReadBefore = round().round.jobsReadAt;
+      await later(10 * 60_000);
+      const jobsReadBefore = (await round()).round.jobsReadAt;
       expect(await runAlertRound()).toBe(true);
-      expect(bodies()).toHaveLength(before);
+      expect(await bodies()).toHaveLength(before);
       // Nothing was asked of the engine: recent jobs weren't read.
-      expect(round().round.jobsReadAt).toBe(jobsReadBefore);
+      expect((await round()).round.jobsReadAt).toBe(jobsReadBefore);
       expect(await roundStatus()).toEqual({ status: "off", lastAt: null });
     } finally {
       configure({ mobile: true, mobileConsole: true });
@@ -541,7 +541,7 @@ describe("alerts on an operator's phone", () => {
       expect((await call()).status).toBe(404);
       expect((await call("Bearer a-secret-somebody-guessed")).status).toBe(404);
       expect((await call("a-secret-only-the-scheduler-holds")).status).toBe(404);
-      later(60_000);
+      await later(60_000);
       const first = await call("Bearer a-secret-only-the-scheduler-holds");
       expect([first.status, await first.json()]).toEqual([200, { ran: true }]);
       // The same call tried again, as a scheduler does after a timeout, runs nothing twice.

@@ -7,7 +7,7 @@ import type { ModerationStore, StoredReport } from "./moderation";
 
 const { characterReports: reports, characterBlocks: blocks, hiddenCharacters: hidden } = schema;
 
-/** What a report's sender is shown as once their account is gone, as the file store writes it. */
+/** What a report's sender is shown as once their account is gone. */
 const DELETED = "deleted";
 
 const stored = (row: typeof reports.$inferSelect): StoredReport => ({

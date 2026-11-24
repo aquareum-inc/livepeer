@@ -1,16 +1,14 @@
 import "server-only";
 
 import { sessionSecret } from "../auth/session";
-import { chosenStore } from "../data/database";
+import { storeOver } from "../data/database";
 import { instance } from "../instance";
 import { auditLog, type AuditLog } from "./audit";
 import { postgresAuditStore, postgresOperatorDeviceStore } from "./postgres";
 import { operatorDeviceSessions, type OperatorDeviceSessions } from "./sessions";
-import { fileAuditStore, fileOperatorDeviceStore } from "./store";
 
-const auditStore = chosenStore({ postgres: postgresAuditStore, file: fileAuditStore });
-// One file store per process, so the request counts it holds in memory are kept between requests.
-const sessionStore = chosenStore({ postgres: postgresOperatorDeviceStore, file: fileOperatorDeviceStore });
+const auditStore = storeOver(postgresAuditStore);
+const sessionStore = storeOver(postgresOperatorDeviceStore);
 
 /** The record of what operators' phones did and were refused. */
 export function operatorAudit(): AuditLog {

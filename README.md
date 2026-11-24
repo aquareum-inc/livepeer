@@ -95,8 +95,9 @@ bundle identifier, instance URL); theme, sign-in methods and features come from 
 Phones are a surface an operator switches on (`surfaces.mobile`, off in both presets), naming the apps built
 for the instance in `mobile.ios.bundleId` and `mobile.android.applicationId`: sign-in hands a session only to
 those. The apps sign in in the system's own browser session and get a revocable device session of their own;
-the instance keeps sessions, and reports and blocks of shared characters, in its Postgres database (the
-Compose bundle runs one), or in files in `DATA_DIR` in development, where there is none.
+the instance keeps sessions, and reports and blocks of shared characters, in its Postgres database. The
+Compose bundle runs one; with no `DATABASE_URL`, as in `pnpm dev`, the app runs a Postgres inside itself and
+keeps it in `.data/`, so there is nothing to install.
 
 The operator console on phones is a second switch (`surfaces.mobileConsole`, also off in both presets). The
 server side is built: an operator's phone gets its own short-lived session, bound to a key in the phone's

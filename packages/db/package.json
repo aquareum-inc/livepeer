@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./migrate": "./src/migrate.ts",
-    "./testing": "./src/testing.ts"
+    "./testing": "./src/testing.ts",
+    "./embedded": "./src/embedded.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",
@@ -16,11 +17,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.6.0",
     "drizzle-orm": "^0.45.4",
     "pg": "^8.23.1"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.6.0",
     "@types/node": "catalog:",
     "@types/pg": "^8.23.1",
     "drizzle-kit": "^0.31.11",

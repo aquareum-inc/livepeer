@@ -4,12 +4,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 vi.mock("server-only", () => ({}));
 
-import { memoryStore } from "../data/store";
 import { postgresOutboxStore } from "../push/postgres";
-import { documentOutboxStore, type OutboxContents, type OutboxStore, type RecordedPush } from "../push/recording";
+import type { OutboxStore, RecordedPush } from "../push/recording";
 import { quietState } from "./decide";
 import { postgresAlertsStore } from "./postgres";
-import { memoryAlertsStore, type AlertsStore } from "./service";
+import type { AlertsStore } from "./service";
 
 const T0 = Date.parse("2026-11-21T09:00:00Z");
 const push = (body: string): RecordedPush => ({ at: new Date(T0).toISOString(), platform: "ios", environment: "production", payload: { aps: { alert: { body } }, opens: "status" } });
@@ -23,24 +22,6 @@ interface Opened {
 }
 
 const implementations: Array<[string, () => Promise<Opened>]> = [
-  [
-    "a document",
-    async () => {
-      let sent = memoryStore<OutboxContents>({ sent: [] });
-      const opened: Opened = {
-        store: memoryAlertsStore(),
-        outbox: documentOutboxStore(sent),
-        recorded: async () => sent.read().sent,
-        reset: async () => {
-          sent = memoryStore<OutboxContents>({ sent: [] });
-          opened.store = memoryAlertsStore();
-          opened.outbox = documentOutboxStore(sent);
-        },
-        close: async () => undefined,
-      };
-      return opened;
-    },
-  ],
   [
     "Postgres",
     async () => {

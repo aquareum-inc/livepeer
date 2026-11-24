@@ -31,15 +31,25 @@ rule: `CLAUDE.md` and the plan hold those.
 
 ## Alerts (the server half; the apps' pages aren't built)
 
-- **A mock instance never contacts Apple or Google.** It records what it would have sent in
-  `<DATA_DIR>/push-outbox.json` (`.data/` at the repository root unless `DATA_DIR` says otherwise), newest
-  last, and offers alerts on both platforms. An iOS entry's `payload` is the APNs payload as it would be sent:
-  save it to a file and `xcrun simctl push <udid> org.livepeer.app.dev <file>` shows it in the simulator.
+- **Looking at, or staging, what the instance keeps needs a Postgres you can open.** With no `DATABASE_URL`
+  the instance runs a Postgres inside its own process (kept in `.data/postgres`), which nothing else can
+  open while it runs. For the notes below that read or change state, give the mock instance a database of
+  its own and use `psql`:
+
+  ```bash
+  docker run -d --name livepeer-dev-db -e POSTGRES_USER=livepeer -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=livepeer -p 127.0.0.1:5433:5432 postgres:17-alpine
+  export DATABASE_URL=postgres://livepeer:dev@127.0.0.1:5433/livepeer
+  corepack pnpm db:migrate
+  MOCK_ONLY=1 INSTANCE_CONFIG=docs/mobile/dev.instance.config.json corepack pnpm dev
+  psql "$DATABASE_URL"
+  ```
+- **A mock instance never contacts Apple or Google.** It records what it would have sent in `push_outbox`
+  (`select at, platform, payload from push_outbox order by seq;`), and offers alerts on both platforms. An
+  iOS row's `payload` is the APNs payload as it would be sent: save it to a file and
+  `xcrun simctl push <udid> org.livepeer.app.dev <file>` shows it in the simulator.
 - **The checks start with the server**: a timer asks for a round five seconds after it starts and then each
-  minute, and each round is claimed in `<DATA_DIR>/operator-alerts.json` (`round.claimedAt`), which also holds
-  what is currently wrong. The engine is only asked while some phone has alerts on. These notes are for an
-  instance with no `DATABASE_URL`, which is how the mock instance runs; with one, the same state is in the
-  database and there are no files to edit.
+  minute, and each round is claimed in `alert_state` (`round_claimed_at`), the one row that also holds what
+  is currently wrong. The engine is only asked while some phone has alerts on.
 - **Seeing an alert without an app.** A phone has to enrol a key, unlock and confirm `operator_set_alerts` with
   a proof; there is no way round that from a shell. A short Node script can stand in for the phone (sign in
   as `sam@example.test` with `client=ios&purpose=operator`, post the code with a P-256 public key, sign the
@@ -48,9 +58,10 @@ rule: `CLAUDE.md` and the plan hold those.
 - **Then:** file a report (above) to see "1 report is waiting" in the outbox; enrol a second phone to see "A
   phone was added to the console"; `operator_test_alert` for "Alerts reach this phone." The mock engine is
   always ready, so "The engine isn't ready" is only seen in the tests.
-- **States on the web's Operator phones panel** can be staged by editing `<DATA_DIR>/operator-device-sessions.json`:
-  a `lastUsedAt` more than 7 days old shows "Signed out · alerts until …"; `"pushSealed": null` shows "not
-  reaching".
+- **States on the web's Operator phones panel** can be staged in the database:
+  `update operator_device_sessions set last_used_at = now() - interval '8 days' where id = '<session id>';`
+  shows "Signed out · alerts until …"; `update operator_push_tokens set push_sealed = null where session_id =
+  '<session id>';` shows "not reaching".
 
 - **A photo to pick in the Android emulator.** `adb push <file>.jpg /sdcard/Download/`, then
   `adb shell "mkdir -p /sdcard/DCIM/Camera && cp /sdcard/Download/<file>.jpg /sdcard/DCIM/Camera/"` and
@@ -69,16 +80,16 @@ rule: `CLAUDE.md` and the plan hold those.
   `google-services.json`: `project_id`, `mobilesdk_app_id`, `current_key`, `project_number`) alerts turn on
   end to end in an emulator with a Google Play image. Keep the file out of the repository; the build doesn't
   read it.
-- **To see the stopped state**, set `alerts.pushSealed` to `null` on the phone's entry in
-  `DATA_DIR/operator-device-sessions.json` and pull the page down.
-- **A mock-only instance records alerts and sends none**, so nothing arrives on a phone. Its outbox is
-  `DATA_DIR/push-outbox.json`.
+- **To see the stopped state**, run `update operator_push_tokens set push_sealed = null where session_id =
+  '<session id>';` and pull the page down.
+- **A mock-only instance records alerts and sends none**, so nothing arrives on a phone. Its outbox is the
+  `push_outbox` table.
 - **To see a real alert arrive on Android**, run the instance without `MOCK_ONLY`, with `FCM_SERVICE_ACCOUNT`
-  in the root `.env`, the same `SESSION_SECRET` and `DATA_DIR` the phone enrolled under, and
-  `ENGINE_ADMIN_TOKEN=` (empty) so the run can't change the engine. The watcher checks once a minute. To make
-  it send without filing a report, edit `DATA_DIR/operator-alerts.json`: set `state.reports` to an old
-  `lastSentAt` with `unannounced: true` for "N reports are waiting"; set `state.engine` to `down: true` with
-  the phone's session id in `told` for "The engine is ready again", two checks later.
+  in the root `.env`, the same `SESSION_SECRET` and database the phone enrolled under, and
+  `ENGINE_ADMIN_TOKEN=` (empty) so the run can't change the engine. The checks run once a minute. To make
+  them send without filing a report: `update alert_state set reports_last_sent_at = now() - interval '2 hours',
+  reports_unannounced = true;` for "N reports are waiting"; `update alert_state set engine_down = true,
+  engine_told = array['<session id>'];` for "The engine is ready again", two checks later.
 - **To close the app without stopping it**, press Home and `adb shell am kill <application id>`. A
   force-stopped app is sent nothing by Firebase, which is Android's rule, not a fault.
 - **Two alerts are drawn as two rows at first** and as one stack of two when the shade is closed and opened

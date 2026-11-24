@@ -1,11 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
 const { auditLog } = await import("./audit");
 const { unlockMessage } = await import("./proof");
 const { operatorDeviceSessions, ABSOLUTE_DAYS, ALERTS_WARNING_DAYS, IDLE_DAYS, MAX_FAILED_PROOFS } = await import("./sessions");
-const { TEST_CHALLENGE, TEST_SECRET, TEST_VERIFIER, emptyAudit, emptyOperatorDevices, testPhone } = await import("./testing");
+const { emptyDatabase, everythingKept, useTestDatabase } = await import("../data/testing");
+const { TEST_CHALLENGE, TEST_SECRET, TEST_VERIFIER, testAudit, testOperatorDevices, testPhone } = await import("./testing");
+
+useTestDatabase();
+beforeEach(emptyDatabase);
 
 const sam = { userId: "usr_demo_sam", name: "Sam Whitfield", email: "sam@example.test", role: "operator" as const };
 const rae = { userId: "usr_demo_rae", name: "Rae Lindqvist", email: "rae@example.test", role: "operator" as const };
@@ -16,8 +20,8 @@ const web = { userId: "usr_demo_rae", name: "Rae Lindqvist", deviceId: null, dev
 
 function setup(secret = TEST_SECRET) {
   const clock = { now: Date.parse("2026-11-21T09:00:00Z") };
-  const store = emptyOperatorDevices();
-  const audit = auditLog(emptyAudit(), () => clock.now);
+  const store = testOperatorDevices(secret);
+  const audit = auditLog(testAudit(), () => clock.now);
   const sessions = operatorDeviceSessions(store, secret, audit, () => clock.now);
   const enrol = async (identity: typeof sam = sam, deviceName = "Sam's iPhone") => {
     const phone = testPhone();
@@ -25,7 +29,7 @@ function setup(secret = TEST_SECRET) {
     const issued = (await sessions.redeemCode({ code, verifier: TEST_VERIFIER, deviceName, platform: "ios", publicKey: phone.rawPublicKey }))!;
     return { ...issued, phone, session: async () => (await sessions.find(issued.token))! };
   };
-  const stored = (id: string) => store.read().sessions.find((entry) => entry.id === id);
+  const stored = async (id: string) => (await store.sessions()).find((entry) => entry.id === id);
   return { clock, store, audit, sessions, enrol, stored };
 }
 
@@ -39,9 +43,9 @@ async function alerting() {
 
 describe("where a push token lives", () => {
   it("is on the phone's own session, sealed, and comes back only to be sent to", async () => {
-    const { sessions, store, phone } = await alerting();
+    const { sessions, phone } = await alerting();
     expect(sessions.alerts(await phone.session())).toEqual({ state: "on", kinds: ["engine_not_ready", "jobs_failing", "reports_waiting"], until: new Date(Date.parse("2026-11-21T09:00:00Z") + ABSOLUTE_DAYS * DAY).toISOString(), lastAlertAt: null });
-    expect(JSON.stringify(store.read())).not.toContain(PUSH);
+    expect(await everythingKept()).not.toContain(PUSH);
     expect(await sessions.alertTargets("engine_not_ready")).toEqual([{ sessionId: phone.device.id, userId: "usr_demo_sam", name: "Sam Whitfield", deviceName: "Sam's iPhone", platform: "ios", environment: "production", pushToken: PUSH }]);
     expect(await sessions.anyAlerts()).toBe(true);
   });
@@ -86,7 +90,7 @@ describe("what ends a phone's alerts", () => {
   it("the operator turning them off: the push token is forgotten at once", async () => {
     const { sessions, phone, stored } = await alerting();
     expect(await sessions.setAlerts(await phone.session(), { kinds: [], pushToken: null, environment: "production" })).toMatchObject({ state: "off", until: null });
-    expect(stored(phone.device.id)?.alerts).toBeNull();
+    expect((await stored(phone.device.id))?.alerts).toBeNull();
     expect(await sessions.anyAlerts()).toBe(false);
   });
 
@@ -124,9 +128,9 @@ describe("what ends a phone's alerts", () => {
 
   it("a new session secret: the push token can no longer be read, and is dropped", async () => {
     const { store, phone } = await alerting();
-    const rotated = operatorDeviceSessions(store, "a-different-secret-of-thirty-two-chars", auditLog(emptyAudit()), () => Date.parse("2026-11-21T10:00:00Z"));
+    const rotated = operatorDeviceSessions(store, "a-different-secret-of-thirty-two-chars", auditLog(testAudit()), () => Date.parse("2026-11-21T10:00:00Z"));
     expect(await rotated.alertTargets(null)).toEqual([]);
-    expect(store.read().sessions.find((entry) => entry.id === phone.device.id)?.alerts).toBeNull();
+    expect((await store.sessions()).find((entry) => entry.id === phone.device.id)?.alerts).toBeNull();
   });
 
   it("the session's absolute end, with a warning a few days before and one notice at the end", async () => {
@@ -166,7 +170,7 @@ describe("what ends a phone's alerts", () => {
     const { sessions, phone, stored } = await alerting();
     await sessions.dropPushToken(phone.device.id);
     expect(sessions.alerts(await phone.session())).toMatchObject({ state: "not_reaching", kinds: ["engine_not_ready", "jobs_failing", "reports_waiting"] });
-    expect(stored(phone.device.id)?.alerts?.pushSealed).toBeNull();
+    expect((await stored(phone.device.id))?.alerts?.pushSealed).toBeNull();
     expect(await sessions.alertTargets(null)).toEqual([]);
     expect((await sessions.list())[0]).toMatchObject({ alerts: "not_reaching" });
     // Turning them back on with the phone's new push token mends it.
@@ -202,9 +206,9 @@ describe("a quiet week", () => {
     clock.now += (IDLE_DAYS + 1) * DAY;
     expect((await sessions.list()).map((entry) => entry.id)).toEqual([told.device.id]);
     await enrol(rae, "Rae's new iPhone");
-    expect(stored(told.device.id)).toBeDefined();
-    expect(stored(silent.device.id)).toBeUndefined();
-    expect(stored(unreachable.device.id)).toBeUndefined();
+    expect((await stored(told.device.id))).toBeDefined();
+    expect((await stored(silent.device.id))).toBeUndefined();
+    expect((await stored(unreachable.device.id))).toBeUndefined();
   });
 
   it("stops at the absolute end all the same", async () => {

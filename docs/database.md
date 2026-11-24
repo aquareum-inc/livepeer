@@ -10,6 +10,16 @@ built. Slice 7's import was dropped by the project owner on 24 November 2026. Sl
   slice 7 also listed is done. The bundle's `app-data` volume is no longer written to.
 - **Slice 8 (Vercel) needs the owner's Vercel and Neon accounts**, and nothing is created in either without
   being asked for first.
+- **The JSON-file store is gone (24 November 2026).** The brief for this plan kept it for local development,
+  tests and mock-only mode. The owner asked what it was for and said to do what I recommended, which was to
+  drop it: local development ran a different store from production, and every new kind of state needed two
+  implementations. With no `DATABASE_URL` the app now runs a Postgres inside its own process (PGlite), kept
+  in `DATA_DIR` and migrated as the server starts, so `pnpm dev`, tests and CI still need nothing installed
+  and there is one implementation of each store. Where this document says "files" or "JSON mode" below, read
+  that. What it costs: the embedded database can't be opened by another tool while the server runs, so
+  staging state by hand needs a real Postgres (`docs/mobile/console-testing-notes.md` says how); one server
+  process may have a `DATA_DIR` open at a time; and it is not for a host with several servers or no disk,
+  which must set `DATABASE_URL`.
 
 The instance keeps its own state as JSON files in `DATA_DIR`, and the operator console writes
 `instance.config.json` to disk. That ties an instance to a host with a persistent disk and one server

@@ -1,6 +1,5 @@
 import "server-only";
 
-import type { StateStore } from "../data/store";
 import { apnsPayload } from "./apns";
 import { fcmMessage } from "./fcm";
 import type { PushSender, PushTarget } from "./types";
@@ -17,25 +16,10 @@ export interface RecordedPush {
   payload: Record<string, unknown>;
 }
 
-export interface OutboxContents {
-  sent: RecordedPush[];
-}
-
 /** Where the recording sender writes down what it would have sent. */
 export interface OutboxStore {
   /** Adds a notification, and keeps only the newest `keep`. */
   record(push: RecordedPush, keep: number): Promise<void>;
-}
-
-/** The outbox kept as one document: a JSON file, or memory in tests. */
-export function documentOutboxStore(document: StateStore<OutboxContents>): OutboxStore {
-  return {
-    async record(push, keep) {
-      document.update((contents) => {
-        contents.sent = [...contents.sent, push].slice(-keep);
-      });
-    },
-  };
 }
 
 /**

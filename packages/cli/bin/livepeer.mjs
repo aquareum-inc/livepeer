@@ -385,7 +385,7 @@ async function doctor(options) {
   // Database: asked through the app, which is the only thing that can reach the bundle's Postgres.
   if (answered) {
     const database = app.body.database;
-    add("database", database !== "unreachable", database === "unreachable" ? "not reachable from the app" : database === "none" ? "none: state is kept in files (development and tests only)" : "reachable", env.DATABASE_URL ? "Check DATABASE_URL in .env and that the database accepts connections from the app" : "Check the bundle's Postgres: docker compose -f deploy/compose.yaml ps db");
+    add("database", database !== "unreachable", database === "unreachable" ? "not reachable from the app" : database === "embedded" ? "embedded: the app's own, kept in DATA_DIR (set DATABASE_URL to use a Postgres server)" : "reachable", env.DATABASE_URL ? "Check DATABASE_URL in .env and that the database accepts connections from the app" : "Check the bundle's Postgres: docker compose -f deploy/compose.yaml ps db");
     if (database === "ok" || database === "behind") {
       add("database schema", database === "ok", database === "ok" ? "has every migration this release expects" : "behind this release's migrations", "Run: livepeer upgrade (it applies the pending migrations before the app starts)");
     }

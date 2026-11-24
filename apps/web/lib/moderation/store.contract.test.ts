@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 vi.mock("server-only", () => ({}));
 
-import { memoryModerationStore, moderation, type ModerationStore, type StoredReport } from "./moderation";
+import { moderation, type ModerationStore, type StoredReport } from "./moderation";
 import { postgresModerationStore } from "./postgres";
 
 const report = (id: string, extra: Partial<StoredReport> = {}): StoredReport => ({ id, character_slug: "mara", character_name: "Mara", author: "studio-north", reason: "spam", note: null, created_at: "2026-11-20T12:00:00.000Z", state: "open", reporter: "usr_adam", ...extra });
@@ -18,19 +18,6 @@ interface Opened {
 }
 
 const implementations: Array<[string, () => Promise<Opened>]> = [
-  [
-    "a document",
-    async () => {
-      const opened: Opened = {
-        store: memoryModerationStore(),
-        reset: async () => {
-          opened.store = memoryModerationStore();
-        },
-        close: async () => undefined,
-      };
-      return opened;
-    },
-  ],
   [
     "Postgres",
     async () => {

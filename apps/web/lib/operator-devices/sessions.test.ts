@@ -1,23 +1,26 @@
 import { generateKeyPairSync } from "node:crypto";
 
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-const { memoryStore } = await import("../data/store");
 const { auditLog, AUDIT_LIMIT } = await import("./audit");
-const { documentAuditStore } = await import("./store");
 const { confirmMessage, inputHash, readPublicKey, signed, unlockMessage } = await import("./proof");
 const { operatorDeviceSessions, OPERATOR_DEVICE_TOKEN_PREFIX, ABSOLUTE_DAYS, IDLE_DAYS, MAX_FAILED_PROOFS, REQUESTS_PER_MINUTE, UNLOCK_SECONDS } = await import("./sessions");
-const { TEST_CHALLENGE, TEST_SECRET, TEST_VERIFIER, emptyAudit, emptyOperatorDevices, testPhone } = await import("./testing");
+const { sql } = await import("@livepeer/db");
+const { emptyDatabase, everythingKept, rowsOf, testDatabase, useTestDatabase } = await import("../data/testing");
+const { TEST_CHALLENGE, TEST_SECRET, TEST_VERIFIER, testAudit, testOperatorDevices, testPhone } = await import("./testing");
+
+useTestDatabase();
+beforeEach(emptyDatabase);
 
 const sam = { userId: "usr_demo_sam", name: "Sam Whitfield", email: "sam@example.test", role: "operator" as const };
 const DAY = 86_400_000;
 
 function setup(start = Date.parse("2026-11-21T09:00:00Z")) {
   const clock = { now: start };
-  const store = emptyOperatorDevices();
-  const audit = auditLog(emptyAudit(), () => clock.now);
+  const store = testOperatorDevices();
+  const audit = auditLog(testAudit(), () => clock.now);
   const sessions = operatorDeviceSessions(store, TEST_SECRET, audit, () => clock.now);
   const phone = testPhone();
   const enrol = async (key = phone.rawPublicKey, identity: typeof sam | (Omit<typeof sam, "role"> & { role: "user" }) = sam) => {
@@ -77,7 +80,7 @@ describe("operator device keys and proofs", () => {
 
 describe("operator device sessions", () => {
   it("enrols only an operator, once per sign-in, with a key, and keeps no token or builder key", async () => {
-    const { sessions, store, enrol, events } = setup();
+    const { sessions, enrol, events } = setup();
     expect(await sessions.issueCode({ identity: { ...sam, role: "user" }, challenge: TEST_CHALLENGE, platform: "ios" })).toBeNull();
     expect(await enrol("not a key")).toBeNull();
 
@@ -91,7 +94,7 @@ describe("operator device sessions", () => {
     expect(issued.token.startsWith(OPERATOR_DEVICE_TOKEN_PREFIX)).toBe(true);
     expect(issued.device).toMatchObject({ user_id: "usr_demo_sam", user_name: "Sam Whitfield", name: "Sam's iPhone", platform: "ios", last_unlocked_at: null });
     expect(Date.parse(issued.device.expires_at) - Date.parse(issued.device.created_at)).toBe(ABSOLUTE_DAYS * DAY);
-    const raw = JSON.stringify(store.read());
+    const raw = await everythingKept();
     expect(raw).not.toContain(issued.token);
     expect(raw).not.toContain("builderKey");
     expect(await sessions.find(issued.token)).toMatchObject({ userId: "usr_demo_sam", unlockedUntil: 0 });
@@ -234,30 +237,31 @@ describe("operator device sessions", () => {
 
   it("rotating the session secret ends every operator session", async () => {
     const { store, issued } = await enrolled();
-    const rotated = operatorDeviceSessions(store, "t".repeat(32), auditLog(emptyAudit()));
+    const rotated = operatorDeviceSessions(store, "t".repeat(32), auditLog(testAudit()));
     expect(await rotated.find(issued.token)).toBeNull();
   });
 
   it("limits how fast one session can ask, by the minute", async () => {
-    const { sessions, clock } = setup();
-    for (let request = 1; request <= REQUESTS_PER_MINUTE; request += 1) expect(await sessions.allow("opd_a")).toBe(true);
-    expect(await sessions.allow("opd_a")).toBe(false);
-    expect(await sessions.allow("opd_b")).toBe(true);
+    const { sessions, clock, enrol } = setup();
+    const [first, second] = [(await enrol())!.device.id, (await enrol())!.device.id];
+    for (let request = 1; request <= REQUESTS_PER_MINUTE; request += 1) expect(await sessions.allow(first)).toBe(true);
+    expect(await sessions.allow(first)).toBe(false);
+    expect(await sessions.allow(second)).toBe(true);
     clock.now += 60_000;
-    expect(await sessions.allow("opd_a")).toBe(true);
+    expect(await sessions.allow(first)).toBe(true);
   });
 
   it("keeps only a handful of nonces waiting per phone", async () => {
-    const { sessions, session, store } = await enrolled();
+    const { sessions, session } = await enrolled();
     for (let asked = 0; asked < 20; asked += 1) await sessions.challenge(await session(), null);
-    expect(store.read().challenges.length).toBe(8);
+    expect(await rowsOf("operator_challenges")).toHaveLength(8);
   });
 });
 
 describe("operator audit log", () => {
   it("lists newest first, holds names and ids only, and drops the oldest past its limit", async () => {
     const clock = { now: Date.parse("2026-11-21T09:00:00Z") };
-    const audit = auditLog(emptyAudit(), () => clock.now);
+    const audit = auditLog(testAudit(), () => clock.now);
     const actor = { userId: "usr_demo_sam", name: "Sam Whitfield", deviceId: "opd_1", deviceName: "Sam's iPhone" };
     await audit.write("sign_in", actor);
     clock.now += 1000;
@@ -266,10 +270,11 @@ describe("operator audit log", () => {
       { id: expect.stringMatching(/^aud_/), at: "2026-11-21T09:00:01.000Z", event: "change", user_id: "usr_demo_sam", user_name: "Sam Whitfield", device_id: "opd_1", device_name: "Sam's iPhone", operation: "operator_resolve_report", target: "rep_1", detail: "done" },
       expect.objectContaining({ event: "sign_in", operation: null, target: null, detail: null }),
     ]);
-    const newest = (await audit.list(1))[0]!;
-    const full = auditLog(documentAuditStore(memoryStore({ entries: Array.from({ length: AUDIT_LIMIT }, () => newest) })), () => clock.now);
-    await full.write("unlock", actor);
-    expect((await full.list(AUDIT_LIMIT + 10)).length).toBe(AUDIT_LIMIT);
-    expect((await full.list(1))[0]?.event).toBe("unlock");
+    // A log already at its limit: one more entry and the oldest goes.
+    await testDatabase().execute(sql.raw(`insert into operator_audit (id, at, event, user_id, actor_sealed) select 'aud_fill_' || n, now(), 'sign_in', 'usr_demo_sam', 'x' from generate_series(1, ${AUDIT_LIMIT}) n`));
+    await audit.write("unlock", actor);
+    expect(await rowsOf("operator_audit")).toHaveLength(AUDIT_LIMIT);
+    expect((await audit.list(AUDIT_LIMIT + 10)).length).toBe(AUDIT_LIMIT);
+    expect((await audit.list(1))[0]?.event).toBe("unlock");
   });
 });

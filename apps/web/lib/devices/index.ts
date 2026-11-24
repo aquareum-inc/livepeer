@@ -1,13 +1,12 @@
 import "server-only";
 
 import { sessionSecret } from "../auth/session";
-import { chosenStore } from "../data/database";
+import { storeOver } from "../data/database";
 import { instance } from "../instance";
 import { postgresDeviceSessionStore } from "./postgres";
 import { deviceSessions, type DeviceSessions, type Platform } from "./sessions";
-import { fileDeviceSessionStore } from "./store";
 
-const store = chosenStore({ postgres: postgresDeviceSessionStore, file: fileDeviceSessionStore });
+const store = storeOver(postgresDeviceSessionStore);
 
 /** The instance's device sessions. */
 export function devices(): DeviceSessions {

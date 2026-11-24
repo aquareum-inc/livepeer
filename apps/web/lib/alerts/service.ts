@@ -1,13 +1,12 @@
 import "server-only";
 
-import { memoryStore, type StateStore } from "../data/store";
 import type { AuditLog } from "../operator-devices/audit";
 import type { AlertTarget, OperatorDeviceSessions } from "../operator-devices/sessions";
 import type { OperatorDeviceRecord } from "../operator-devices/store";
 import type { AlertsAccess } from "../public-api/operations";
 import { validPushToken, type PushNotification, type PushPlatform, type PushSender } from "../push/types";
 import { alertNotification, endingNotification, testNotification } from "./compose";
-import { decide, quietState, type Alert, type AlertState, type Observation } from "./decide";
+import { decide, type Alert, type AlertState, type Observation } from "./decide";
 
 /** Test alerts one phone may ask for in an hour. */
 export const TESTS_PER_HOUR = 3;
@@ -19,16 +18,8 @@ const TEST = "test";
  */
 export const ROUND_EVERY_MS = 50_000;
 
-/** What the instance keeps about its alerts when it has no database, in DATA_DIR/operator-alerts.json. */
-export interface AlertsContents {
-  /** When a round of checks was last started, and when it last read recent jobs. */
-  round: { claimedAt: number | null; jobsReadAt: number | null };
-  state: AlertState;
-  /** When Apple or Google last refused the instance's own credentials, for the System page. Cleared by a send they accept. */
-  refused: Partial<Record<PushPlatform, { at: string; detail: string }>>;
-}
-
-export const emptyAlerts = (): AlertsContents => ({ round: { claimedAt: null, jobsReadAt: null }, state: quietState(), refused: {} });
+/** When Apple or Google last refused the instance's own credentials, by platform. Cleared by a send they accept. */
+export type Refusals = Partial<Record<PushPlatform, { at: string; detail: string }>>;
 
 /** Where the instance keeps what it has noticed and said. One method per thing the alerts need of it. */
 export interface AlertsStore {
@@ -46,57 +37,9 @@ export interface AlertsStore {
   jobsRead(at: number): Promise<void>;
   /** When a round of checks was last started, or null if none ever was. */
   lastRoundAt(): Promise<number | null>;
-  refusals(): Promise<AlertsContents["refused"]>;
+  refusals(): Promise<Refusals>;
   /** Notes that a platform refused the instance's own credentials, or with null that it has accepted them since. */
   setRefusal(platform: PushPlatform, refusal: { at: string; detail: string } | null): Promise<void>;
-}
-
-/** Alerts kept as one document: a JSON file, or memory in tests. */
-export function documentAlertsStore(document: StateStore<AlertsContents>): AlertsStore {
-  return {
-    async advance(change) {
-      return document.update((contents) => {
-        const next = change(contents.state);
-        contents.state = next.state;
-        return next.result;
-      });
-    },
-    async setEngineTold(sessionIds) {
-      document.update((contents) => {
-        contents.state.engine.told = sessionIds;
-      });
-    },
-    async claimRound(now, every) {
-      return document.update((contents) => {
-        if (contents.round.claimedAt !== null && now - contents.round.claimedAt < every) return null;
-        contents.round.claimedAt = now;
-        return { jobsReadAt: contents.round.jobsReadAt };
-      });
-    },
-    async jobsRead(at) {
-      document.update((contents) => {
-        contents.round.jobsReadAt = at;
-      });
-    },
-    async lastRoundAt() {
-      return document.read().round.claimedAt;
-    },
-    async refusals() {
-      return document.read().refused;
-    },
-    async setRefusal(platform, refusal) {
-      document.update((contents) => {
-        if (refusal) contents.refused[platform] = refusal;
-        else delete contents.refused[platform];
-      });
-    },
-  };
-}
-
-/** An empty store in memory, for tests. `read` is everything it holds. */
-export function memoryAlertsStore() {
-  const document = memoryStore<AlertsContents>(emptyAlerts());
-  return { ...documentAlertsStore(document), read: () => document.read() };
 }
 
 export interface AlertsDependencies {
@@ -128,7 +71,7 @@ export interface Alerts extends AlertsAccess {
   /** When a round of checks was last started, or null if none ever was. */
   lastRoundAt(): Promise<number | null>;
   /** When each platform's credentials were last refused. */
-  refusals(): Promise<AlertsContents["refused"]>;
+  refusals(): Promise<Refusals>;
   /** Resolves when everything being sent has been handed over. */
   settled(): Promise<void>;
 }

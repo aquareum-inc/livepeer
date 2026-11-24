@@ -84,7 +84,7 @@ Uses builder-core-console's names: actors, allocations, grants, offerings, orche
 
 | Route | Purpose |
 |-------|---------|
-| `/api/health` | Health check for the bundle and `doctor`: engine, database (`ok`, `behind`, `unreachable`, `none`) and whether the checks behind alerts are running |
+| `/api/health` | Health check for the bundle and `doctor`: engine, database (`ok`, `behind`, `unreachable`, `embedded`) and whether the checks behind alerts are running |
 | `/api/cron/alerts` | Runs one round of the checks behind operators' alerts, for a scheduler on a host with no server between requests. 404 unless the request carries `Authorization: Bearer $CRON_SECRET` |
 | `/api/v1` | Index of every operation, readable without a key |
 | `/api/v1/*` | The instance's REST API: 30 operations (17 for users, 13 for operators), each calling one API client function. Authenticated by an API key, a browser session, or `OPERATOR_API_TOKEN` for operator operations. |

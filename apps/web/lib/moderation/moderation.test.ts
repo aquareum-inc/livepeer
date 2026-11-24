@@ -1,13 +1,20 @@
 import type { Character } from "@livepeer/api-client";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { memoryModerationStore, moderation } from "./moderation";
+vi.mock("server-only", () => ({}));
+
+import { emptyDatabase, testDatabase, useTestDatabase } from "../data/testing";
+import { moderation } from "./moderation";
+import { postgresModerationStore } from "./postgres";
+
+useTestDatabase();
+beforeEach(emptyDatabase);
 
 const character = (slug: string, author: string, extra: Partial<Character> = {}): Character => ({
   slug, name: slug, tagline: "", description: "", greeting: "", author, visibility: "public", mature: false, calls: false, tags: [], rating: 0, chats: 0, mine: false, image: null, artwork: { hues: [0, 0, 0], seed: 0 }, ...extra,
 });
 
-const fresh = () => moderation(memoryModerationStore(), () => new Date("2026-11-20T12:00:00Z"));
+const fresh = () => moderation(postgresModerationStore(testDatabase()), () => new Date("2026-11-20T12:00:00Z"));
 
 describe("moderation", () => {
   it("files a report without saying who sent it, and a second one from the same person updates it", async () => {

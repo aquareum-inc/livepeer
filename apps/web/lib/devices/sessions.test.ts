@@ -1,19 +1,18 @@
 import { createHash } from "node:crypto";
 
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
+const { emptyDatabase, everythingKept, testDatabase, useTestDatabase } = await import("../data/testing");
+const { postgresDeviceSessionStore } = await import("./postgres");
 const { deviceSessions, DEVICE_TOKEN_PREFIX, IDLE_DAYS } = await import("./sessions");
-const { documentDeviceSessionStore } = await import("./store");
-const { memoryStore: memoryDocument } = await import("../data/store");
-type Contents = import("./store").Contents;
 
-/** The store the instance uses without a database, over memory instead of a file. */
-function memoryStore() {
-  const document = memoryDocument<Contents>({ sessions: [], codes: [] });
-  return { ...documentDeviceSessionStore(document), raw: () => JSON.stringify(document.read()) };
-}
+useTestDatabase();
+beforeEach(emptyDatabase);
+
+/** The instance's own store, over the test's database. */
+const deviceStore = () => postgresDeviceSessionStore(testDatabase(), secret);
 
 const secret = "s".repeat(32);
 const verifier = "a-verifier-the-app-made-and-kept-to-itself-0123";
@@ -27,7 +26,7 @@ async function signIn(sessions: ReturnType<typeof deviceSessions>, platform: "io
 
 describe("device sessions", () => {
   it("hands a sign-in to the app that started it, once, for its verifier only", async () => {
-    const store = memoryStore();
+    const store = deviceStore();
     const sessions = deviceSessions(store, secret);
     const code = await sessions.issueCode({ identity, builderKey: null, challenge, platform: "ios" });
     expect(await sessions.redeemCode({ code, verifier: "someone-else's-verifier-that-does-not-match-at-all", deviceName: "x", platform: "ios" })).toBeNull();
@@ -44,25 +43,25 @@ describe("device sessions", () => {
 
   it("refuses a code after a minute", async () => {
     let now = Date.parse("2026-11-20T09:00:00Z");
-    const sessions = deviceSessions(memoryStore(), secret, () => now);
+    const sessions = deviceSessions(deviceStore(), secret, () => now);
     const code = await sessions.issueCode({ identity, builderKey: null, challenge, platform: "ios" });
     now += 61_000;
     expect(await sessions.redeemCode({ code, verifier, deviceName: "x", platform: "ios" })).toBeNull();
   });
 
   it("stores neither the token nor the code", async () => {
-    const store = memoryStore();
+    const store = deviceStore();
     const sessions = deviceSessions(store, secret);
     const code = await sessions.issueCode({ identity, builderKey: null, challenge, platform: "ios" });
-    expect(store.raw()).not.toContain(code);
+    expect(await everythingKept()).not.toContain(code);
     const token = (await sessions.redeemCode({ code, verifier, deviceName: "x", platform: "ios" }))!.token;
-    expect(store.raw()).not.toContain(token);
+    expect(await everythingKept()).not.toContain(token);
     expect(await sessions.find(token)).toMatchObject({ userId: "usr_demo_adam" });
   });
 
   it("ends after 90 days without use, and stays alive while used", async () => {
     let now = Date.parse("2026-11-20T09:00:00Z");
-    const sessions = deviceSessions(memoryStore(), secret, () => now);
+    const sessions = deviceSessions(deviceStore(), secret, () => now);
     const { token } = (await signIn(sessions))!;
     now += (IDLE_DAYS - 1) * 86_400_000;
     expect(await sessions.find(token)).not.toBeNull();
@@ -73,7 +72,7 @@ describe("device sessions", () => {
   });
 
   it("lists and revokes only the user's own devices", async () => {
-    const sessions = deviceSessions(memoryStore(), secret);
+    const sessions = deviceSessions(deviceStore(), secret);
     const first = (await signIn(sessions))!;
     const second = (await signIn(sessions, "android"))!;
     expect((await sessions.list("usr_demo_adam", first.device.id)).map((device) => device.current).sort()).toEqual([false, true]);
@@ -85,13 +84,13 @@ describe("device sessions", () => {
   });
 
   it("rotating the session secret ends every session", async () => {
-    const store = memoryStore();
+    const store = deviceStore();
     const { token } = (await signIn(deviceSessions(store, secret)))!;
     expect(await deviceSessions(store, "t".repeat(32)).find(token)).toBeNull();
   });
 
   it("remembers which workspace a phone is working in, per phone, and nothing more about it", async () => {
-    const sessions = deviceSessions(memoryStore(), secret);
+    const sessions = deviceSessions(deviceStore(), secret);
     const first = (await signIn(sessions))!;
     const second = (await signIn(sessions, "android"))!;
     expect((await sessions.find(first.token))?.workspaceId ?? null).toBeNull();

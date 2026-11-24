@@ -1,12 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
 import { auditLog } from "../operator-devices/audit";
 import { ABSOLUTE_DAYS, ALERTS_WARNING_DAYS, operatorDeviceSessions } from "../operator-devices/sessions";
-import { TEST_CHALLENGE, TEST_SECRET, TEST_VERIFIER, emptyAudit, emptyOperatorDevices, testPhone } from "../operator-devices/testing";
+import { emptyDatabase, everythingKept, testDatabase, useTestDatabase } from "../data/testing";
+import { TEST_CHALLENGE, TEST_SECRET, TEST_VERIFIER, testAudit, testOperatorDevices, testPhone } from "../operator-devices/testing";
 import type { PushNotification, PushResult, PushSender, PushTarget } from "../push/types";
-import { ROUND_EVERY_MS, TESTS_PER_HOUR, alertsService, memoryAlertsStore } from "./service";
+import { postgresAlertsStore } from "./postgres";
+import { ROUND_EVERY_MS, TESTS_PER_HOUR, alertsService } from "./service";
+
+useTestDatabase();
+beforeEach(emptyDatabase);
 
 const DAY = 86_400_000;
 const sam = { userId: "usr_demo_sam", name: "Sam Whitfield", email: "sam@example.test", role: "operator" as const };
@@ -17,11 +22,10 @@ const ALL = ["engine_not_ready", "jobs_failing", "reports_waiting"] as const;
 function setup() {
   const clock = { now: Date.parse("2026-11-21T09:00:00Z") };
   const now = () => clock.now;
-  const devices = emptyOperatorDevices();
-  const auditStore = emptyAudit();
-  const audit = auditLog(auditStore, now);
+  const devices = testOperatorDevices();
+  const audit = auditLog(testAudit(), now);
   const sessions = operatorDeviceSessions(devices, TEST_SECRET, audit, now);
-  const store = memoryAlertsStore();
+  const store = postgresAlertsStore(testDatabase());
   const sent: Array<{ target: PushTarget; notification: PushNotification }> = [];
   const answers = new Map<string, PushResult>();
   const offers = { ios: true, android: true };
@@ -48,7 +52,7 @@ function setup() {
   const bodies = () => sent.map((entry) => entry.notification.body);
   const to = (pushToken: string) => sent.filter((entry) => entry.target.token === pushToken).map((entry) => entry.notification.body);
   const events = async () => (await audit.list(200)).filter((entry) => entry.event === "alert");
-  return { clock, sessions, store, auditStore, alerts, sent, answers, offers, flags, enrol, bodies, to, events };
+  return { clock, sessions, store, alerts, sent, answers, offers, flags, enrol, bodies, to, events };
 }
 
 const engineDown = async (alerts: ReturnType<typeof setup>["alerts"]) => {
@@ -124,7 +128,7 @@ describe("who is told", () => {
 
 describe("what happens to a send", () => {
   it("is written down with the phone it went to and whether it was accepted, and never the push token", async () => {
-    const { alerts, enrol, events, auditStore, store } = setup();
+    const { alerts, enrol, events } = setup();
     const phone = await enrol(sam, "Sam's iPhone");
     await engineDown(alerts);
     await engineUp(alerts);
@@ -132,7 +136,7 @@ describe("what happens to a send", () => {
       ["Sam Whitfield", "Sam's iPhone", "engine_not_ready, over: sent"],
       ["Sam Whitfield", "Sam's iPhone", "engine_not_ready: sent"],
     ]);
-    expect(JSON.stringify([auditStore.read(), store.read()])).not.toContain(phone.pushToken);
+    expect(await everythingKept()).not.toContain(phone.pushToken);
   });
 
   it("drops a push token Apple or Google calls dead, and shows the phone as not reached", async () => {

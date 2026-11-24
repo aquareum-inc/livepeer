@@ -3,27 +3,25 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { preset } from "@livepeer/config";
-import { schema } from "@livepeer/db";
-import { testDatabase } from "@livepeer/db/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { memoryStore } from "../data/store";
+import { rowsOf, testDatabase, useTestDatabase } from "../data/testing";
 import { effectiveInstance, forgetInstance, instance } from "../instance";
 import { readSettings, settingsOf, withCapabilities, withSettings } from "../instance-overrides";
 import { currentSettings, resetSettings, saveSettings } from "./settings";
-import { documentSettingsStore, postgresSettingsStore, type SavedOverrides, type SettingsStore } from "./settings-store";
+import { postgresSettingsStore, settingsStore } from "./settings-store";
 
 const dir = mkdtempSync(path.join(tmpdir(), "livepeer-settings-"));
 const file = path.join(dir, "instance.config.json");
 const deployed = JSON.stringify({ name: "Northlight", domain: "video.example.test", surfaces: { app: true, console: true, api: true, mcp: false }, auth: { provider: "mock", signUp: "invite" }, theme: { dark: { primary: "oklch(0.9 0 0)" } } });
-const overridesFile = () => path.join(dir, "data", "instance-settings.json");
+
+useTestDatabase();
 
 beforeAll(() => {
   writeFileSync(file, deployed);
   vi.stubEnv("INSTANCE_CONFIG", file);
-  vi.stubEnv("DATA_DIR", path.join(dir, "data"));
   vi.stubEnv("DATABASE_URL", "");
 });
 afterEach(async () => {
@@ -74,7 +72,7 @@ describe("settings saved from the console", () => {
     expect(await instance()).toMatchObject({ name: "Harbour", domain: "video.example.test", surfaces: { api: false, console: true }, privacy: { retainChats: true }, auth: { provider: "mock", signUp: "invite" } });
     expect(await currentSettings()).toMatchObject({ saved: true, ignored: false });
     expect(readFileSync(file, "utf8")).toBe(deployed);
-    expect(JSON.parse(readFileSync(overridesFile(), "utf8")).settings).toMatchObject({ name: "Harbour" });
+    expect(await rowsOf("instance_settings")).toEqual([expect.objectContaining({ settings: expect.objectContaining({ name: "Harbour" }) })]);
   });
 
   it("refuses a save that wouldn't make a valid config, and keeps a logo only as something safe to draw", async () => {
@@ -102,7 +100,7 @@ describe("settings saved from the console", () => {
     const { settings } = await currentSettings();
     await saveSettings({ ...settings, name: "Harbour" });
     // As if a later version's schema no longer allowed what an earlier one saved.
-    writeFileSync(overridesFile(), JSON.stringify({ settings: { ...settings, name: "" }, capabilities: {} }));
+    await settingsStore().saveSettings({ ...settings, name: "" });
     forgetInstance();
     expect(await effectiveInstance()).toMatchObject({ config: { name: "Northlight" }, saved: { settings: true }, ignored: { settings: true } });
     expect(await currentSettings()).toMatchObject({ ignored: true, settings: { name: "Northlight" } });
@@ -122,21 +120,11 @@ describe("settings saved from the console", () => {
   });
 });
 
-const implementations: Array<[string, () => Promise<{ store: SettingsStore; close: () => Promise<void> }>]> = [
-  ["a document", async () => ({ store: documentSettingsStore(memoryStore<SavedOverrides>({ settings: null, capabilities: {} })), close: async () => undefined })],
-  [
-    "Postgres",
-    async () => {
-      const { db, close } = await testDatabase();
-      await db.delete(schema.instanceSettings);
-      return { store: postgresSettingsStore(db), close };
-    },
-  ],
-];
-
-describe.each(implementations)("the settings store over %s", (_kind, open) => {
+describe("the settings store", () => {
   it("keeps the page's fields as one document and each capability on its own, and forgets either on its own", async () => {
-    const { store, close } = await open();
+    const store = postgresSettingsStore(testDatabase());
+    await store.reset("settings");
+    await store.reset("capabilities");
     expect(await store.read()).toEqual({ settings: null, capabilities: {} });
 
     await store.saveSettings({ name: "Harbour", surfaces: { api: false } });
@@ -151,6 +139,6 @@ describe.each(implementations)("the settings store over %s", (_kind, open) => {
     await store.saveCapability("music", { enabled: false, markup: null, surfaces: null });
     await store.reset("settings");
     expect(await store.read()).toEqual({ settings: null, capabilities: { music: { enabled: false, markup: null, surfaces: null } } });
-    await close();
+    await store.reset("capabilities");
   });
 });

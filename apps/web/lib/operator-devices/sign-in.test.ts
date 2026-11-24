@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 
 vi.mock("server-only", () => ({}));
 
+import { useTestDatabase } from "../data/testing";
 import { GET as callback } from "../../app/auth/callback/route";
 import { GET as start } from "../../app/auth/start/route";
 import { oidcProvider } from "../auth/oidc-provider";
@@ -27,9 +28,10 @@ function configure(extra: Record<string, unknown> = {}, mobileConsole = true) {
   utimesSync(configFile, next, next);
 }
 
+useTestDatabase();
+
 beforeAll(async () => {
   vi.stubEnv("INSTANCE_CONFIG", configFile);
-  vi.stubEnv("DATA_DIR", path.join(dir, "data"));
   vi.stubEnv("MOCK_ONLY", "1");
   vi.stubEnv("SESSION_SECRET", "a-session-secret-for-the-operator-sign-in-tests");
   configure();

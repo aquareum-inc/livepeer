@@ -1,8 +1,5 @@
 import "server-only";
 
-import { jsonFileStore } from "../data/json-file";
-import type { StateStore } from "../data/store";
-
 /** A device session as the instance keeps it. The token itself is never stored, only a keyed hash. */
 export interface DeviceRecord {
   id: string;
@@ -42,11 +39,6 @@ export interface PendingCode {
   expiresAt: number;
 }
 
-export interface Contents {
-  sessions: DeviceRecord[];
-  codes: PendingCode[];
-}
-
 /**
  * Where device sessions live: revocation needs state. It holds sessions and pending sign-ins only, never
  * balances. One method per thing the sessions need of it, so a database can answer each with one statement.
@@ -66,63 +58,4 @@ export interface DeviceSessionStore {
   remove(by: { id: string; userId: string } | { userId: string }): Promise<number>;
   /** Drops sign-ins nobody collected by `now` and sessions not used since `idleSince`. */
   sweep(input: { now: number; idleSince: string }): Promise<void>;
-}
-
-/** Device sessions kept as one document: a JSON file, or memory in tests. */
-export function documentDeviceSessionStore(document: StateStore<Contents>): DeviceSessionStore {
-  return {
-    async putCode(code) {
-      document.update((contents) => {
-        contents.codes.push(code);
-      });
-    },
-    async takeCode(codeHash) {
-      return document.update((contents) => {
-        const pending = contents.codes.find((entry) => entry.codeHash === codeHash) ?? null;
-        contents.codes = contents.codes.filter((entry) => entry !== pending);
-        return pending;
-      });
-    },
-    async createSession(record) {
-      document.update((contents) => {
-        contents.sessions.push(record);
-      });
-    },
-    async findByTokenHash(tokenHash) {
-      return document.read().sessions.find((entry) => entry.tokenHash === tokenHash) ?? null;
-    },
-    async touch(id, at) {
-      document.update((contents) => {
-        const stored = contents.sessions.find((entry) => entry.id === id);
-        if (stored) stored.lastUsedAt = at;
-      });
-    },
-    async listForUser(userId) {
-      return document.read().sessions.filter((entry) => entry.userId === userId);
-    },
-    async setWorkspace(id, workspaceId) {
-      return document.update((contents) => {
-        const stored = contents.sessions.find((entry) => entry.id === id);
-        if (stored) stored.workspaceId = workspaceId;
-        return stored !== undefined;
-      });
-    },
-    async remove(by) {
-      return document.update((contents) => {
-        const before = contents.sessions.length;
-        contents.sessions = contents.sessions.filter((entry) => entry.userId !== by.userId || ("id" in by && entry.id !== by.id));
-        return before - contents.sessions.length;
-      });
-    },
-    async sweep({ now, idleSince }) {
-      document.update((contents) => {
-        contents.codes = contents.codes.filter((entry) => entry.expiresAt > now);
-        contents.sessions = contents.sessions.filter((entry) => entry.lastUsedAt > idleSince);
-      });
-    },
-  };
-}
-
-export function fileDeviceSessionStore(): DeviceSessionStore {
-  return documentDeviceSessionStore(jsonFileStore<Contents>("device-sessions.json", (value) => ({ sessions: value.sessions ?? [], codes: value.codes ?? [] })));
 }
