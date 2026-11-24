@@ -84,7 +84,7 @@ Uses builder-core-console's names: actors, allocations, grants, offerings, orche
 
 | Route | Purpose |
 |-------|---------|
-| `/api/health` | Health check for the bundle and `doctor` |
+| `/api/health` | Health check for the bundle and `doctor`: engine and database (`ok`, `behind`, `unreachable`, `none`) |
 | `/api/v1` | Index of every operation, readable without a key |
 | `/api/v1/*` | The instance's REST API: 30 operations (17 for users, 13 for operators), each calling one API client function. Authenticated by an API key, a browser session, or `OPERATOR_API_TOKEN` for operator operations. |
 | `/api/mcp` | MCP server (streamable HTTP, stateless) exposing the same operations as tools |

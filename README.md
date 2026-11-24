@@ -72,6 +72,7 @@ apps/ios                  Native iOS app (Swift, SwiftUI): a client of an instan
 apps/android              Native Android app (Kotlin, Compose): a client of an instance's /api/v1
 packages/api-client       Types and one function per operation (live + mock), data-source map
 packages/config           Instance config schema, generated types, presets, capability and surface rules
+packages/db               The instance's Postgres: schema, connection, migrations and the migration runner
 packages/ui               Theme tokens, primitives, motion
 packages/user-app         User-app screens
 packages/operator-console Operator console screens

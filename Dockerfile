@@ -9,6 +9,8 @@ COPY apps ./apps
 COPY packages ./packages
 RUN pnpm install --frozen-lockfile
 RUN MOCK_ONLY=1 pnpm --filter @livepeer/web build
+# The migration runner as one file, so the image needs none of the build's node_modules to run it.
+RUN pnpm --filter @livepeer/db bundle
 
 FROM node:22-alpine AS run
 WORKDIR /app
@@ -17,6 +19,8 @@ RUN addgroup -S app && adduser -S app -G app && mkdir -p /data && chown app:app 
 COPY --from=build --chown=app:app /app/apps/web/.next/standalone ./
 COPY --from=build --chown=app:app /app/apps/web/.next/static ./apps/web/.next/static
 COPY --chown=app:app packages/config/presets ./presets
+COPY --from=build --chown=app:app /app/packages/db/dist/migrate.cjs ./migrate.cjs
+COPY --chown=app:app packages/db/migrations ./migrations
 USER app
 EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \

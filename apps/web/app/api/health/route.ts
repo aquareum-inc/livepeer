@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { databaseStatus } from "@/lib/data/database";
 import { env } from "@/lib/env";
 import { instance } from "@/lib/instance";
 
@@ -19,9 +20,11 @@ export async function GET() {
       engine = "unreachable";
     }
   }
-  const ok = engine !== "unreachable";
+  // "behind" is a database that hasn't had this release's migrations: the app must not serve on it.
+  const database = await databaseStatus();
+  const ok = engine !== "unreachable" && database !== "unreachable" && database !== "behind";
   return NextResponse.json(
-    { status: ok ? "ok" : "degraded", instance: config.name, mode: mockOnly ? "mock-only" : "live", surfaces: config.surfaces, engine },
+    { status: ok ? "ok" : "degraded", instance: config.name, mode: mockOnly ? "mock-only" : "live", surfaces: config.surfaces, engine, database },
     { status: ok ? 200 : 503 },
   );
 }

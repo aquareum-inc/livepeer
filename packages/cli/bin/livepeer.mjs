@@ -150,6 +150,27 @@ async function waitForHealth(url, seconds) {
   return { ok: false, detail: last };
 }
 
+/** What the bundle's one-shot migrate service last reported: {applied, total}, or null when it said nothing. */
+function migrations(dir) {
+  const logs = compose(dir, ["logs", "--no-log-prefix", "migrate"], { capture: true });
+  const line = (logs.stdout ?? "").trim().split("\n").findLast((entry) => entry.startsWith("{"));
+  try {
+    return line ? JSON.parse(line) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Why `up` failed, in one line. A failed migration is the one cause worth naming: the app won't start on it. */
+function startFailure(dir, up) {
+  const states = compose(dir, ["ps", "--all", "--format", "json", "migrate"], { capture: true });
+  if (/"ExitCode":\s*[1-9]/.test(states.stdout ?? "")) {
+    const logs = compose(dir, ["logs", "--no-log-prefix", "--tail", "1", "migrate"], { capture: true });
+    return `the database migration failed, so the app was not started${logs.stdout?.trim() ? ` (${logs.stdout.trim()})` : ""}`;
+  }
+  return `docker compose up failed${up.stderr ? `: ${up.stderr.trim().split("\n").pop()}` : ""}`;
+}
+
 async function setup(options) {
   const { json } = options;
   const dir = path.resolve(options.dir ?? ROOT);
@@ -191,6 +212,8 @@ async function setup(options) {
   const updates = {
     ...release(),
     SESSION_SECRET: randomBytes(32).toString("base64url"),
+    // For the bundle's own Postgres. It goes into a connection address, so it must be safe in a URL.
+    POSTGRES_PASSWORD: randomBytes(24).toString("base64url"),
     APP_PORT: String(options.port || current.APP_PORT || 3000),
     MOCK_ONLY: mockOnly ? "1" : "",
   };
@@ -208,7 +231,9 @@ async function setup(options) {
   if (!options["no-start"]) {
     if (!dockerAvailable()) fail(EXIT.docker, "Docker with the Compose plugin is required. Install Docker, or pass --no-start.", json);
     const up = compose(dir, ["up", "-d", "--build"], { network: options.network, capture: json });
-    if (up.status !== 0) fail(EXIT.start, `docker compose up failed${up.stderr ? `: ${up.stderr.trim().split("\n").pop()}` : ""}`, json);
+    if (up.status !== 0) fail(EXIT.start, startFailure(dir, up), json);
+    result.migrations = migrations(dir);
+    if (result.migrations) say(`database migrated (migrations applied: ${result.migrations.applied})`);
     const health = await waitForHealth(`${result.url}/api/health`, 120);
     if (!health.ok) fail(EXIT.health, `the app did not become healthy at ${result.url}/api/health (${health.detail}). Run: livepeer doctor`, json);
     result.started = true;
@@ -314,6 +339,7 @@ async function doctor(options) {
   const mockOnly = env.MOCK_ONLY === "1" || env.MOCK_ONLY === "true";
   add("env file", existsSync(envFile), existsSync(envFile) ? ".env present" : ".env not found", "Run: livepeer setup --no-start");
   add("SESSION_SECRET", (env.SESSION_SECRET ?? "").length >= 32, (env.SESSION_SECRET ?? "") ? "set" : "missing", "Run: livepeer setup --no-start (generates one), or set a 32+ character value in .env");
+  add("database address", Boolean(env.DATABASE_URL || env.POSTGRES_PASSWORD), env.DATABASE_URL ? "DATABASE_URL set" : env.POSTGRES_PASSWORD ? "the bundle's own Postgres" : "neither DATABASE_URL nor POSTGRES_PASSWORD is set", "Run: livepeer setup --no-start (generates POSTGRES_PASSWORD for the bundle's Postgres), or set DATABASE_URL in .env");
   // Alerts to operators' phones go straight to Apple and Google with the publisher's own credentials.
   if (config?.surfaces?.mobileConsole === true) {
     const iphone = mockOnly ? { ok: true, detail: "recorded, not sent (mock-only mode)" } : alertsToIphone(env, config);
@@ -352,7 +378,18 @@ async function doctor(options) {
   // App
   const appUrl = `http://localhost:${env.APP_PORT || 3000}/api/health`;
   const app = await probe(appUrl);
-  add("app", app.status === 200, app.status === 200 ? `healthy (${app.body?.mode})` : `not reachable at ${appUrl}`, "Run: livepeer setup");
+  // The app answers 503 when it is up but something it needs is not; its body says what.
+  const answered = typeof app.body?.status === "string";
+  add("app", app.status === 200, app.status === 200 ? `healthy (${app.body?.mode})` : answered ? `running but ${app.body.status}` : `not reachable at ${appUrl}`, answered ? "Fix the failing checks listed here, then run doctor again" : "Run: livepeer setup");
+
+  // Database: asked through the app, which is the only thing that can reach the bundle's Postgres.
+  if (answered) {
+    const database = app.body.database;
+    add("database", database !== "unreachable", database === "unreachable" ? "not reachable from the app" : database === "none" ? "none: state is kept in files (development and tests only)" : "reachable", env.DATABASE_URL ? "Check DATABASE_URL in .env and that the database accepts connections from the app" : "Check the bundle's Postgres: docker compose -f deploy/compose.yaml ps db");
+    if (database === "ok" || database === "behind") {
+      add("database schema", database === "ok", database === "ok" ? "has every migration this release expects" : "behind this release's migrations", "Run: livepeer upgrade (it applies the pending migrations before the app starts)");
+    }
+  }
 
   const ok = checks.every((check) => check.ok);
   if (options.json) {
@@ -373,16 +410,18 @@ async function upgrade(options) {
   const envFile = path.join(dir, ".env");
   if (!existsSync(envFile)) fail(EXIT.usage, "no .env here. Run: livepeer setup", json);
   const pins = release();
-  const merged = mergeEnv(readFileSync(envFile, "utf8"), pins, { overwrite: Object.keys(pins) });
+  // An instance set up before the bundle had its own Postgres has no password for it yet; one already set is kept.
+  const merged = mergeEnv(readFileSync(envFile, "utf8"), { ...pins, POSTGRES_PASSWORD: randomBytes(24).toString("base64url") }, { overwrite: Object.keys(pins) });
   writeFileSync(envFile, merged.text, { mode: 0o600 });
   if (!dockerAvailable()) fail(EXIT.docker, "Docker with the Compose plugin is required.", json);
   const up = compose(dir, ["up", "-d", "--build"], { network: options.network, capture: json });
-  if (up.status !== 0) fail(EXIT.start, "docker compose up failed", json);
+  if (up.status !== 0) fail(EXIT.start, startFailure(dir, up), json);
+  const migrated = migrations(dir);
   const url = `http://localhost:${parseEnv(merged.text).APP_PORT || 3000}`;
   const health = await waitForHealth(`${url}/api/health`, 120);
   if (!health.ok) fail(EXIT.health, `the app did not become healthy (${health.detail}). Run: livepeer doctor`, json);
-  if (json) process.stdout.write(`${JSON.stringify({ ok: true, version: pins.APP_VERSION, engine: pins.ENGINE_REF, changed: merged.changed })}\n`);
-  else process.stdout.write(`upgraded to ${pins.APP_VERSION} (engine ${pins.ENGINE_REF.slice(0, 7)}); ready at ${url}\n`);
+  if (json) process.stdout.write(`${JSON.stringify({ ok: true, version: pins.APP_VERSION, engine: pins.ENGINE_REF, changed: merged.changed, migrations: migrated })}\n`);
+  else process.stdout.write(`upgraded to ${pins.APP_VERSION} (engine ${pins.ENGINE_REF.slice(0, 7)}); migrations applied: ${migrated?.applied ?? "unknown"}; ready at ${url}\n`);
 }
 
 let parsed;

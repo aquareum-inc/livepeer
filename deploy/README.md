@@ -12,13 +12,44 @@ INSTANCE_DIR=$PWD docker compose -f deploy/compose.yaml --env-file .env up -d
 | Service | Profile | What it is |
 |---------|---------|------------|
 | `app` | always | This repository: user app, operator console, API, MCP |
+| `db` | always | Postgres 17, the instance's own database. No published port |
+| `migrate` | always | The app image, run once on every `up`: applies pending migrations, then exits |
 | `engine` | `network` | The pinned livepeer-builder engine (`lpb serve`) |
 | `discovery` | `network` | The engine's discovery reader (`lpb discovery`) |
 | `clearinghouse` | `network` | Clearinghouse Batteries, the payment provider |
 | `signer` | `network` | The livepeer/node remote signer |
 
-Without the `network` profile only the app starts, in mock-only mode or pointed at an engine you already run
-(`ENGINE_URL`).
+Without the `network` profile only the app and its database start, in mock-only mode or pointed at an engine
+you already run (`ENGINE_URL`).
+
+## Database
+
+The bundle runs its own Postgres, with its data in the `db-data` volume and a password `./livepeer setup`
+generates (`POSTGRES_PASSWORD`). The `migrate` service brings it to the release's schema before the app
+starts, on `setup`, on `upgrade` and on a plain `docker compose up`. If a migration fails nothing is changed,
+the app is not started, and `setup` and `upgrade` say so. `./livepeer doctor` and `/api/health` report
+whether the database is reachable and whether its schema is the one this release expects.
+
+In this release the database is migrated and empty. The instance's state is still in the `app-data` volume
+and moves table by table in the releases that follow (`docs/database.md`, section 10).
+
+Back up and restore:
+
+```bash
+docker compose -f deploy/compose.yaml --env-file .env exec -T db pg_dump -U livepeer livepeer > backup.sql
+docker compose -f deploy/compose.yaml --env-file .env exec -T db psql -U livepeer livepeer < backup.sql
+```
+
+To use a Postgres you already run, set `DATABASE_URL` in `.env`: the app and `migrate` use it instead. If it
+is a pooled address, also set `DATABASE_URL_UNPOOLED` to the direct one, which migrations need. The bundled
+`db` still starts and sits idle; to leave it out, add an override file with `-f` after `compose.yaml`:
+
+```yaml
+services:
+  db: !reset null
+  migrate:
+    depends_on: !reset []
+```
 
 ## Running the network profile
 

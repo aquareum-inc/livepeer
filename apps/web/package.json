@@ -12,6 +12,7 @@
   "dependencies": {
     "@livepeer/api-client": "workspace:*",
     "@livepeer/config": "workspace:*",
+    "@livepeer/db": "workspace:*",
     "@livepeer/operator-console": "workspace:*",
     "@livepeer/ui": "workspace:*",
     "@livepeer/user-app": "workspace:*",
