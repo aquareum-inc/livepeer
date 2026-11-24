@@ -1,7 +1,15 @@
 # A Postgres database for the instance: plan
 
 Status: **approved on 24 November 2026 with every recommendation in section 0 as written. Slices 1 to 6 are
-built; slices 7 and 8 are not.** What slice 1 changed from the plan is listed under the slices table in section 10.
+built; slices 7 and 8 are not, and each waits on the project owner.**
+
+- **Slice 7 (the one-time import of `DATA_DIR` files) may have nothing to do.** Testing found that the
+  Compose bundle could never write those files (see "Found while testing the bundle" in section 10), so no
+  bundle has sessions, reports or alerts state to bring over. The import would only serve an instance run
+  some other way with `DATA_DIR` set by hand. Recommendation: don't build it; such an instance's phones sign
+  in again. That reverses D5, so it is the owner's call. The docs sweep that slice 7 also listed is done.
+- **Slice 8 (Vercel) needs the owner's Vercel and Neon accounts**, and nothing is created in either without
+  being asked for first. What slice 1 changed from the plan is listed under the slices table in section 10.
 
 The instance keeps its own state as JSON files in `DATA_DIR`, and the operator console writes
 `instance.config.json` to disk. That ties an instance to a host with a persistent disk and one server
