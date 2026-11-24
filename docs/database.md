@@ -1,7 +1,7 @@
 # A Postgres database for the instance: plan
 
-Status: **approved on 24 November 2026 with every recommendation in section 0 as written. Slice 1 is built;
-slices 2 to 8 are not.** What slice 1 changed from the plan is listed under the slices table in section 10.
+Status: **approved on 24 November 2026 with every recommendation in section 0 as written. Slices 1 and 2 are
+built; slices 3 to 8 are not.** What slice 1 changed from the plan is listed under the slices table in section 10.
 
 The instance keeps its own state as JSON files in `DATA_DIR`, and the operator console writes
 `instance.config.json` to disk. That ties an instance to a host with a persistent disk and one server
@@ -477,6 +477,14 @@ Object storage for uploads is not a slice here; it is the separate plan in 8.1.
 - The migration runner is bundled into one file (`packages/db/dist/migrate.cjs`, built by esbuild) so the
   image runs it without the build's `node_modules`. `pnpm db:migrate` runs the same file.
 - `attachDatabasePool` (section 3) is left to slice 8, where it can be tried on a real Vercel deployment.
+
+**Slice 2 as built (24 November 2026).** The store interfaces are `DeviceSessionStore`, `OperatorDeviceStore`,
+`AuditStore`, `ModerationStore`, `AlertsStore` and `OutboxStore`, each with a `document…Store` implementation
+over a JSON file or memory. Two things are left exactly as they were, for the slices that own them: the two
+rate limits are still counted in process memory (slice 3, though `allow` is already asynchronous so its
+callers won't change again), and the alerts lease and timer are untouched (slice 6). Hashes are now looked up
+by equality, as section 3 says. Sweeping of expired codes and nonces still happens when a sign-in or a
+challenge is made, through a `sweep` method on each store, until the alerts round takes it over in slice 6.
 
 **To confirm in slice 7, before the import is written.** The bundle's `.env` carries `DATA_DIR=` empty, and
 Compose passes that to the app over the image's own `DATA_DIR=/data`. Read from the code, the app would then

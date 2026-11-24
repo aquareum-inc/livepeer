@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { StateStore } from "../data/store";
+import { memoryStore, type StateStore } from "../data/store";
 import type { AuditLog } from "../operator-devices/audit";
 import type { AlertTarget, OperatorDeviceSessions } from "../operator-devices/sessions";
 import type { OperatorDeviceRecord } from "../operator-devices/store";
@@ -23,9 +23,60 @@ export interface AlertsContents {
   refused: Partial<Record<PushPlatform, { at: string; detail: string }>>;
 }
 
-export type AlertsStore = StateStore<AlertsContents>;
-
 export const emptyAlerts = (): AlertsContents => ({ lease: null, state: quietState(), refused: {} });
+
+/** Where the instance keeps what it has noticed and said. One method per thing the alerts need of it. */
+export interface AlertsStore {
+  /** Takes the state through `change` as one step, and answers with whatever else `change` worked out. */
+  advance<R>(change: (state: AlertState) => { state: AlertState; result: R }): Promise<R>;
+  /** Notes which phones were told the engine isn't ready, so "ready again" goes to them and nobody else. */
+  setEngineTold(sessionIds: string[]): Promise<void>;
+  /** Gives or renews the right to run the checks. False while another holder's has not lapsed. */
+  lease(holder: string, input: { now: number; until: number }): Promise<boolean>;
+  refusals(): Promise<AlertsContents["refused"]>;
+  /** Notes that a platform refused the instance's own credentials, or with null that it has accepted them since. */
+  setRefusal(platform: PushPlatform, refusal: { at: string; detail: string } | null): Promise<void>;
+}
+
+/** Alerts kept as one document: a JSON file, or memory in tests. */
+export function documentAlertsStore(document: StateStore<AlertsContents>): AlertsStore {
+  return {
+    async advance(change) {
+      return document.update((contents) => {
+        const next = change(contents.state);
+        contents.state = next.state;
+        return next.result;
+      });
+    },
+    async setEngineTold(sessionIds) {
+      document.update((contents) => {
+        contents.state.engine.told = sessionIds;
+      });
+    },
+    async lease(holder, { now, until }) {
+      return document.update((contents) => {
+        if (contents.lease && contents.lease.holder !== holder && contents.lease.until > now) return false;
+        contents.lease = { holder, until };
+        return true;
+      });
+    },
+    async refusals() {
+      return document.read().refused;
+    },
+    async setRefusal(platform, refusal) {
+      document.update((contents) => {
+        if (refusal) contents.refused[platform] = refusal;
+        else delete contents.refused[platform];
+      });
+    },
+  };
+}
+
+/** An empty store in memory, for tests. `read` is everything it holds. */
+export function memoryAlertsStore() {
+  const document = memoryStore<AlertsContents>(emptyAlerts());
+  return { ...documentAlertsStore(document), read: () => document.read() };
+}
 
 export interface AlertsDependencies {
   store: AlertsStore;
@@ -45,9 +96,9 @@ export interface Alerts extends AlertsAccess {
   /** Tells phones whose alerts are about to end with their session, and those whose alerts just did. */
   endings(): Promise<void>;
   /** Whether this process may run the checks now: it holds the lease, or took it. */
-  lease(holder: string): boolean;
+  lease(holder: string): Promise<boolean>;
   /** When each platform's credentials were last refused. */
-  refusals(): AlertsContents["refused"];
+  refusals(): Promise<AlertsContents["refused"]>;
   /** Resolves when everything being sent has been handed over. */
   settled(): Promise<void>;
 }
@@ -66,14 +117,10 @@ export function alertsService({ store, sessions, audit, sender, enabled, name, n
       .send({ platform: target.platform, token: target.pushToken, environment: target.environment }, notification)
       .catch(() => ({ outcome: "failed" as const, detail: "unreachable" }));
     const actor = { userId: target.userId, name: target.name, deviceId: target.sessionId, deviceName: target.deviceName };
-    audit().write("alert", actor, { detail: `${what}: ${result.outcome === "sent" ? "sent" : `${result.outcome.replace("gone", "phone not reachable")}${result.detail ? ` (${result.detail})` : ""}`}`.slice(0, 200) });
-    if (result.outcome === "gone") sessions().dropPushToken(target.sessionId);
-    if (result.outcome === "refused" || result.outcome === "sent") {
-      store.update((contents) => {
-        if (result.outcome === "refused") contents.refused[target.platform] = { at: new Date(now()).toISOString(), detail: result.detail ?? "refused" };
-        else delete contents.refused[target.platform];
-      });
-    }
+    await audit().write("alert", actor, { detail: `${what}: ${result.outcome === "sent" ? "sent" : `${result.outcome.replace("gone", "phone not reachable")}${result.detail ? ` (${result.detail})` : ""}`}`.slice(0, 200) });
+    if (result.outcome === "gone") await sessions().dropPushToken(target.sessionId);
+    if (result.outcome === "refused") await store.setRefusal(target.platform, { at: new Date(now()).toISOString(), detail: result.detail ?? "refused" });
+    if (result.outcome === "sent") await store.setRefusal(target.platform, null);
     return result.outcome === "sent";
   };
 
@@ -84,29 +131,25 @@ export function alertsService({ store, sessions, audit, sender, enabled, name, n
     // page already say that platform isn't set up.
     const offered = targets.filter((target) => sender().offers(target.platform));
     const reached = (await Promise.all(offered.map(async (target) => ((await send(target, notification(target), what)) ? target.sessionId : null)))).filter((id): id is string => id !== null);
-    sessions().alerted(reached);
+    await sessions().alerted(reached);
     return reached;
   };
 
   const deliver = async (alert: Alert, told: string[]): Promise<void> => {
     if (!enabled()) return;
-    const targets = sessions().alertTargets(alert.kind === "phone_added" ? null : alert.kind, { ...(alert.except ? { except: alert.except } : {}), ...(alert.over ? { only: told } : {}) });
+    const targets = await sessions().alertTargets(alert.kind === "phone_added" ? null : alert.kind, { ...(alert.except ? { except: alert.except } : {}), ...(alert.over ? { only: told } : {}) });
     const reached = await sendAll(targets, () => alertNotification(name(), alert), alert.over ? `${alert.kind}, over` : alert.kind);
     if (alert.kind !== "engine_not_ready") return;
     // "Ready again" goes only to the phones that were told it wasn't.
-    store.update((contents) => {
-      contents.state.engine.told = alert.over ? [] : reached;
-    });
+    await store.setEngineTold(alert.over ? [] : reached);
   };
 
   const observe = async (observation: Observation): Promise<void> => {
     // With the console off on phones nothing is noticed, so nothing is used up before it is switched back on.
     if (!enabled()) return;
-    const step = store.update((contents) => {
-      const told = contents.state.engine.told;
-      const next = decide(contents.state, observation, now());
-      contents.state = next.state;
-      return { alerts: next.alerts, told };
+    const step = await store.advance((state) => {
+      const next = decide(state, observation, now());
+      return { state: next.state, result: { alerts: next.alerts, told: state.engine.told } };
     });
     for (const alert of step.alerts) await deliver(alert, step.told);
   };
@@ -126,7 +169,7 @@ export function alertsService({ store, sessions, audit, sender, enabled, name, n
     async test(session: OperatorDeviceRecord) {
       const alerts = sessions().alerts(session);
       if (alerts.state === "off") return "off";
-      const [target] = sessions().alertTargets(null, { only: [session.id] });
+      const [target] = await sessions().alertTargets(null, { only: [session.id] });
       if (!enabled() || !target) return "not_delivered";
       const recent = (tests.get(session.id) ?? []).filter((at) => now() - at < 3600_000);
       if (recent.length >= TESTS_PER_HOUR) return "limited";
@@ -138,22 +181,16 @@ export function alertsService({ store, sessions, audit, sender, enabled, name, n
 
     async endings() {
       if (!enabled()) return;
-      const { warn, ended } = sessions().alertEndings();
+      const { warn, ended } = await sessions().alertEndings();
       const days = new Map(warn.map((target) => [target.sessionId, target.daysLeft]));
       await sendAll(warn, (target) => endingNotification(name(), days.get(target.sessionId) ?? 1), "alerts end soon");
       // Not `sendAll`: these sessions are over, and there is nothing left to note on them.
       await Promise.all(ended.map((target) => send(target, endingNotification(name(), null), "alerts ended with the session")));
     },
 
-    lease(holder) {
-      return store.update((contents) => {
-        if (contents.lease && contents.lease.holder !== holder && contents.lease.until > now()) return false;
-        contents.lease = { holder, until: now() + LEASE_MS };
-        return true;
-      });
-    },
+    lease: (holder) => store.lease(holder, { now: now(), until: now() + LEASE_MS }),
 
-    refusals: () => store.read().refused,
+    refusals: () => store.refusals(),
 
     async settled() {
       while (sending.size > 0) await Promise.all([...sending]);

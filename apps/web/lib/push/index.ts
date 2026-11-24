@@ -7,13 +7,13 @@ import { instance } from "../instance";
 import { apnsSender } from "./apns";
 import { readApnsCredentials, readFcmCredentials } from "./credentials";
 import { fcmSender } from "./fcm";
-import { recordingSender, type OutboxContents } from "./recording";
+import { documentOutboxStore, recordingSender, type OutboxContents } from "./recording";
 import type { PushPlatform, PushSender } from "./types";
 
 /** Where a platform stands: able to send, not set up (which is fine: alerts are optional), or set up wrongly. */
 export type PushSetup = { state: "ready"; detail: string } | { state: "none"; detail: string } | { state: "problem"; detail: string };
 
-export const fileOutbox = () => jsonFileStore<OutboxContents>("push-outbox.json", (value) => ({ sent: value.sent ?? [] }));
+export const fileOutbox = () => documentOutboxStore(jsonFileStore<OutboxContents>("push-outbox.json", (value) => ({ sent: value.sent ?? [] })));
 
 /**
  * Whether the instance can send to each platform, in words safe to show an operator. iPhone needs the APNs key

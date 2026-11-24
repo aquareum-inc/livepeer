@@ -10,7 +10,7 @@ import { memoryStore } from "../data/store";
 import { apnsSender } from "./apns";
 import { readApnsCredentials, readFcmCredentials } from "./credentials";
 import { fcmSender } from "./fcm";
-import { OUTBOX_LIMIT, recordingSender, type OutboxContents } from "./recording";
+import { OUTBOX_LIMIT, documentOutboxStore, recordingSender, type OutboxContents } from "./recording";
 import { validPushToken, type PushNotification, type PushTarget } from "./types";
 
 const notification: PushNotification = { title: "Livepeer", body: "The engine isn't ready", kind: "engine_not_ready", opens: "status", collapse: "console-engine_not_ready", lifeSeconds: 3600, channel: "console_service", urgent: true };
@@ -293,7 +293,7 @@ describe("sending to Google", () => {
 describe("the recording sender", () => {
   it("contacts nobody, offers both platforms, and writes down what it would have sent without the push token", async () => {
     const outbox = memoryStore<OutboxContents>({ sent: [] });
-    const sender = recordingSender(outbox, () => Date.parse("2026-11-21T09:00:00Z"));
+    const sender = recordingSender(documentOutboxStore(outbox), () => Date.parse("2026-11-21T09:00:00Z"));
     expect([sender.offers("ios"), sender.offers("android")]).toEqual([true, true]);
     expect(await sender.send(iphone, notification)).toEqual({ outcome: "sent", detail: null });
     expect(await sender.send(android, notification)).toEqual({ outcome: "sent", detail: null });
@@ -309,7 +309,7 @@ describe("the recording sender", () => {
 
   it("keeps only the latest", async () => {
     const outbox = memoryStore<OutboxContents>({ sent: [] });
-    const sender = recordingSender(outbox);
+    const sender = recordingSender(documentOutboxStore(outbox));
     for (let index = 0; index < OUTBOX_LIMIT + 5; index += 1) await sender.send(iphone, { ...notification, body: `${index + 1} jobs failed in the last hour` });
     expect(outbox.read().sent).toHaveLength(OUTBOX_LIMIT);
     expect(outbox.read().sent.at(-1)?.payload).toMatchObject({ aps: { alert: { body: `${OUTBOX_LIMIT + 5} jobs failed in the last hour` } } });

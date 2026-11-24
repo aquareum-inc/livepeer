@@ -18,9 +18,9 @@ export interface AuditActor {
 }
 
 export interface AuditLog {
-  write(event: OperatorAuditEntry["event"], actor: AuditActor, facts?: { operation?: string | null; target?: string | null; detail?: string | null }): void;
+  write(event: OperatorAuditEntry["event"], actor: AuditActor, facts?: { operation?: string | null; target?: string | null; detail?: string | null }): Promise<void>;
   /** Newest first. */
-  list(limit: number): OperatorAuditEntry[];
+  list(limit: number): Promise<OperatorAuditEntry[]>;
 }
 
 /**
@@ -30,8 +30,8 @@ export interface AuditLog {
 export function auditLog(store: AuditStore, now: () => number = Date.now): AuditLog {
   return {
     write(event, actor, facts = {}) {
-      store.update((contents) => {
-        contents.entries.push({
+      return store.append(
+        {
           id: `aud_${randomBytes(9).toString("base64url")}`,
           at: new Date(now()).toISOString(),
           event,
@@ -42,12 +42,10 @@ export function auditLog(store: AuditStore, now: () => number = Date.now): Audit
           operation: facts.operation ?? null,
           target: facts.target ?? null,
           detail: facts.detail ?? null,
-        });
-        if (contents.entries.length > AUDIT_LIMIT) contents.entries = contents.entries.slice(-AUDIT_LIMIT);
-      });
+        },
+        AUDIT_LIMIT,
+      );
     },
-    list(limit) {
-      return store.read().entries.slice(-Math.max(1, Math.min(limit, AUDIT_LIMIT))).reverse();
-    },
+    list: (limit) => store.newest(Math.max(1, Math.min(limit, AUDIT_LIMIT))),
   };
 }

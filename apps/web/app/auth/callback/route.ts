@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
     // A session the provider already had for this browser doesn't enrol a phone: the sign-in must be new.
     if (authenticatedAt === null || Math.abs(Date.now() / 1000 - authenticatedAt) > FRESH_SECONDS) return fail("not_fresh");
     // Null for anyone the provider doesn't mark as an operator: no code, so no session.
-    const handoff = operatorDevices().issueCode({ identity, challenge: flow.native.challenge, platform: flow.native.platform });
+    const handoff = await operatorDevices().issueCode({ identity, challenge: flow.native.challenge, platform: flow.native.platform });
     if (!handoff) return fail("not_operator");
     return finish(returnToApp(callback, { code: handoff, state: flow.native.state, purpose: "operator" }));
   }
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
   if (flow.native && callback) {
     if (!mobileEnabled()) return fail("mobile_off");
     const { builderKey } = createSession(identity);
-    const handoff = devices().issueCode({
+    const handoff = await devices().issueCode({
       // A device session never does operator work, whoever signs in. It records the role only so the app knows
       // whether to offer the console, which has its own session, key and biometric check.
       identity,

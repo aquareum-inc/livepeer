@@ -24,8 +24,7 @@ export default async function OperatorLayout({ children }: { children: ReactNode
   if (!session) redirect("/sign-in?next=/operator");
   // Hidden from users: to anyone who isn't an operator the console doesn't exist.
   if (session.role !== "operator") notFound();
-  const newPhones = operatorDevices()
-    .list()
+  const newPhones = (await operatorDevices().list())
     .filter((phone) => Date.now() - Date.parse(phone.created_at) < NEW_PHONE_MS)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   return (

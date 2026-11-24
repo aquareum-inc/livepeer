@@ -34,8 +34,8 @@ export async function setUserStatusAction(applicationId: string, actorId: string
   }
   // A suspended user's apps sign out on their next request, and so does the console on any phone of theirs.
   if (status === "paused") {
-    devices().revokeAll(actorId);
-    operatorDevices().revokeUser(actorId, "suspended");
+    await devices().revokeAll(actorId);
+    await operatorDevices().revokeUser(actorId, "suspended");
   }
   revalidatePath("/operator/users", "layout");
 }
@@ -43,7 +43,7 @@ export async function setUserStatusAction(applicationId: string, actorId: string
 export async function setUserRoleAction(userId: string, role: "user" | "operator"): Promise<void> {
   await (await operatorApi()).provider.identity.setUserRole(userId, role);
   // The role is read when a phone signs in, so taking it away ends the console sessions it opened.
-  if (role === "user") operatorDevices().revokeUser(userId, "operator role removed");
+  if (role === "user") await operatorDevices().revokeUser(userId, "operator role removed");
   revalidatePath("/operator/users", "layout");
 }
 
@@ -164,7 +164,7 @@ export async function revokeKeyAction(keyId: string): Promise<AccessKey | null> 
 /** The operator's decision on a report; answers with every report, as the queue shows them. */
 export async function resolveReportAction(id: string, outcome: "dismissed" | "hidden"): Promise<CharacterReport[]> {
   await requireOperator();
-  moderation().resolve(id, outcome);
+  await moderation().resolve(id, outcome);
   return moderation().reports();
 }
 
@@ -177,14 +177,14 @@ async function revoker() {
 
 /** Revokes one operator phone; answers with the phones still enrolled. */
 export async function revokeOperatorPhoneAction(id: string): Promise<OperatorPhone[]> {
-  operatorDevices().revoke(id, await revoker());
+  await operatorDevices().revoke(id, await revoker());
   revalidatePath("/operator", "layout");
   return operatorDevices().list();
 }
 
 /** Revokes every operator phone; answers with the phones still enrolled. */
 export async function revokeAllOperatorPhonesAction(): Promise<OperatorPhone[]> {
-  operatorDevices().revokeAll(await revoker());
+  await operatorDevices().revokeAll(await revoker());
   revalidatePath("/operator", "layout");
   return operatorDevices().list();
 }

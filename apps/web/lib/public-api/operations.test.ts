@@ -5,8 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { memoryStore } from "../data/store";
-import { moderation, type ModerationContents } from "../moderation/moderation";
+import { memoryModerationStore, moderation } from "../moderation/moderation";
 import { auditLog } from "../operator-devices/audit";
 import { operatorDeviceSessions } from "../operator-devices/sessions";
 import { TEST_SECRET, emptyAudit, emptyOperatorDevices } from "../operator-devices/testing";
@@ -32,34 +31,34 @@ const labels = async () => [{ app: "text-to-video", name: "Text to video", work:
 
 const phone: DeviceSession = { id: "dev_1", name: "Test iPhone", platform: "ios", created_at: "2026-11-20T09:00:00Z", last_used_at: "2026-11-20T09:00:00Z", current: true };
 const devices: DeviceAccess = {
-  redeemCode: ({ code }) => (code === "good" ? { token: "aqd_test", device: phone } : null),
-  list: (userId, currentId) => (userId === "usr_demo_adam" ? [{ ...phone, current: phone.id === currentId }] : []),
-  setWorkspace: vi.fn((id: string) => id === phone.id),
-  revoke: (userId, id) => userId === "usr_demo_adam" && id === phone.id,
-  revokeAll: vi.fn(() => 1),
+  redeemCode: async ({ code }) => (code === "good" ? { token: "aqd_test", device: phone } : null),
+  list: async (userId, currentId) => (userId === "usr_demo_adam" ? [{ ...phone, current: phone.id === currentId }] : []),
+  setWorkspace: vi.fn(async (id: string) => id === phone.id),
+  revoke: async (userId, id) => userId === "usr_demo_adam" && id === phone.id,
+  revokeAll: vi.fn(async () => 1),
 };
 const agentModelMenu = async () => [];
 const studioMediums = async () => describeStudio([]);
-const desk = moderation(memoryStore<ModerationContents>({ reports: [], blocks: [], hidden: [] }));
+const desk = moderation(memoryModerationStore());
 const audit = auditLog(emptyAudit());
 const alerts: AlertsAccess = { offered: () => true, accepts: () => true, reportFiled: vi.fn(), phoneAdded: vi.fn(), test: async () => "sent" };
 const base: Context = { via: "api_key", client, operator: null, account: null, devices, operatorDevice: null, operatorDevices: operatorDeviceSessions(emptyOperatorDevices(), TEST_SECRET, audit), audit, alerts, moderation: desk, privacy: () => describePrivacy(false), instance, labels, agentModelMenu, studioMediums, quote: quoteCredits };
 const adam: Account = { user: { id: "usr_demo_adam", name: "Adam Soffer", email: "adam@example.test" }, role: "user", deviceId: "dev_1" };
 
 describe("public API operations", () => {
-  it("names and routes are unique", () => {
+  it("names and routes are unique", async () => {
     expect(new Set(OPERATIONS.map((operation) => operation.name)).size).toBe(OPERATIONS.length);
     expect(new Set(OPERATIONS.map((operation) => `${operation.method} ${operation.path}`)).size).toBe(OPERATIONS.length);
   });
 
-  it("every operation describes itself and its input for agents", () => {
+  it("every operation describes itself and its input for agents", async () => {
     for (const operation of OPERATIONS) {
       expect(operation.description.length).toBeGreaterThan(20);
       expect(operation.input).toMatchObject({ type: "object" });
     }
   });
 
-  it("matches REST routes and extracts path inputs", () => {
+  it("matches REST routes and extracts path inputs", async () => {
     expect(matchOperation("GET", ["offerings"])?.operation.name).toBe("list_capabilities");
     expect(matchOperation("POST", ["conversations", "cnv_1", "messages"])).toMatchObject({ operation: { name: "send_message" }, params: { id: "cnv_1" } });
     expect(matchOperation("GET", ["nope"])).toBeNull();
@@ -93,11 +92,11 @@ describe("public API operations", () => {
     expect((await provider.plans.getUserPlan("usr_demo_priya"))?.id).toBe("pln_studio");
   });
 
-  it("every operation outside the operator's says what it answers with", () => {
+  it("every operation outside the operator's says what it answers with", async () => {
     for (const operation of OPERATIONS) if (!operation.operator) expect(operation.output, operation.name).toBeDefined();
   });
 
-  it("only an operator operation that says what it answers with is marked for phones, and the marked ones are exactly these", () => {
+  it("only an operator operation that says what it answers with is marked for phones, and the marked ones are exactly these", async () => {
     for (const operation of OPERATIONS.filter((entry) => entry.mobile)) {
       expect(operation.operator, operation.name).toBe(true);
       expect(operation.output, operation.name).toBeDefined();
@@ -115,7 +114,7 @@ describe("public API operations", () => {
     expect(status.today).toMatchObject({ active_users: expect.any(Number), jobs: expect.any(Number), failed: expect.any(Number), revenue_usd: expect.any(Number), margin_usd: expect.any(Number) });
     expect(status.service).toMatchObject({ engine_ready: expect.any(Boolean), engine_version: expect.any(String) });
     expect(status.attention.some((entry) => entry.kind === "reports_waiting")).toBe(false);
-    desk.report("usr_demo_priya", { slug: "juno-live", name: "Juno", author: "relay-club" } as never, "spam", null);
+    await desk.report("usr_demo_priya", { slug: "juno-live", name: "Juno", author: "relay-club" } as never, "spam", null);
     const after = (await run("operator_status")) as typeof status;
     expect(after.attention).toContainEqual({ kind: "reports_waiting", message: "1 report is waiting", count: 1, opens: "reports" });
   });
@@ -141,13 +140,13 @@ describe("public API operations", () => {
     expect(await run("operator_list_users", { query: "no-one-is-called-this" })).toEqual([]);
   });
 
-  it("only reads are open to guests, apart from collecting a sign-in, and none of them is the operator's", () => {
+  it("only reads are open to guests, apart from collecting a sign-in, and none of them is the operator's", async () => {
     const open = OPERATIONS.filter((operation) => operation.public);
     expect(open.map((operation) => operation.name).sort()).toEqual(["create_device_session", "create_operator_device_session", "get_character", "get_instance", "get_privacy", "list_agent_model_menu", "list_agent_models", "list_capabilities", "list_capability_labels", "list_characters", "list_prompt_starters", "list_showcase", "list_studio_mediums", "quote_generation"]);
     for (const operation of open) expect((operation.method === "GET" || operation.name === "create_device_session" || operation.name === "create_operator_device_session") && !operation.operator, operation.name).toBe(true);
   });
 
-  it("keeps the apps' sign-in plumbing, account switching and uploads from a device away from agents", () => {
+  it("keeps the apps' sign-in plumbing, account switching and uploads from a device away from agents", async () => {
     expect(OPERATIONS.filter((operation) => operation.mcp === false).map((operation) => operation.name).sort()).toEqual(["create_device_session", "create_operator_challenge", "create_operator_device_session", "delete_account", "delete_operator_device_session", "end_device_session", "request_upload", "switch_account", "unlock_operator_device_session"]);
   });
 
@@ -307,10 +306,10 @@ describe("public API operations", () => {
     expect(await run("get_privacy", {}, null)).toMatchObject({ retains_chats: false, tiers: expect.arrayContaining([expect.objectContaining({ name: "Verified compute", status: "Planned, not available" })]) });
 
     await expect(run("delete_account", {}, null)).rejects.toMatchObject({ status: 403, code: "account_required" });
-    desk.block(adam.user.id, (await run("get_character", { slug: "juno-live" })) as never);
+    await desk.block(adam.user.id, (await run("get_character", { slug: "juno-live" })) as never);
     expect(await run("delete_account", {})).toEqual({ deleted: true });
     expect(devices.revokeAll).toHaveBeenCalledWith(adam.user.id);
-    expect(desk.visible(adam.user.id)({ slug: "juno-live", author: "relay-club", mine: false } as never)).toBe(true);
+    expect((await desk.visible(adam.user.id))({ slug: "juno-live", author: "relay-club", mine: false } as never)).toBe(true);
     expect(await provider.identity.getUser(adam.user.id)).toBeNull();
   });
 });

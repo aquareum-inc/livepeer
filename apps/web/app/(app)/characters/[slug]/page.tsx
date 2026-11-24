@@ -24,7 +24,7 @@ export default async function CharacterPage({ params }: Props) {
   if (!character.data) notFound();
   if (character.data.mature && !(await adultContent(client)).shown) notFound();
   const session = await getSession();
-  if (!moderation().visible(session?.userId ?? null)(character.data)) notFound();
+  if (!(await moderation().visible(session?.userId ?? null))(character.data)) notFound();
   return (
     <>
       <CharacterDetail character={character.data} signedIn={session !== null} instanceName={instance().name} />

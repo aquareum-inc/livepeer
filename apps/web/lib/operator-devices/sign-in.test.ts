@@ -27,15 +27,15 @@ function configure(extra: Record<string, unknown> = {}, mobileConsole = true) {
   utimesSync(configFile, next, next);
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   vi.stubEnv("INSTANCE_CONFIG", configFile);
   vi.stubEnv("DATA_DIR", path.join(dir, "data"));
   vi.stubEnv("MOCK_ONLY", "1");
   vi.stubEnv("SESSION_SECRET", "a-session-secret-for-the-operator-sign-in-tests");
   configure();
 });
-afterEach(() => vi.unstubAllGlobals());
-afterAll(() => {
+afterEach(async () => vi.unstubAllGlobals());
+afterAll(async () => {
   vi.unstubAllEnvs();
   rmSync(dir, { recursive: true, force: true });
 });
@@ -60,15 +60,15 @@ describe("signing in to the console on a phone", () => {
     expect(Object.fromEntries(result)).toEqual({ code: expect.any(String), state: STATE, purpose: "operator" });
     const code = result.get("code")!;
     // The user app's exchange doesn't know the code.
-    expect(devices().redeemCode({ code, verifier: TEST_VERIFIER, deviceName: "x", platform: "ios" })).toBeNull();
-    const issued = operatorDevices().redeemCode({ code, verifier: TEST_VERIFIER, deviceName: "Sam's iPhone", platform: "ios", publicKey: testPhone().rawPublicKey })!;
+    expect(await devices().redeemCode({ code, verifier: TEST_VERIFIER, deviceName: "x", platform: "ios" })).toBeNull();
+    const issued = (await operatorDevices().redeemCode({ code, verifier: TEST_VERIFIER, deviceName: "Sam's iPhone", platform: "ios", publicKey: testPhone().rawPublicKey }))!;
     expect(issued.token.startsWith("aqo_")).toBe(true);
-    expect(operatorAudit().list(1)[0]).toMatchObject({ event: "sign_in", user_id: "usr_demo_sam", device_name: "Sam's iPhone" });
+    expect((await operatorAudit().list(1))[0]).toMatchObject({ event: "sign_in", user_id: "usr_demo_sam", device_name: "Sam's iPhone" });
 
     // And the other way round: a user sign-in's code enrols no operator phone, operator or not.
     const user = await signIn({ method: "email" });
     expect(user.get("purpose")).toBeNull();
-    expect(operatorDevices().redeemCode({ code: user.get("code")!, verifier: TEST_VERIFIER, deviceName: "x", platform: "ios", publicKey: testPhone().rawPublicKey })).toBeNull();
+    expect(await operatorDevices().redeemCode({ code: user.get("code")!, verifier: TEST_VERIFIER, deviceName: "x", platform: "ios", publicKey: testPhone().rawPublicKey })).toBeNull();
   });
 
   it("turns away anyone the provider doesn't mark as an operator", async () => {
@@ -115,8 +115,8 @@ describe("with an OpenID Connect provider", () => {
     return new URL(`http://localhost/auth/callback?code=abc&state=${location.searchParams.get("state")}`);
   };
 
-  beforeAll(() => configure({ auth: { provider: "oidc", methods: ["email"], oidc: { issuer, clientId: "livepeer" } } }));
-  afterAll(() => configure());
+  beforeAll(async () => configure({ auth: { provider: "oidc", methods: ["email"], oidc: { issuer, clientId: "livepeer" } } }));
+  afterAll(async () => configure());
 
   it("asks the provider for a new sign-in for the console, and only then", async () => {
     provider({ roles: ["operator"] }, { id_token: idToken({ auth_time: now() }) });

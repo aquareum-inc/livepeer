@@ -15,7 +15,7 @@ export default async function CharactersPage() {
   const client = await api();
   const session = await getSession();
   const signedIn = session !== null;
-  const visible = moderation().visible(session?.userId ?? null);
+  const visible = await moderation().visible(session?.userId ?? null);
   const { shown } = await adultContent(client);
   const [mine, shared] = await Promise.all([
     client.listCharacters({ scope: "mine", includeMature: shown }),

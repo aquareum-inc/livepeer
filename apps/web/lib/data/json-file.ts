@@ -12,9 +12,10 @@ function dataDirectory(): string {
 }
 
 /**
- * A JSON file in the instance's data directory. The instance has no database yet; a database implementation
- * replaces this behind the same interface. It re-reads the file whenever it changed on disk, so every server
- * module sees the same state, and writes through a temporary file so a crash never leaves half a file.
+ * A JSON file in the instance's data directory: where an instance with no database keeps its state, which is
+ * how development, tests and CI run. Each domain's store has an implementation over one of these. It re-reads
+ * the file whenever it changed on disk, so every server module sees the same state, and writes through a
+ * temporary file so a crash never leaves half a file.
  */
 export function jsonFileStore<T>(name: string, parse: (value: Partial<T>) => T, file = path.join(dataDirectory(), name)): StateStore<T> {
   let cache: { contents: T; stamp: number } | null = null;

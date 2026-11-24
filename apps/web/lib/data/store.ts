@@ -1,4 +1,8 @@
-/** State the instance keeps itself, read and changed as one value. */
+/**
+ * State read and changed as one value: a JSON file, or memory in tests. Each domain's store (device sessions,
+ * moderation, alerts) has an implementation over one of these and one over Postgres, behind the same
+ * interface, so nothing above a store knows which it has.
+ */
 export interface StateStore<T> {
   /** Reads, changes and writes the contents as one step. */
   update<R>(change: (contents: T) => R): R;

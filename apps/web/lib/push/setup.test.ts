@@ -42,7 +42,7 @@ const set = (values: Partial<Record<keyof typeof credentials, string>>) => {
   for (const name of Object.keys(credentials) as Array<keyof typeof credentials>) vi.stubEnv(name, values[name] ?? "");
 };
 
-beforeAll(() => {
+beforeAll(async () => {
   vi.stubEnv("INSTANCE_CONFIG", configFile);
   vi.stubEnv("DATA_DIR", path.join(dir, "data"));
   vi.stubEnv("MOCK_ONLY", "");
@@ -50,20 +50,20 @@ beforeAll(() => {
   vi.stubEnv("ENGINE_READER_TOKEN", "a-reader-token");
   vi.stubEnv("ENGINE_ADMIN_TOKEN", "an-admin-token");
 });
-afterAll(() => {
+afterAll(async () => {
   vi.unstubAllEnvs();
   rmSync(dir, { recursive: true, force: true });
 });
 
 describe("whether the instance can send alerts", () => {
-  it("can't, and says alerts aren't set up, with no credentials: that is not a fault", () => {
+  it("can't, and says alerts aren't set up, with no credentials: that is not a fault", async () => {
     configure({ ios: { bundleId: "org.livepeer.app" }, android: { applicationId: "org.livepeer.app", firebase } });
     set({});
     expect(pushSetup()).toEqual({ ios: { state: "none", detail: "no APNs key" }, android: { state: "none", detail: "no Firebase service account" } });
     expect([pushSender().offers("ios"), pushSender().offers("android")]).toEqual([false, false]);
   });
 
-  it("can, per platform, with that platform's credentials and its app named in the config", () => {
+  it("can, per platform, with that platform's credentials and its app named in the config", async () => {
     configure({ ios: { bundleId: "org.livepeer.app" }, android: { applicationId: "org.livepeer.app", firebase } });
     set(credentials);
     expect(pushSetup()).toEqual({ ios: { state: "ready", detail: "key ABC123DEFG for org.livepeer.app" }, android: { state: "ready", detail: "project livepeer-test" } });
@@ -73,7 +73,7 @@ describe("whether the instance can send alerts", () => {
     expect([pushSender().offers("ios"), pushSender().offers("android")]).toEqual([false, true]);
   });
 
-  it("says what is wrong when credentials are half set, name no app, or are for another project, and sends nothing there", () => {
+  it("says what is wrong when credentials are half set, name no app, or are for another project, and sends nothing there", async () => {
     configure({ android: { applicationId: "org.livepeer.app" } });
     set(credentials);
     expect(pushSetup()).toEqual({ ios: { state: "problem", detail: "an APNs key is set but mobile.ios.bundleId is not" }, android: { state: "problem", detail: "a service account is set but mobile.android.firebase is not" } });
@@ -85,7 +85,7 @@ describe("whether the instance can send alerts", () => {
     expect([pushSender().offers("ios"), pushSender().offers("android")]).toEqual([false, false]);
   });
 
-  it("never repeats a credential in what it says", () => {
+  it("never repeats a credential in what it says", async () => {
     set(credentials);
     expect(JSON.stringify(pushSetup())).not.toMatch(/BEGIN|PRIVATE|client_email|gserviceaccount/);
   });
@@ -101,7 +101,7 @@ describe("whether the instance can send alerts", () => {
 });
 
 describe("the watcher's client", () => {
-  it("holds the reader token and no admin token, unlike the console's", () => {
+  it("holds the reader token and no admin token, unlike the console's", async () => {
     captured.clients.length = 0;
     buildReaderClient();
     buildOperatorClient();

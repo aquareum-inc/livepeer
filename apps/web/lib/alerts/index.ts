@@ -5,7 +5,7 @@ import { instance } from "../instance";
 import { mobileConsoleEnabled, operatorAudit, operatorDevices } from "../operator-devices";
 import { pushSender } from "../push";
 import { quietState } from "./decide";
-import { alertsService, type Alerts, type AlertsContents } from "./service";
+import { alertsService, documentAlertsStore, type Alerts, type AlertsContents } from "./service";
 
 let built: Alerts | null = null;
 
@@ -15,7 +15,7 @@ let built: Alerts | null = null;
  */
 export function alerts(): Alerts {
   built ??= alertsService({
-    store: jsonFileStore<AlertsContents>("operator-alerts.json", (value) => ({ lease: value.lease ?? null, state: value.state ?? quietState(), refused: value.refused ?? {} })),
+    store: documentAlertsStore(jsonFileStore<AlertsContents>("operator-alerts.json", (value) => ({ lease: value.lease ?? null, state: value.state ?? quietState(), refused: value.refused ?? {} }))),
     sessions: operatorDevices,
     audit: operatorAudit,
     sender: pushSender,

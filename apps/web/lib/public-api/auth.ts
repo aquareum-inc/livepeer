@@ -61,14 +61,14 @@ export async function authenticate(request: NextRequest): Promise<Caller | null>
     }
     if (token.startsWith(OPERATOR_DEVICE_TOKEN_PREFIX)) {
       if (!mobileConsoleEnabled()) throw new ApiError(403, "This service doesn't offer its console on phones.", "mobile_console_off");
-      const session = operatorDevices().find(token);
+      const session = await operatorDevices().find(token);
       if (!session) return null;
       const user = { id: session.userId, name: session.name, email: session.email };
       return { via: "operator_device", client: apiFor(user), operator: buildOperatorClient(), account: { user, role: "operator", deviceId: null }, operatorDevice: session };
     }
     if (token.startsWith(DEVICE_TOKEN_PREFIX)) {
       if (!mobileEnabled()) throw new ApiError(403, "This service doesn't offer its app on phones right now.", "mobile_off");
-      const device = devices().find(token);
+      const device = await devices().find(token);
       if (!device) return null;
       const user = { id: device.userId, name: device.name, email: device.email };
       // The app works in the account the device session names, if the person still belongs to it.

@@ -26,7 +26,7 @@ export default async function HomePage({ searchParams }: Props) {
   ]);
   const offered = composerOfferings(offerings.data);
   const found = character?.data ?? null;
-  const cast = found && (!found.mature || (await adultContent(client)).shown) && moderation().visible(session?.userId ?? null)(found) ? { slug: found.slug, name: found.name, image: found.image } : null;
+  const cast = found && (!found.mature || (await adultContent(client)).shown) && (await moderation().visible(session?.userId ?? null))(found) ? { slug: found.slug, name: found.name, image: found.image } : null;
   return (
     <>
       <Home starters={starters.data} offerings={offered} agentModels={agentModels.data} signedIn={session !== null} characters={characters} cast={cast} backdrop={{ video: home?.backgroundVideo ?? null, poster: home?.backgroundPoster ?? null, image: home?.backgroundImage ?? null, aurora: home?.aurora ?? false }} />

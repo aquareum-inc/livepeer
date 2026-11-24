@@ -21,7 +21,22 @@ export interface OutboxContents {
   sent: RecordedPush[];
 }
 
-export type OutboxStore = StateStore<OutboxContents>;
+/** Where the recording sender writes down what it would have sent. */
+export interface OutboxStore {
+  /** Adds a notification, and keeps only the newest `keep`. */
+  record(push: RecordedPush, keep: number): Promise<void>;
+}
+
+/** The outbox kept as one document: a JSON file, or memory in tests. */
+export function documentOutboxStore(document: StateStore<OutboxContents>): OutboxStore {
+  return {
+    async record(push, keep) {
+      document.update((contents) => {
+        contents.sent = [...contents.sent, push].slice(-keep);
+      });
+    },
+  };
+}
 
 /**
  * The sender for mock-only mode, tests and CI: it contacts nobody and writes down what it would have sent.
@@ -32,9 +47,7 @@ export function recordingSender(store: OutboxStore, now: () => number = Date.now
     offers: () => true,
     async send(target, notification) {
       const payload = target.platform === "ios" ? apnsPayload(notification) : fcmMessage("<push token>", notification);
-      store.update((contents) => {
-        contents.sent = [...contents.sent, { at: new Date(now()).toISOString(), platform: target.platform, environment: target.environment, payload }].slice(-OUTBOX_LIMIT);
-      });
+      await store.record({ at: new Date(now()).toISOString(), platform: target.platform, environment: target.environment, payload }, OUTBOX_LIMIT);
       return { outcome: "sent", detail: null };
     },
   };

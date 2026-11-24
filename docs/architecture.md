@@ -208,8 +208,11 @@ bundle's `migrate` service and a serverless host's build all run the same bundle
 lock, in one transaction. `/api/health` reports the database as `ok`, `behind`, `unreachable` or `none`. The
 database is migrated and empty so far: no state has moved into it yet.
 
-State the instance keeps itself lives in `apps/web/lib/data`: a `StateStore` interface and a JSON file in
-`DATA_DIR` behind it, until each store moves to the database. Device sessions use it, and so does
+Each kind of state the instance keeps has its own store interface, asynchronous, with one method per thing
+asked of it: `DeviceSessionStore`, `OperatorDeviceStore`, `AuditStore`, `ModerationStore`, `AlertsStore` and
+`OutboxStore`, each beside the service that holds its rules. Today each has one implementation, over a
+document read and written whole (`apps/web/lib/data`: a JSON file in `DATA_DIR`, or memory in tests); the
+Postgres implementations come behind the same interfaces, so nothing above a store knows which it has. Device sessions use it, and so does
 `apps/web/lib/moderation`: reports of shared characters, what each person blocked, and what the operator took
 down. Every character read (`list_characters`, `get_character`, the web's pages and Home's cast) filters
 through `moderation().visible(userId)`; the console's Reports page decides reports.
