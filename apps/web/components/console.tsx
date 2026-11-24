@@ -10,9 +10,9 @@ export function ConsoleLink({ href, ...props }: ConsoleLinkProps) {
   return <NextLink href={href} {...props} />;
 }
 
-export function Console({ brand, appAvailable, children }: { brand: Brand; appAvailable: boolean; children: ReactNode }) {
+export function Console({ brand, appAvailable, marks, children }: { brand: Brand; appAvailable: boolean; marks: Readonly<Record<string, string>>; children: ReactNode }) {
   return (
-    <ConsoleShell brand={brand} pathname={usePathname()} Link={ConsoleLink} appAvailable={appAvailable}>
+    <ConsoleShell brand={brand} pathname={usePathname()} Link={ConsoleLink} appAvailable={appAvailable} marks={marks}>
       {children}
     </ConsoleShell>
   );

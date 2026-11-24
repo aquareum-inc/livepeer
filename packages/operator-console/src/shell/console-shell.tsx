@@ -50,8 +50,28 @@ const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string;
 
 const active = (pathname: string, href: string) => (href === "/operator" ? pathname === href : pathname.startsWith(href));
 
+/** A quiet mark on a page's name in the navigation: something there is new, said in words to a screen reader. */
+function Mark({ says }: { says: string }) {
+  return (
+    <>
+      <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-foreground" />
+      <span className="sr-only">, {says}</span>
+    </>
+  );
+}
+
+export interface ConsoleShellProps {
+  brand: Brand;
+  pathname: string;
+  Link: ComponentType<ConsoleLinkProps>;
+  appAvailable: boolean;
+  /** Pages to mark with a dot in the navigation, by href, each with what the dot means. */
+  marks?: Readonly<Record<string, string>>;
+  children: ReactNode;
+}
+
 /** The console's frame: the same sidebar-and-panel as the user app, tuned denser. */
-export function ConsoleShell({ brand, pathname, Link, appAvailable, children }: { brand: Brand; pathname: string; Link: ComponentType<ConsoleLinkProps>; appAvailable: boolean; children: ReactNode }) {
+export function ConsoleShell({ brand, pathname, Link, appAvailable, marks = {}, children }: ConsoleShellProps) {
   const { resolved, setPreference } = useTheme();
   const items = GROUPS.flatMap((group) => group.items);
   return (
@@ -78,7 +98,8 @@ export function ConsoleShell({ brand, pathname, Link, appAvailable, children }: 
                   )}
                 >
                   <item.icon className="size-4 shrink-0" strokeWidth={1.75} />
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {marks[item.href] ? <Mark says={marks[item.href] as string} /> : null}
                 </Link>
               );
             })}
@@ -105,8 +126,9 @@ export function ConsoleShell({ brand, pathname, Link, appAvailable, children }: 
           {items.map((item) => {
             const current = active(pathname, item.href);
             return (
-              <Link key={item.href} href={item.href} aria-current={current ? "page" : undefined} className={cn("inline-flex h-8 shrink-0 items-center rounded-full px-3 text-[13px] font-medium", current ? "bg-active text-foreground" : "text-muted-foreground")}>
+              <Link key={item.href} href={item.href} aria-current={current ? "page" : undefined} className={cn("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium", current ? "bg-active text-foreground" : "text-muted-foreground")}>
                 {item.label}
+                {marks[item.href] ? <Mark says={marks[item.href] as string} /> : null}
               </Link>
             );
           })}

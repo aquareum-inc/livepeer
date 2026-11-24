@@ -32,6 +32,8 @@ const MAX_PENDING_CHALLENGES = 8;
 export const ALERTS_WARNING_DAYS = 3;
 /** Last-used times are written at most this often, so most requests write nothing. */
 const TOUCH_MS = 60 * 60 * 1000;
+/** How long a newly enrolled phone counts as new on the web console. */
+export const NEW_PHONE_HOURS = 48;
 const DAY_MS = 86_400_000;
 
 type Platform = OperatorDeviceRecord["platform"];
@@ -78,6 +80,13 @@ export interface OperatorDeviceSessions {
    * marked signed out, for as long as alerts still reach it.
    */
   list(): Promise<OperatorPhone[]>;
+  /**
+   * The phones enrolled in the last two days, newest first, as one operator sees them on the web console:
+   * `announced` are those whose notice they haven't closed, `dismissed` those they have.
+   */
+  newPhones(userId: string): Promise<{ announced: OperatorPhone[]; dismissed: OperatorPhone[] }>;
+  /** An operator closes the notice for these phones. It closes for them only, and for these phones only. */
+  dismissNewPhones(userId: string, phoneIds: readonly string[]): Promise<void>;
   /** Where alerts stand on a phone. */
   alerts(session: OperatorDeviceRecord): PhoneAlertState;
   /**
@@ -209,6 +218,15 @@ export function operatorDeviceSessions(store: OperatorDeviceStore, secret: strin
     return removed.length;
   };
 
+  const list = async (): Promise<OperatorPhone[]> =>
+    (await store.sessions())
+      .filter(kept)
+      .sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt))
+      .map((record) => {
+        const alerts = alertState(record);
+        return { ...toOperatorDeviceSession(record), alerts: alerts.state, alerts_until: alerts.until, signed_out: !used(record) };
+      });
+
   return {
     async issueCode({ identity, challenge, platform }) {
       if (identity.role !== "operator") return null;
@@ -295,15 +313,17 @@ export function operatorDeviceSessions(store: OperatorDeviceStore, secret: strin
       return store.clearFailedProofs(session.id);
     },
 
-    async list() {
-      return (await store.sessions())
-        .filter(kept)
-        .sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt))
-        .map((record) => {
-          const alerts = alertState(record);
-          return { ...toOperatorDeviceSession(record), alerts: alerts.state, alerts_until: alerts.until, signed_out: !used(record) };
-        });
+    list,
+
+    async newPhones(userId) {
+      const since = now() - NEW_PHONE_HOURS * 3_600_000;
+      const fresh = (await list()).filter((phone) => Date.parse(phone.created_at) > since).sort((a, b) => b.created_at.localeCompare(a.created_at));
+      if (fresh.length === 0) return { announced: [], dismissed: [] };
+      const closed = new Set(await store.noticesDismissedBy(userId));
+      return { announced: fresh.filter((phone) => !closed.has(phone.id)), dismissed: fresh.filter((phone) => closed.has(phone.id)) };
     },
+
+    dismissNewPhones: (userId, phoneIds) => store.dismissNotice(userId, phoneIds, new Date(now()).toISOString()),
 
     alerts: alertState,
 

@@ -1,4 +1,5 @@
 import type { OperatorAuditEntry, OperatorPhone } from "@livepeer/api-client";
+import { X } from "lucide-react";
 import type { ComponentType } from "react";
 
 import { ago, dateTime } from "../components/format";
@@ -39,24 +40,41 @@ export function PhoneActivityPanel({ entries }: { entries: OperatorAuditEntry[] 
   );
 }
 
-/** Said on every console page for two days after a phone is enrolled, so an addition nobody expected is seen. */
-export function NewPhoneNotice({ phones, Link }: { phones: OperatorPhone[]; Link: ComponentType<ConsoleLinkProps> }) {
+/**
+ * Said at the top of every console page when a phone is enrolled, so an addition nobody expected is seen,
+ * until the operator reading it closes it or two days pass. Closing it is theirs alone: every other operator
+ * still sees it, and so does whoever's account added the phone. `phones` are the ones this operator hasn't
+ * closed, newest first; `dismiss` closes them all.
+ */
+export function NewPhoneNotice({ phones, dismiss, Link }: { phones: OperatorPhone[]; dismiss: () => Promise<void>; Link: ComponentType<ConsoleLinkProps> }) {
   const [latest] = phones;
   if (!latest) return null;
   return (
     <div className="mx-auto w-full max-w-[1280px] px-4 pt-4 md:px-6">
-      <div role="status" className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-card border border-hairline bg-card px-4 py-2.5 text-[13px]">
-      <p>
-        {phones.length === 1 ? (
-          <>
-            <span className="font-medium">{latest.user_name}</span> added <span className="font-medium">{latest.name}</span> as an operator phone {ago(latest.created_at)}.
-          </>
-        ) : (
-          <>{phones.length} operator phones were added in the last two days, the latest {ago(latest.created_at)}.</>
-        )}{" "}
-        <span className="text-muted-foreground">If you didn't expect {phones.length === 1 ? "it, revoke it" : "them, revoke them"}.</span>
-      </p>
-        <Link href="/operator/system#operator-phones" className="shrink-0 font-medium underline underline-offset-4">Operator phones</Link>
+      <div role="status" className="flex items-start gap-2 rounded-card border border-hairline bg-card py-1.5 pl-4 pr-1.5 text-[13px]">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-1 py-1">
+          <p>
+            {phones.length === 1 ? (
+              <>
+                <span className="font-medium">{latest.user_name}</span> added <span className="font-medium">{latest.name}</span> as an operator phone {ago(latest.created_at)}.
+              </>
+            ) : (
+              <>{phones.length} operator phones were added in the last two days, the latest {ago(latest.created_at)}.</>
+            )}{" "}
+            <span className="text-muted-foreground">If you didn't expect {phones.length === 1 ? "it, revoke it" : "them, revoke them"}.</span>
+          </p>
+          <Link href="/operator/system#operator-phones" className="shrink-0 font-medium underline underline-offset-4">Operator phones</Link>
+        </div>
+        <form action={dismiss} className="shrink-0">
+          <button
+            type="submit"
+            aria-label="Dismiss"
+            title="Dismiss. Other operators still see this."
+            className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground outline-none transition-[background-color,color,transform] duration-200 hover:bg-hover hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring active:scale-[0.92]"
+          >
+            <X className="size-4" strokeWidth={1.75} />
+          </button>
+        </form>
       </div>
     </div>
   );

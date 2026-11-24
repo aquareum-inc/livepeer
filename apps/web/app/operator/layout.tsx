@@ -9,9 +9,7 @@ import { getSession } from "@/lib/auth/session";
 import { isDev } from "@/lib/env";
 import { brandOf, instance } from "@/lib/instance";
 import { operatorDevices } from "@/lib/operator-devices";
-
-/** How long a newly enrolled phone is announced on every console page. */
-const NEW_PHONE_MS = 48 * 3600_000;
+import { dismissNewPhonesAction } from "@/lib/operator/actions";
 
 export const metadata: Metadata = { title: { default: "Operator console", template: "%s · Operator console" } };
 export const dynamic = "force-dynamic";
@@ -24,13 +22,14 @@ export default async function OperatorLayout({ children }: { children: ReactNode
   if (!session) redirect("/sign-in?next=/operator");
   // Hidden from users: to anyone who isn't an operator the console doesn't exist.
   if (session.role !== "operator") notFound();
-  const newPhones = (await operatorDevices().list())
-    .filter((phone) => Date.now() - Date.parse(phone.created_at) < NEW_PHONE_MS)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  // New phones are announced to each operator until they close the notice; after that System carries a dot.
+  const { announced, dismissed } = await operatorDevices().newPhones(session.userId);
+  const marks: Record<string, string> = {};
+  if (dismissed.length > 0) marks["/operator/system"] = dismissed.length === 1 ? "an operator phone was added in the last two days" : `${dismissed.length} operator phones were added in the last two days`;
   return (
     <>
-      <Console brand={brandOf(config)} appAvailable={surfaces.app}>
-        <NewPhoneNotice phones={newPhones} Link={ConsoleLink} />
+      <Console brand={brandOf(config)} appAvailable={surfaces.app} marks={marks}>
+        <NewPhoneNotice phones={announced} dismiss={dismissNewPhonesAction.bind(null, announced.map((phone) => phone.id))} Link={ConsoleLink} />
         {children}
       </Console>
       {isDev ? <DevRoleSwitch role={session.role} /> : null}

@@ -148,7 +148,7 @@ browser session cookie holds it.
 §18). They are a separate record, token and file from users' device sessions: `apps/web/lib/operator-devices`
 keeps sessions, pending sign-ins and pending nonces, and the audit log (the newest 2,000 entries), behind
 `OperatorDeviceStore` and `AuditStore`: in Postgres (`operator_device_sessions`, `operator_sign_in_codes`,
-`operator_challenges`, `operator_push_tokens`, `operator_audit`). A person's name and email are sealed with
+`operator_challenges`, `operator_push_tokens`, `operator_phone_notice_dismissals`, `operator_audit`). A person's name and email are sealed with
 `SESSION_SECRET`, never in the clear.
 The store holds an HMAC of each token, code and nonce keyed with `SESSION_SECRET`, the phone's P-256 public
 key, and no builder key. A session ends after 7 days unused, 30 days after it was made, on sign-out or
