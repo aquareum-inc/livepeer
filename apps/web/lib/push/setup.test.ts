@@ -59,42 +59,42 @@ describe("whether the instance can send alerts", () => {
   it("can't, and says alerts aren't set up, with no credentials: that is not a fault", async () => {
     configure({ ios: { bundleId: "org.livepeer.app" }, android: { applicationId: "org.livepeer.app", firebase } });
     set({});
-    expect(pushSetup()).toEqual({ ios: { state: "none", detail: "no APNs key" }, android: { state: "none", detail: "no Firebase service account" } });
-    expect([pushSender().offers("ios"), pushSender().offers("android")]).toEqual([false, false]);
+    expect(await pushSetup()).toEqual({ ios: { state: "none", detail: "no APNs key" }, android: { state: "none", detail: "no Firebase service account" } });
+    expect([(await pushSender()).offers("ios"), (await pushSender()).offers("android")]).toEqual([false, false]);
   });
 
   it("can, per platform, with that platform's credentials and its app named in the config", async () => {
     configure({ ios: { bundleId: "org.livepeer.app" }, android: { applicationId: "org.livepeer.app", firebase } });
     set(credentials);
-    expect(pushSetup()).toEqual({ ios: { state: "ready", detail: "key ABC123DEFG for org.livepeer.app" }, android: { state: "ready", detail: "project livepeer-test" } });
-    expect([pushSender().offers("ios"), pushSender().offers("android")]).toEqual([true, true]);
+    expect(await pushSetup()).toEqual({ ios: { state: "ready", detail: "key ABC123DEFG for org.livepeer.app" }, android: { state: "ready", detail: "project livepeer-test" } });
+    expect([(await pushSender()).offers("ios"), (await pushSender()).offers("android")]).toEqual([true, true]);
 
     set({ FCM_SERVICE_ACCOUNT: credentials.FCM_SERVICE_ACCOUNT });
-    expect([pushSender().offers("ios"), pushSender().offers("android")]).toEqual([false, true]);
+    expect([(await pushSender()).offers("ios"), (await pushSender()).offers("android")]).toEqual([false, true]);
   });
 
   it("says what is wrong when credentials are half set, name no app, or are for another project, and sends nothing there", async () => {
     configure({ android: { applicationId: "org.livepeer.app" } });
     set(credentials);
-    expect(pushSetup()).toEqual({ ios: { state: "problem", detail: "an APNs key is set but mobile.ios.bundleId is not" }, android: { state: "problem", detail: "a service account is set but mobile.android.firebase is not" } });
-    expect([pushSender().offers("ios"), pushSender().offers("android")]).toEqual([false, false]);
+    expect(await pushSetup()).toEqual({ ios: { state: "problem", detail: "an APNs key is set but mobile.ios.bundleId is not" }, android: { state: "problem", detail: "a service account is set but mobile.android.firebase is not" } });
+    expect([(await pushSender()).offers("ios"), (await pushSender()).offers("android")]).toEqual([false, false]);
 
     configure({ ios: { bundleId: "org.livepeer.app" }, android: { applicationId: "org.livepeer.app", firebase } });
     set({ ...credentials, APNS_TEAM_ID: "", FCM_SERVICE_ACCOUNT: account("someone-elses-project") });
-    expect(pushSetup()).toEqual({ ios: { state: "problem", detail: "APNS_TEAM_ID missing" }, android: { state: "problem", detail: "the service account is for someone-elses-project, the config names livepeer-test" } });
-    expect([pushSender().offers("ios"), pushSender().offers("android")]).toEqual([false, false]);
+    expect(await pushSetup()).toEqual({ ios: { state: "problem", detail: "APNS_TEAM_ID missing" }, android: { state: "problem", detail: "the service account is for someone-elses-project, the config names livepeer-test" } });
+    expect([(await pushSender()).offers("ios"), (await pushSender()).offers("android")]).toEqual([false, false]);
   });
 
   it("never repeats a credential in what it says", async () => {
     set(credentials);
-    expect(JSON.stringify(pushSetup())).not.toMatch(/BEGIN|PRIVATE|client_email|gserviceaccount/);
+    expect(JSON.stringify(await pushSetup())).not.toMatch(/BEGIN|PRIVATE|client_email|gserviceaccount/);
   });
 
   it("only records in mock-only mode, whatever credentials are present", async () => {
     set(credentials);
     vi.stubEnv("MOCK_ONLY", "1");
-    expect(pushSetup().ios).toEqual({ state: "ready", detail: "recorded, not sent (mock-only mode)" });
-    const result = await pushSender().send({ platform: "ios", token: "ab".repeat(32), environment: "production" }, { title: "Test", body: "Alerts reach this phone.", kind: "test", opens: "status", collapse: "console-test", lifeSeconds: 3600, channel: "console_service", urgent: false });
+    expect((await pushSetup()).ios).toEqual({ state: "ready", detail: "recorded, not sent (mock-only mode)" });
+    const result = await (await pushSender()).send({ platform: "ios", token: "ab".repeat(32), environment: "production" }, { title: "Test", body: "Alerts reach this phone.", kind: "test", opens: "status", collapse: "console-test", lifeSeconds: 3600, channel: "console_service", urgent: false });
     expect(result).toEqual({ outcome: "sent", detail: null });
     vi.stubEnv("MOCK_ONLY", "");
   });
@@ -103,8 +103,8 @@ describe("whether the instance can send alerts", () => {
 describe("the watcher's client", () => {
   it("holds the reader token and no admin token, unlike the console's", async () => {
     captured.clients.length = 0;
-    buildReaderClient();
-    buildOperatorClient();
+    await buildReaderClient();
+    await buildOperatorClient();
     expect(captured.clients.map((options) => options.engine)).toEqual([
       { url: "http://engine.test", reader: "a-reader-token" },
       { url: "http://engine.test", reader: "a-reader-token", admin: "an-admin-token" },

@@ -37,15 +37,15 @@ export async function workspaceOf(session: { userId: string; workspaceId?: strin
  * `workspaceId` is the workspace the person is working in; callers must have checked they belong (`workspaceOf`).
  * `viaApiKey` is for a workspace's API key, which has no person behind it.
  */
-export function apiFor(user: { id: string; name: string } | null, scope: "offered" | "network" = "offered", workspaceId: string | null = null, viaApiKey = false): ApiClient {
-  const config = instance();
+export async function apiFor(user: { id: string; name: string } | null, scope: "offered" | "network" = "offered", workspaceId: string | null = null, viaApiKey = false): Promise<ApiClient> {
+  const config = await instance();
   const url = config.engine?.url ?? env("ENGINE_URL");
   const mockOnly = env("MOCK_ONLY");
   return createApiClient({
     ...(url ? { engine: { url } } : {}),
     describeApps: async (apps) => (await describeApps(apps)).data,
     env: mockOnly ? { MOCK_ONLY: mockOnly } : {},
-    ...(scope === "offered" ? { offers: (app: string) => isCapabilityEnabled(app, instance().capabilities) } : {}),
+    ...(scope === "offered" ? { offers: (app: string) => isCapabilityEnabled(app, config.capabilities) } : {}),
     ...(user ? { user } : {}),
     workspaceId,
     viaApiKey,

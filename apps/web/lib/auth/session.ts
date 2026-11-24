@@ -29,8 +29,8 @@ export function mockMode(): boolean {
 }
 
 /** The mock provider is available in development and mock-only mode, never to real end users. */
-export function authProvider(): AuthProvider {
-  const auth = instance().auth;
+export async function authProvider(): Promise<AuthProvider> {
+  const auth = (await instance()).auth;
   if (auth?.provider === "oidc" && auth.oidc) {
     const secret = env("OIDC_CLIENT_SECRET");
     return oidcProvider({ issuer: auth.oidc.issuer, clientId: auth.oidc.clientId, ...(auth.oidc.methodParam ? { methodParam: auth.oidc.methodParam } : {}), ...(secret ? { clientSecret: secret } : {}) });

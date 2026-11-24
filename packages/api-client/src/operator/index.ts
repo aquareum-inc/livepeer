@@ -68,6 +68,7 @@ export const OPERATOR_DATA_SOURCES = {
   updateBillingSettings: "mock",
   getCapabilitySetting: "live",
   updateCapabilitySetting: "live",
+  resetCapabilitySettings: "live",
   // Workspaces are the payment provider's; mocked until it has them (docs/workspaces.md).
   listWorkspaces: "mock",
   getWorkspace: "mock",
@@ -96,6 +97,8 @@ export interface OperatorClient {
   updateBillingSettings(patch: Partial<BillingSettings>): Promise<Sourced<BillingSettings>>;
   getCapabilitySetting(app: string): Promise<Sourced<CapabilitySetting>>;
   updateCapabilitySetting(app: string, patch: Partial<Omit<CapabilitySetting, "app">>): Promise<Sourced<CapabilitySetting>>;
+  /** Puts every capability back as the instance was deployed with it: what the console changed is forgotten. */
+  resetCapabilitySettings(): Promise<Sourced<boolean>>;
   /** Every workspace with its owner, plan and budget. Empty when the provider has no workspaces. */
   listWorkspaces(): Promise<Sourced<OperatorWorkspace[]>>;
   getWorkspace(id: string): Promise<Sourced<OperatorWorkspaceDetail | null>>;
@@ -105,19 +108,25 @@ export interface OperatorClient {
 
 /**
  * Where a capability's settings live: whether it's offered, where it appears and its markup. The app keeps
- * them in the instance config, which is what users are served and charged from, so a change made in the
- * console is what users get.
+ * them over the instance config it was deployed with, which is what users are served and charged from, so a
+ * change made in the console is what users get.
  */
 export interface CapabilityStore {
   read(app: string): Omit<CapabilitySetting, "app">;
   /** Changes a capability's settings. Refuses a markup below 1. */
   write(app: string, patch: Partial<Omit<CapabilitySetting, "app">>): Promise<void>;
+  /** Forgets every change made here, so each capability is as the instance was deployed with it. */
+  reset(): Promise<void>;
 }
 
 /** Capability settings held in memory, for tests and for clients with nowhere to save them. */
 export function memoryCapabilityStore(initial: Record<string, Partial<Omit<CapabilitySetting, "app">>> = {}): CapabilityStore {
   const settings = new Map(Object.entries(initial));
   return {
+    async reset() {
+      settings.clear();
+      for (const [app, setting] of Object.entries(initial)) settings.set(app, setting);
+    },
     read: (app) => ({ enabled: true, markup: null, surfaces: null, ...settings.get(app) }),
     async write(app, patch) {
       if (patch.markup != null && !(patch.markup >= 1)) throw new Error("A markup can't be less than 1.");
@@ -350,6 +359,10 @@ export function createOperatorClient(options: OperatorClientOptions): OperatorCl
     async updateCapabilitySetting(app, patch) {
       await capabilities.write(app, patch);
       return { data: { app, ...capabilities.read(app) }, source: "live" };
+    },
+    async resetCapabilitySettings() {
+      await capabilities.reset();
+      return { data: true, source: "live" };
     },
   };
   return client;

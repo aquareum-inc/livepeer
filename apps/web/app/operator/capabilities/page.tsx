@@ -1,38 +1,30 @@
-import { isCapabilityEnabled, placeCapability } from "@livepeer/config";
 import { CapabilitiesView } from "@livepeer/operator-console";
 import type { Metadata } from "next";
 
 import { instance } from "@/lib/instance";
-import { updateCapabilityAction } from "@/lib/operator/actions";
+import { resetCapabilitiesAction, updateCapabilityAction } from "@/lib/operator/actions";
+import { capabilityRows } from "@/lib/operator/capability-rows";
 import { operatorApi, pricing } from "@/lib/operator/client";
+import { capabilityOverrides } from "@/lib/operator/settings";
 
 export const metadata: Metadata = { title: "Capabilities" };
 
 export default async function CapabilitiesPage() {
   const client = await operatorApi();
-  const { capabilities, surfaces, mobile } = instance();
+  const { surfaces, mobile } = await instance();
   const phones = surfaces.mobile === true && Boolean(mobile?.ios?.bundleId || mobile?.android?.applicationId);
-  const offerings = await client.listOfferings();
-  const rows = await Promise.all(
-    offerings.data.map(async (offering) => {
-      const placement = placeCapability(offering, capabilities?.overrides);
-      return {
-        offering,
-        kind: placement.kind.replace(/-/g, " "),
-        surfaces: placement.surfaces,
-        // Blocked by a rule in the config file; the console's own switch is the exact entry, read as the setting.
-        allowed: isCapabilityEnabled(offering.app, { ...capabilities, block: (capabilities?.block ?? []).filter((rule) => rule !== offering.app) }),
-        setting: (await client.getCapabilitySetting(offering.app)).data,
-      };
-    }),
-  );
+  const { rows, source } = await capabilityRows(client);
+  const overrides = await capabilityOverrides();
   return (
     <CapabilitiesView
       rows={rows}
-      defaultMarkup={pricing().default}
+      defaultMarkup={(await pricing()).default}
       update={updateCapabilityAction}
       placing={surfaces.app || phones}
-      sources={[{ name: "listOfferings", source: offerings.source }, { name: "updateCapabilitySetting", source: "live" }]}
+      overridden={overrides.saved}
+      ignored={overrides.ignored}
+      reset={resetCapabilitiesAction}
+      sources={[{ name: "listOfferings", source }, { name: "updateCapabilitySetting", source: "live" }]}
     />
   );
 }

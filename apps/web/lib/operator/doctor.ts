@@ -26,7 +26,7 @@ export async function runDoctor(): Promise<SystemCheck[]> {
   const mockOnly = env("MOCK_ONLY") === "1" || env("MOCK_ONLY") === "true";
 
   try {
-    const config = instance();
+    const config = await instance();
     add("Instance config", true, `valid (${config.name})`);
   } catch (error) {
     add("Instance config", false, "invalid", error instanceof Error ? error.message : "Fix instance.config.json");
@@ -36,8 +36,8 @@ export async function runDoctor(): Promise<SystemCheck[]> {
   add("SESSION_SECRET", secret.length >= 32 || mockOnly, secret.length >= 32 ? "set" : mockOnly ? "development default (mock-only)" : "missing", "Set a 32+ character SESSION_SECRET in .env");
 
   // Alerts to operators' phones are optional: no credentials is fine, half-set or unreadable ones are not.
-  if (instance().surfaces.mobileConsole === true) {
-    const setup = pushSetup();
+  if ((await instance()).surfaces.mobileConsole === true) {
+    const setup = await pushSetup();
     add("Alerts to iPhone", setup.ios.state !== "problem", setup.ios.state === "none" ? "not set up (optional)" : setup.ios.detail, "Set APNS_KEY (the .p8 file as base64 on one line), APNS_KEY_ID and APNS_TEAM_ID in .env, and mobile.ios.bundleId in the config");
     add("Alerts to Android", setup.android.state !== "problem", setup.android.state === "none" ? "not set up (optional)" : setup.android.detail, "Set FCM_SERVICE_ACCOUNT (the service account's JSON as base64 on one line) in .env, and mobile.android.firebase in the config from the same Firebase project");
   }
@@ -48,7 +48,7 @@ export async function runDoctor(): Promise<SystemCheck[]> {
     return checks;
   }
 
-  const url = instance().engine?.url ?? env("ENGINE_URL");
+  const url = (await instance()).engine?.url ?? env("ENGINE_URL");
   if (!url) {
     add("Engine", false, "ENGINE_URL is not set", "Set ENGINE_URL in .env, or MOCK_ONLY=1 to run without the engine");
     return checks;

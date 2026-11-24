@@ -17,10 +17,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ModelPage({ params }: Props) {
-  const { surfaces } = instance();
+  const { surfaces } = await instance();
   const name = (await params).app.map(decodeURIComponent).join("/");
   const offerings = await (await api()).listOfferings();
-  const entry = catalogue(offerings.data).find((candidate) => candidate.offering.app === name);
+  const entry = (await catalogue(offerings.data)).find((candidate) => candidate.offering.app === name);
   if (!entry) notFound();
   return (
     <DevelopersLayout current="/developers/models" available={developerTabs(surfaces)} surfaces={surfaces}>

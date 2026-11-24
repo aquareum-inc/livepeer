@@ -79,6 +79,17 @@ describe("validateConfig", () => {
 });
 
 describe("loadConfig", () => {
+  it("takes the config itself from INSTANCE_CONFIG_JSON, ahead of any file, for hosts with no file to mount", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cfg-"));
+    writeFileSync(path.join(dir, "instance.config.json"), JSON.stringify({ name: "From the file", surfaces: { app: true, console: true, api: true, mcp: true } }));
+    const json = JSON.stringify({ name: "From the environment", surfaces: { app: false, console: true, api: true, mcp: false } });
+    const loaded = loadConfig({ cwd: dir, env: { INSTANCE_CONFIG_JSON: json, ENGINE_URL: "http://b.test" } });
+    expect(loaded).toMatchObject({ file: null, source: "environment", config: { name: "From the environment", engine: { url: "http://b.test" } } });
+    expect(loadConfig({ cwd: dir, env: {} })).toMatchObject({ source: "file", config: { name: "From the file" } });
+    expect(() => loadConfig({ cwd: dir, env: { INSTANCE_CONFIG_JSON: "{not json" } })).toThrow(ConfigError);
+    expect(() => loadConfig({ cwd: dir, env: { INSTANCE_CONFIG_JSON: JSON.stringify({ name: "No surfaces" }) } })).toThrow(ConfigError);
+  });
+
   it("falls back to the full preset when no file exists", () => {
     const loaded = loadConfig({ cwd: mkdtempSync(path.join(tmpdir(), "cfg-")), env: {} });
     expect(loaded.file).toBeNull();

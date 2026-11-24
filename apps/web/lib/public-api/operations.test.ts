@@ -41,8 +41,8 @@ const agentModelMenu = async () => [];
 const studioMediums = async () => describeStudio([]);
 const desk = moderation(memoryModerationStore());
 const audit = auditLog(emptyAudit());
-const alerts: AlertsAccess = { offered: () => true, accepts: () => true, reportFiled: vi.fn(), phoneAdded: vi.fn(), test: async () => "sent" };
-const base: Context = { via: "api_key", client, operator: null, account: null, devices, operatorDevice: null, operatorDevices: operatorDeviceSessions(emptyOperatorDevices(), TEST_SECRET, audit), audit, alerts, moderation: desk, privacy: () => describePrivacy(false), instance, labels, agentModelMenu, studioMediums, quote: quoteCredits };
+const alerts: AlertsAccess = { offered: async () => true, accepts: () => true, reportFiled: vi.fn(), phoneAdded: vi.fn(), test: async () => "sent" };
+const base: Context = { via: "api_key", client, operator: null, account: null, devices, operatorDevice: null, operatorDevices: operatorDeviceSessions(emptyOperatorDevices(), TEST_SECRET, audit), audit, alerts, moderation: desk, privacy: async () => describePrivacy(false), instance, labels, agentModelMenu, studioMediums, quote: quoteCredits };
 const adam: Account = { user: { id: "usr_demo_adam", name: "Adam Soffer", email: "adam@example.test" }, role: "user", deviceId: "dev_1" };
 
 describe("public API operations", () => {

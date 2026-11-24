@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "Live" };
 export default async function LivePage() {
   const client = await api();
   const signedIn = (await getSession()) !== null;
-  const { capabilities } = instance();
+  const { capabilities } = await instance();
   // Saved looks and destinations belong to an account; a guest starts with none.
   const [offerings, looks, destinations] = await Promise.all([
     client.listOfferings(),

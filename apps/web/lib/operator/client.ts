@@ -7,16 +7,16 @@ import { env } from "../env";
 import { instance } from "../instance";
 import { configCapabilityStore } from "./settings";
 
-export function pricing() {
-  const config = instance().pricing;
+export async function pricing() {
+  const config = (await instance()).pricing;
   return { creditsPerUsd: config?.creditsPerUsd ?? 100, default: config?.markup?.default ?? 1.3, perApp: config?.markup?.perApp ?? {} };
 }
 
 /** The payment provider this instance is configured for. `readOnly` leaves the admin token out of it. */
-export function paymentProvider(readOnly = false): PaymentProvider {
-  const url = instance().engine?.url ?? env("ENGINE_URL");
+export async function paymentProvider(readOnly = false): Promise<PaymentProvider> {
+  const url = (await instance()).engine?.url ?? env("ENGINE_URL");
   const mockOnly = env("MOCK_ONLY") === "1" || env("MOCK_ONLY") === "true";
-  if (instance().payments?.provider === "batteries" && url && !mockOnly) {
+  if ((await instance()).payments?.provider === "batteries" && url && !mockOnly) {
     const reader = env("ENGINE_READER_TOKEN");
     const admin = readOnly ? undefined : env("ENGINE_ADMIN_TOKEN");
     return createBatteriesProvider({ url, ...(reader ? { reader } : {}), ...(admin ? { admin } : {}) });
@@ -40,7 +40,7 @@ export async function requireOperator(): Promise<void> {
 }
 
 /** Builds the operator client. Callers must have checked the operator role first. */
-export function buildOperatorClient(): OperatorClient {
+export function buildOperatorClient(): Promise<OperatorClient> {
   return build(false);
 }
 
@@ -48,20 +48,21 @@ export function buildOperatorClient(): OperatorClient {
  * An operator client that holds the reader token and no admin token, so it can read and change nothing. The
  * alert watcher uses it: it runs with no caller, and only ever reads.
  */
-export function buildReaderClient(): OperatorClient {
+export function buildReaderClient(): Promise<OperatorClient> {
   return build(true);
 }
 
-function build(readOnly: boolean): OperatorClient {
-  const url = instance().engine?.url ?? env("ENGINE_URL");
+async function build(readOnly: boolean): Promise<OperatorClient> {
+  const config = await instance();
+  const url = config.engine?.url ?? env("ENGINE_URL");
   const reader = env("ENGINE_READER_TOKEN");
   const admin = readOnly ? undefined : env("ENGINE_ADMIN_TOKEN");
   const mockOnly = env("MOCK_ONLY");
   return createOperatorClient({
     ...(url ? { engine: { url, ...(reader ? { reader } : {}), ...(admin ? { admin } : {}) } } : {}),
-    provider: paymentProvider(readOnly),
+    provider: await paymentProvider(readOnly),
     env: mockOnly ? { MOCK_ONLY: mockOnly } : {},
-    pricing: pricing(),
-    capabilities: configCapabilityStore(),
+    pricing: await pricing(),
+    capabilities: configCapabilityStore(config),
   });
 }

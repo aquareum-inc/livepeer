@@ -31,12 +31,12 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   const next = safeNext(rawNext);
   if (await getSession()) redirect(next);
 
-  const config = instance();
-  const offered: string[] = signInMethods();
+  const config = await instance();
+  const offered: string[] = await signInMethods();
   const providers = PROVIDERS.filter((provider) => offered.includes(provider.method));
   const email = offered.includes("email");
   const passkey = offered.includes("passkey");
-  const development = authProvider().id === "mock";
+  const development = (await authProvider()).id === "mock";
   const signUp = config.auth?.signUp ?? "open";
   const start = (method: string) => `/auth/start?method=${method}&next=${encodeURIComponent(next)}`;
 

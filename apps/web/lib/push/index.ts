@@ -20,12 +20,12 @@ export const fileOutbox = () => documentOutboxStore(jsonFileStore<OutboxContents
  * and an app named in the config; Android needs the service account and the project's public values in the
  * config, for the same project.
  */
-export function pushSetup(): Record<PushPlatform, PushSetup> {
+export async function pushSetup(): Promise<Record<PushPlatform, PushSetup>> {
   if (mockMode()) {
     const recorded: PushSetup = { state: "ready", detail: "recorded, not sent (mock-only mode)" };
     return { ios: recorded, android: recorded };
   }
-  const apps = instance().mobile;
+  const apps = (await instance()).mobile;
   const apns = readApnsCredentials(env);
   const fcm = readFcmCredentials(env);
   const firebase = apps?.android?.firebase;
@@ -56,8 +56,8 @@ let built: { key: string; sender: PushSender } | null = null;
  * Apple and Google with the publisher's own credentials, for whichever platforms are set up. One per process,
  * rebuilt when the credentials or the named apps change.
  */
-export function pushSender(): PushSender {
-  const apps = instance().mobile;
+export async function pushSender(): Promise<PushSender> {
+  const apps = (await instance()).mobile;
   const key = JSON.stringify([mockMode(), env("APNS_KEY"), env("APNS_KEY_ID"), env("APNS_TEAM_ID"), env("FCM_SERVICE_ACCOUNT"), apps?.ios?.bundleId, apps?.android?.firebase?.projectId]);
   if (built?.key === key) return built.sender;
 
@@ -65,7 +65,7 @@ export function pushSender(): PushSender {
   if (mockMode()) {
     sender = recordingSender(fileOutbox());
   } else {
-    const setup = pushSetup();
+    const setup = await pushSetup();
     const apns = readApnsCredentials(env);
     const fcm = readFcmCredentials(env);
     const senders: Partial<Record<PushPlatform, PushSender>> = {

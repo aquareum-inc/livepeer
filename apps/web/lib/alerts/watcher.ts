@@ -29,10 +29,10 @@ interface Watcher {
  * reader token only, through the same client functions the console's pages use, and takes nothing from a request.
  */
 export async function check(watcher: Watcher, now: number = Date.now()): Promise<void> {
-  if (!mobileConsoleEnabled() || !await operatorDevices().anyAlerts()) return;
+  if (!await mobileConsoleEnabled() || !await operatorDevices().anyAlerts()) return;
   const service = alerts();
   if (!(await service.lease(watcher.holder))) return;
-  const client = buildReaderClient();
+  const client = await buildReaderClient();
 
   // An engine that can't be reached is not ready, whatever the reason.
   const ready = await answered(client.getEngineHealth()).then((health) => health.data.ready, () => false);

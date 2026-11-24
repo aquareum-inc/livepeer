@@ -33,7 +33,7 @@ function setup() {
     },
   };
   const flags = { enabled: true };
-  const alerts = alertsService({ store, sessions: () => sessions, audit: () => audit, sender: () => sender, enabled: () => flags.enabled, name: () => "Livepeer", now });
+  const alerts = alertsService({ store, sessions: () => sessions, audit: () => audit, sender: async () => sender, enabled: async () => flags.enabled, name: async () => "Livepeer", now });
 
   let phones = 0;
   const enrol = async (identity: typeof sam, deviceName: string, kinds: readonly (typeof ALL)[number][] | null = ALL, platform: "ios" | "android" = "ios") => {
@@ -270,7 +270,7 @@ it("leaves out a phone on a platform it can't send to, without a line in the aud
 it("says whether a platform can be sent to, and whether a push token is that platform's", async () => {
   const { alerts, offers } = setup();
   offers.android = false;
-  expect([alerts.offered("ios"), alerts.offered("android")]).toEqual([true, false]);
+  expect([await alerts.offered("ios"), await alerts.offered("android")]).toEqual([true, false]);
   expect(alerts.accepts("ios", "ab".repeat(32))).toBe(true);
   expect(alerts.accepts("ios", "not hex")).toBe(false);
 });

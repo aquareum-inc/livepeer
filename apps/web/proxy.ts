@@ -10,9 +10,9 @@ import { homePath, surfacePathServed } from "@/lib/surfaces";
  * Runs before every page: turns off surfaces the instance doesn't serve, and applies the role
  * guard. Layouts check again, so a route is never protected by this file alone.
  */
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const { surfaces } = instance();
+  const { surfaces } = await instance();
   const isApi = pathname.startsWith("/api/");
   // With no app, the front door is the console.
   if (pathname === "/" && homePath(surfaces) !== "/") return NextResponse.redirect(new URL(homePath(surfaces), request.url));

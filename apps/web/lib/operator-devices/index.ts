@@ -24,6 +24,6 @@ export function operatorDevices(): OperatorDeviceSessions {
 }
 
 /** Whether the instance offers the console inside the native apps. Off unless an operator turned it on. */
-export function mobileConsoleEnabled(): boolean {
-  return instance().surfaces.mobileConsole === true;
+export async function mobileConsoleEnabled(): Promise<boolean> {
+  return (await instance()).surfaces.mobileConsole === true;
 }

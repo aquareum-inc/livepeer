@@ -26,10 +26,10 @@ interface Flow {
  */
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
-  const origin = publicOrigin(request);
+  const origin = await publicOrigin(request);
   const code = params.get("code");
   const flow = unseal<Flow>(request.cookies.get(FLOW_COOKIE)?.value ?? "", sessionSecret());
-  const callback = flow?.native ? appCallback(flow.native.platform) : null;
+  const callback = flow?.native ? await appCallback(flow.native.platform) : null;
   const finish = (response: NextResponse) => {
     response.cookies.delete(FLOW_COOKIE);
     return response;
@@ -44,13 +44,13 @@ export async function GET(request: NextRequest) {
   let identity;
   let authenticatedAt;
   try {
-    ({ identity, authenticatedAt } = await authProvider().exchange({ code, redirectUri, codeVerifier: flow.codeVerifier }));
+    ({ identity, authenticatedAt } = await (await authProvider()).exchange({ code, redirectUri, codeVerifier: flow.codeVerifier }));
   } catch {
     return fail("failed");
   }
 
   if (flow.native?.purpose === "operator" && callback) {
-    if (!mobileConsoleEnabled()) return fail("mobile_console_off");
+    if (!await mobileConsoleEnabled()) return fail("mobile_console_off");
     // A session the provider already had for this browser doesn't enrol a phone: the sign-in must be new.
     if (authenticatedAt === null || Math.abs(Date.now() / 1000 - authenticatedAt) > FRESH_SECONDS) return fail("not_fresh");
     // Null for anyone the provider doesn't mark as an operator: no code, so no session.
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (flow.native && callback) {
-    if (!mobileEnabled()) return fail("mobile_off");
+    if (!await mobileEnabled()) return fail("mobile_off");
     const { builderKey } = createSession(identity);
     const handoff = await devices().issueCode({
       // A device session never does operator work, whoever signs in. It records the role only so the app knows

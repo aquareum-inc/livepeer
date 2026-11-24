@@ -22,7 +22,16 @@ package is not loaded. One origin and one session keep self-hosting to a single 
 ## Instance config
 
 `instance.config.json`, validated against `packages/config/schema/instance.schema.json` (TypeScript types
-generated from the schema). Environment variables hold secrets and the engine URL only.
+generated from the schema). Environment variables hold secrets and the engine URL only, or the whole config
+as `INSTANCE_CONFIG_JSON` on a host with no file to mount.
+
+That is the config the instance is deployed with, and the app never writes it. What the console changes is
+state laid over it (`apps/web/lib/instance-overrides.ts`): the Settings page's fields as one document, and a
+row per capability, in Postgres or in `DATA_DIR/instance-settings.json`. `instance()` is asynchronous and
+answers with the two together, validated; a saved layer that no longer validates is left out and the page
+says so. One process trusts what it read for 10 seconds, so a change saved on one server reaches the others
+within that. Sign-in, the phone apps named, the engine and whether there is a console at all can only be
+changed where the instance is deployed.
 
 ```
 name, logo { symbol, wordmark, tint }, theme { tokens... }            branding

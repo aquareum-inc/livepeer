@@ -11,7 +11,7 @@ import { moderation } from "@/lib/moderation";
 export const metadata: Metadata = { title: "Characters" };
 
 export default async function CharactersPage() {
-  if (!charactersEnabled()) notFound();
+  if (!await charactersEnabled()) notFound();
   const client = await api();
   const session = await getSession();
   const signedIn = session !== null;

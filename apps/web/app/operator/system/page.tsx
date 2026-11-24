@@ -14,7 +14,7 @@ import { pushSetup } from "@/lib/push";
 
 /** Whether alerts can be sent to each kind of phone, and whether Apple or Google last refused the instance's credentials. */
 async function alertConnections(): Promise<Array<{ to: string; detail: string }>> {
-  const setup = pushSetup();
+  const setup = await pushSetup();
   const refused = await alerts().refusals();
   return ([["ios", "iPhone"], ["android", "Android"]] as const).map(([platform, to]) => {
     const refusal = refused[platform];
@@ -51,9 +51,9 @@ export default async function SystemPage() {
       checks={await runDoctor()}
       dataSources={dataSources}
       sources={[{ name: "getEngineHealth", source: healthSource }]}
-      phones={{ phones: await operatorDevices().list(), offered: mobileConsoleEnabled(), revoke: revokeOperatorPhoneAction, revokeAll: revokeAllOperatorPhonesAction }}
+      phones={{ phones: await operatorDevices().list(), offered: await mobileConsoleEnabled(), revoke: revokeOperatorPhoneAction, revokeAll: revokeAllOperatorPhonesAction }}
       phoneActivity={await operatorAudit().list(200)}
-      alerts={mobileConsoleEnabled() ? await alertConnections() : null}
+      alerts={await mobileConsoleEnabled() ? await alertConnections() : null}
     />
   );
 }

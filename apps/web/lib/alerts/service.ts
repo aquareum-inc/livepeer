@@ -84,11 +84,11 @@ export interface AlertsDependencies {
   store: AlertsStore;
   sessions: () => OperatorDeviceSessions;
   audit: () => AuditLog;
-  sender: () => PushSender;
+  sender: () => Promise<PushSender>;
   /** Whether the instance offers the console on phones. While it doesn't, nothing is sent. */
-  enabled: () => boolean;
+  enabled: () => Promise<boolean>;
   /** The instance's name: every notification's title. */
-  name: () => string;
+  name: () => Promise<string>;
   now?: () => number;
 }
 
@@ -114,7 +114,7 @@ export function alertsService({ store, sessions, audit, sender, enabled, name, n
 
   /** Sends one notification to one phone and deals with the answer. True when Apple or Google took it. */
   const send = async (target: AlertTarget, notification: PushNotification, what: string): Promise<boolean> => {
-    const result = await sender()
+    const result = await (await sender())
       .send({ platform: target.platform, token: target.pushToken, environment: target.environment }, notification)
       .catch(() => ({ outcome: "failed" as const, detail: "unreachable" }));
     const actor = { userId: target.userId, name: target.name, deviceId: target.sessionId, deviceName: target.deviceName };
@@ -130,16 +130,18 @@ export function alertsService({ store, sessions, audit, sender, enabled, name, n
     // A phone on a platform the instance holds no credentials for is left out: there is nothing to try, and a
     // line in the audit log for each alert would bury the ones that matter. System and the phone's own Alerts
     // page already say that platform isn't set up.
-    const offered = targets.filter((target) => sender().offers(target.platform));
+    const pushes = await sender();
+    const offered = targets.filter((target) => pushes.offers(target.platform));
     const reached = (await Promise.all(offered.map(async (target) => ((await send(target, notification(target), what)) ? target.sessionId : null)))).filter((id): id is string => id !== null);
     await sessions().alerted(reached);
     return reached;
   };
 
   const deliver = async (alert: Alert, told: string[]): Promise<void> => {
-    if (!enabled()) return;
+    if (!(await enabled())) return;
     const targets = await sessions().alertTargets(alert.kind === "phone_added" ? null : alert.kind, { ...(alert.except ? { except: alert.except } : {}), ...(alert.over ? { only: told } : {}) });
-    const reached = await sendAll(targets, () => alertNotification(name(), alert), alert.over ? `${alert.kind}, over` : alert.kind);
+    const title = await name();
+    const reached = await sendAll(targets, () => alertNotification(title, alert), alert.over ? `${alert.kind}, over` : alert.kind);
     if (alert.kind !== "engine_not_ready") return;
     // "Ready again" goes only to the phones that were told it wasn't.
     await store.setEngineTold(alert.over ? [] : reached);
@@ -147,7 +149,7 @@ export function alertsService({ store, sessions, audit, sender, enabled, name, n
 
   const observe = async (observation: Observation): Promise<void> => {
     // With the console off on phones nothing is noticed, so nothing is used up before it is switched back on.
-    if (!enabled()) return;
+    if (!(await enabled())) return;
     const step = await store.advance((state) => {
       const next = decide(state, observation, now());
       return { state: next.state, result: { alerts: next.alerts, told: state.engine.told } };
@@ -162,7 +164,7 @@ export function alertsService({ store, sessions, audit, sender, enabled, name, n
   };
 
   return {
-    offered: (platform) => sender().offers(platform),
+    offered: async (platform) => (await sender()).offers(platform),
     accepts: validPushToken,
     reportFiled: (waiting) => background(observe({ type: "report_filed", waiting })),
     phoneAdded: (sessionId) => background(observe({ type: "phone_added", sessionId })),
@@ -171,21 +173,23 @@ export function alertsService({ store, sessions, audit, sender, enabled, name, n
       const alerts = sessions().alerts(session);
       if (alerts.state === "off") return "off";
       const [target] = await sessions().alertTargets(null, { only: [session.id] });
-      if (!enabled() || !target) return "not_delivered";
+      if (!(await enabled()) || !target) return "not_delivered";
+      const title = await name();
       // Every test sent, or tried, is in the audit log, so the log is the count: no process has to remember it.
       if ((await audit().alertsSince(session.id, TEST, now() - 3600_000)) >= TESTS_PER_HOUR) return "limited";
-      return (await sendAll([target], () => testNotification(name()), TEST)).length > 0 ? "sent" : "not_delivered";
+      return (await sendAll([target], () => testNotification(title), TEST)).length > 0 ? "sent" : "not_delivered";
     },
 
     observe,
 
     async endings() {
-      if (!enabled()) return;
+      if (!(await enabled())) return;
       const { warn, ended } = await sessions().alertEndings();
       const days = new Map(warn.map((target) => [target.sessionId, target.daysLeft]));
-      await sendAll(warn, (target) => endingNotification(name(), days.get(target.sessionId) ?? 1), "alerts end soon");
+      const title = await name();
+      await sendAll(warn, (target) => endingNotification(title, days.get(target.sessionId) ?? 1), "alerts end soon");
       // Not `sendAll`: these sessions are over, and there is nothing left to note on them.
-      await Promise.all(ended.map((target) => send(target, endingNotification(name(), null), "alerts ended with the session")));
+      await Promise.all(ended.map((target) => send(target, endingNotification(title, null), "alerts ended with the session")));
     },
 
     lease: (holder) => store.lease(holder, { now: now(), until: now() + LEASE_MS }),

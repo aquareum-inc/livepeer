@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: { default: "Operator console", templa
 export const dynamic = "force-dynamic";
 
 export default async function OperatorLayout({ children }: { children: ReactNode }) {
-  const config = instance();
+  const config = await instance();
   const { surfaces } = config;
   if (!surfaces.console) notFound();
   const session = await getSession();

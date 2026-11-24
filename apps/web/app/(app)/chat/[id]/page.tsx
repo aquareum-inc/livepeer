@@ -21,11 +21,11 @@ export default async function ChatPage({ params }: Props) {
   const client = await api();
   const [conversation, offerings, agentModels] = await Promise.all([client.getConversation(id), client.listOfferings(), client.listAgentModels()]);
   if (!conversation.data) notFound();
-  const offered = composerOfferings(offerings.data);
+  const offered = await composerOfferings(offerings.data);
   const models = await appModels(offered);
   return (
     <>
-      <Chat conversation={conversation.data} offerings={offered} agentModels={agentModels.data} models={models.data} characters={charactersEnabled()} />
+      <Chat conversation={conversation.data} offerings={offered} agentModels={agentModels.data} models={models.data} characters={await charactersEnabled()} />
       {isDev ? (
         <DataSourceBadge
           sources={[

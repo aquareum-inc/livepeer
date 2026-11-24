@@ -117,7 +117,9 @@ in `apps/web/lib/public-api/operations.ts`.
 | Operator · Grants | List, create, add funding | `provider.budgets.listGrants`, `createGrant`, `fundGrant` | iOS and Android stage 2, read only: More ▸ Grants reads `operator_list_grants`. Creating and funding stay on the web |
 | Operator · Plans (phone) | See the provider's plans as users are offered them | `operator_list_plans` (`provider.plans.listPlans`) | iOS and Android stage 2, read only: More ▸ Plans |
 | Operator · Reports (phone) | See the queue; keep a character up or take it down | `operator_list_reports`, `operator_resolve_report` (a proof from the phone each time) | iOS and Android: Reports, with a count on its tab; a report's page; Keep it up or Take it down in a tray, confirmed with a face or fingerprint |
-| Operator · Settings | Switch the console on phones on or off | `saveInstanceSettingsAction` (`surfaces.mobileConsole` in the instance config) | Not on mobile |
+| Operator · Settings | Switch the console on phones on or off | `saveInstanceSettingsAction` (`surfaces.mobileConsole`, kept by the instance over its deployed config) | Not on mobile |
+| Operator · Settings | Reset the page to the deployed config | `resetInstanceSettingsAction` (forgets what the page saved; `apps/web/lib/operator/settings.ts`) | Not on mobile |
+| Operator · Capabilities | Reset every capability to the deployed config | `resetCapabilitySettings` (`operator_reset_capabilities`; on the web `resetCapabilitiesAction`) | Not on mobile: web only, like every change to capabilities |
 | Operator · System | See the phones enrolled for the console, and whether alerts reach each (on, off, not reaching, or signed out with alerts until a date) | `operator_list_devices` (`operatorDevices().list()`) | Not on mobile |
 | Operator · System | Revoke one operator phone, or all of them | `operator_revoke_device`, `operator_revoke_all_devices`; on the web `revokeOperatorPhoneAction`, `revokeAllOperatorPhonesAction` | Not on mobile |
 | Operator · System | Read what operators' phones did and were refused, and each alert sent to one | `operator_list_audit` (`operatorAudit().list()`) | Not on mobile |

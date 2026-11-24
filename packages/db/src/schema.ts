@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { bigint, boolean, doublePrecision, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 /**
  * The instance's tables, as Drizzle definitions. This file is the source of the row types and of every
@@ -181,4 +181,27 @@ export const characterBlocks = pgTable(
 export const hiddenCharacters = pgTable("hidden_characters", {
   characterSlug: text("character_slug").primaryKey(),
   hiddenAt: time("hidden_at").notNull().defaultNow(),
+});
+
+/**
+ * What the console's Settings page last saved, laid over the config the instance was deployed with. One row.
+ * It is a document on purpose: it is validated whole against the config's schema, read whole and written
+ * whole, and never searched by field.
+ */
+export const instanceSettings = pgTable("instance_settings", {
+  /** Always "instance": there is one. */
+  id: text("id").primaryKey(),
+  settings: jsonb("settings").notNull(),
+  updatedAt: time("updated_at").notNull().defaultNow(),
+});
+
+/** One capability's settings as the console last saved them, in place of what the config says of it. */
+export const capabilitySettings = pgTable("capability_settings", {
+  app: text("app").primaryKey(),
+  enabled: boolean("enabled").notNull(),
+  /** Null for no markup of its own: the instance's default applies. */
+  markup: doublePrecision("markup"),
+  /** Null to appear wherever it does by default. */
+  surfaces: text("surfaces").array(),
+  updatedAt: time("updated_at").notNull().defaultNow(),
 });

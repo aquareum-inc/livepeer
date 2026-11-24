@@ -1,7 +1,7 @@
 # A Postgres database for the instance: plan
 
-Status: **approved on 24 November 2026 with every recommendation in section 0 as written. Slices 1 to 4 are
-built; slices 5 to 8 are not.** What slice 1 changed from the plan is listed under the slices table in section 10.
+Status: **approved on 24 November 2026 with every recommendation in section 0 as written. Slices 1 to 5 are
+built; slices 6 to 8 are not.** What slice 1 changed from the plan is listed under the slices table in section 10.
 
 The instance keeps its own state as JSON files in `DATA_DIR`, and the operator console writes
 `instance.config.json` to disk. That ties an instance to a host with a persistent disk and one server
@@ -506,6 +506,25 @@ challenge is made, through a `sweep` method on each store, until the alerts roun
 `hidden_characters` (migration `0002_moderation`). One difference from section 2: `reporter_id` is nullable.
 A deleted account's reports keep no sender, and two such reports of one character would otherwise break the
 "one open report per person per character" index; the file store's `"deleted"` marker is `NULL` here.
+
+**Slice 5 as built (24 November 2026).** Tables `instance_settings` and `capability_settings` (migration
+`0003_settings`); `INSTANCE_CONFIG_JSON`; `instance()` asynchronous. Differences from sections 2 and 5:
+
+- `instance_settings` has no `version` column: nothing needed one.
+- A `capability_settings` row is that capability's settings in full (offered, markup, where it appears), in
+  place of what the deployed config says of it, so its columns need no "not set" state.
+- There is no `React.cache()`. The per-process cache already answers every call after the first in a request
+  from memory, and it works the same in the proxy and in route handlers, where `cache()` does nothing.
+- If the database can't be asked, a process keeps serving on what it last read. With nothing read yet the
+  request fails, and `/api/health` answers 503: serving the deployed config alone could switch back on a
+  surface an operator switched off.
+- Reset is two actions, one per page. Capabilities' is the operation `operator_reset_capabilities`
+  (`resetCapabilitySettings` in the API client), beside `operator_set_capability`. The Settings page's is a
+  server action beside the one that saves it; neither has ever been an `/api/v1` operation, so the operator
+  API token still can't change an instance's surfaces or sign-up.
+- The type checker does not report a forgotten `await` inside `!…`, so every call of a function this slice
+  made asynchronous was checked by script as well. Worth a lint rule (`no-floating-promises`,
+  `no-misused-promises`) before the next change of this kind; the repo has no linter today.
 
 **Found while testing the bundle, and fixed.** The bundle's `.env` carries `DATA_DIR=` empty, and Compose
 passed that to the app in place of the image's own `DATA_DIR=/data`. The app then tried to write its JSON

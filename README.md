@@ -120,6 +120,10 @@ fails when the generated files are out of date.
 
 ## Instance config and presets
 
+What the console's Settings and Capabilities pages change is kept by the instance itself, laid over this
+config; the config is never written by the app, and "Reset to deployed config" on either page goes back to
+it. On a host with no file to mount, give the config itself in `INSTANCE_CONFIG_JSON`.
+
 An instance is one file, `instance.config.json`, validated against
 [`packages/config/schema/instance.schema.json`](packages/config/schema/instance.schema.json), plus
 environment variables for secrets (see [.env.example](.env.example)). It covers the name, logo and colours,

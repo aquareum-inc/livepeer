@@ -1,7 +1,7 @@
 "use client";
 
 import type { CapabilitySetting, DataSource, Offering } from "@livepeer/api-client";
-import { Badge, Input, Switch } from "@livepeer/ui";
+import { Badge, Button, Input, Sheet, Switch } from "@livepeer/ui";
 import { useState } from "react";
 
 import { label } from "../components/format";
@@ -24,6 +24,12 @@ export interface CapabilitiesViewProps {
   sources: ReadonlyArray<{ name: string; source: DataSource }>;
   /** False when neither the user app nor the phone apps are on, so nothing shows a capability on a surface. */
   placing: boolean;
+  /** Whether anything has been set here over the config the instance was deployed with. */
+  overridden: boolean;
+  /** What was set here no longer makes a valid config, so the instance is running without it. */
+  ignored: boolean;
+  /** Forgets everything set here, and answers with the capabilities as the instance was deployed with them. */
+  reset: () => Promise<CapabilityRow[]>;
 }
 
 const SURFACES = ["chat", "studio", "characters", "library", "live"];
@@ -36,9 +42,26 @@ function wholesale(offering: Offering): string {
   return `$${amount < 0.01 ? amount.toPrecision(1) : amount.toFixed(2)}${perSecond ? "/hr" : ""}`;
 }
 
-export function CapabilitiesView({ rows: initial, defaultMarkup, update, sources, placing }: CapabilitiesViewProps) {
+export function CapabilitiesView({ rows: initial, defaultMarkup, update, sources, placing, overridden, ignored, reset }: CapabilitiesViewProps) {
   const [rows, setRows] = useState(initial);
   const [failed, setFailed] = useState<string | null>(null);
+  // Whether there is anything set here to forget, and whether what was set is being left out.
+  const [kept, setKept] = useState({ saved: overridden, ignored });
+  const [resetting, setResetting] = useState(false);
+  // Markup fields hold what was typed; a reset has to draw them again from what came back.
+  const [drawn, setDrawn] = useState(0);
+
+  const forget = async () => {
+    setResetting(false);
+    setFailed(null);
+    try {
+      setRows(await reset());
+      setKept({ saved: false, ignored: false });
+      setDrawn((count) => count + 1);
+    } catch {
+      setFailed("every capability");
+    }
+  };
 
   const save = async (app: string, patch: Partial<Omit<CapabilitySetting, "app">>) => {
     const previous = rows;
@@ -47,6 +70,7 @@ export function CapabilitiesView({ rows: initial, defaultMarkup, update, sources
     try {
       const setting = await update(app, patch);
       setRows((current) => current.map((row) => (row.offering.app === app ? { ...row, setting } : row)));
+      setKept({ saved: true, ignored: false });
     } catch {
       setRows(previous);
       setFailed(app);
@@ -54,8 +78,14 @@ export function CapabilitiesView({ rows: initial, defaultMarkup, update, sources
   };
 
   return (
-    <ConsolePage title="Capabilities" description="Everything discovery returns from the network. Choose what this instance offers, what it charges and where each one appears." sources={sources} note="Discovery is live. Markups save to instance.config.json, which users are charged from. Whether a capability is offered and where it appears are held in memory for now; allow and block rules come from instance.config.json. Routing preferences need the engine to accept a routing constraint.">
+    <ConsolePage title="Capabilities" description="Everything discovery returns from the network. Choose what this instance offers, what it charges and where each one appears." sources={sources} actions={kept.saved ? <Button variant="ghost" onClick={() => setResetting(true)}>Reset to deployed config</Button> : null} note="Discovery is live. What you set here is kept by this instance over the config it was deployed with, and is what users are served and charged from; a change applies everywhere within 10 seconds. Allow and block rules come from the deployed config. Routing preferences need the engine to accept a routing constraint.">
       {failed ? <p role="alert" className="mb-3 text-[13px] text-destructive">The change to {failed} didn't save.</p> : null}
+      {kept.ignored ? (
+        <div role="status" className="mb-3 flex items-start gap-3 rounded-card border border-hairline bg-card px-4 py-3 text-[13px]">
+          <Badge tone="warn" className="shrink-0 whitespace-nowrap">Not applied</Badge>
+          <p className="text-muted-foreground">What was set here no longer makes a valid config in this version, so capabilities are as the instance was deployed with them. Change one to replace it, or reset.</p>
+        </div>
+      ) : null}
       {rows.length === 0 ? (
         <div className="rounded-card border border-dashed border-input px-6 py-12 text-center text-[13px] text-muted-foreground">
           Discovery returned nothing. Check the engine's discovery status on the System page.
@@ -78,7 +108,7 @@ export function CapabilitiesView({ rows: initial, defaultMarkup, update, sources
               {rows.map(({ offering, kind, surfaces, allowed, setting }) => {
                 const shown = setting.surfaces ?? surfaces;
                 return (
-                  <tr key={`${offering.app}:${offering.rate_low?.unit ?? ""}`} className="transition-colors duration-150 hover:bg-hover">
+                  <tr key={`${offering.app}:${offering.rate_low?.unit ?? ""}:${drawn}`} className="transition-colors duration-150 hover:bg-hover">
                     <td className="py-2 pl-4 pr-3">
                       <p className="flex flex-wrap items-center gap-1.5 font-medium">
                         {label(offering.app)}
@@ -132,6 +162,12 @@ export function CapabilitiesView({ rows: initial, defaultMarkup, update, sources
           </table>
         </div>
       )}
+      <Sheet open={resetting} onOpenChange={setResetting} title="Reset capabilities to the deployed config?" description="Every capability goes back to how the instance was deployed with it, within 10 seconds: what you switched off is offered again, and your markups and placements are forgotten. That changes what people can use and what they are charged.">
+        <div className="flex gap-2">
+          <Button className="flex-1" onClick={() => setResetting(false)}>Keep what's set</Button>
+          <Button variant="destructive" className="flex-1" onClick={() => void forget()}>Reset</Button>
+        </div>
+      </Sheet>
     </ConsolePage>
   );
 }

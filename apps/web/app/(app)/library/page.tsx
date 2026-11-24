@@ -17,7 +17,7 @@ export default async function LibraryPage() {
   const signedIn = (await getSession()) !== null;
   const [media, offerings] = await Promise.all([signedIn ? client.listMedia() : null, client.listOfferings()]);
   // Media tools run from their model page, which lives in the Developers section.
-  const actions = developerTabs(instance().surfaces).includes("/developers/models") ? mediaActions(offerings.data) : [];
+  const actions = developerTabs((await instance()).surfaces).includes("/developers/models") ? await mediaActions(offerings.data) : [];
   return (
     <>
       <Library items={media?.data ?? []} actions={actions} />

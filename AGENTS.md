@@ -54,6 +54,10 @@ carries a `fix`.
 - Connect a real engine: set `ENGINE_URL`, `ENGINE_READER_TOKEN` (an auditor key) and `ENGINE_ADMIN_TOKEN`
   (an admin key) in `.env`, then run `./livepeer setup` again. `MOCK_ONLY` is cleared automatically.
 - Restart after editing either file: `./livepeer setup`.
+- The console's Settings and Capabilities pages never write the config file. What they save is kept by the
+  instance (in its database) and laid over the file; `DELETE /api/v1/operator/capabilities`
+  (`operator_reset_capabilities`) forgets every capability change. A field the console has saved wins over
+  the same field in the file until it is reset there.
 
 ## Upgrade
 

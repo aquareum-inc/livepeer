@@ -20,7 +20,7 @@ export function alerts(): Alerts {
     audit: operatorAudit,
     sender: pushSender,
     enabled: mobileConsoleEnabled,
-    name: () => instance().name,
+    name: async () => (await instance()).name,
   });
   return built;
 }

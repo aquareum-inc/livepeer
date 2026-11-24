@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function CharacterPage({ params }: Props) {
-  if (!charactersEnabled()) notFound();
+  if (!await charactersEnabled()) notFound();
   const client = await api();
   const character = await client.getCharacter((await params).slug);
   if (!character.data) notFound();
@@ -27,7 +27,7 @@ export default async function CharacterPage({ params }: Props) {
   if (!(await moderation().visible(session?.userId ?? null))(character.data)) notFound();
   return (
     <>
-      <CharacterDetail character={character.data} signedIn={session !== null} instanceName={instance().name} />
+      <CharacterDetail character={character.data} signedIn={session !== null} instanceName={(await instance()).name} />
       {isDev ? <DataSourceBadge sources={[{ name: "getCharacter", source: character.source }]} /> : null}
     </>
   );

@@ -33,7 +33,7 @@ export interface DeviceAccess {
 /** The instance's alerts to operators' phones, as the operations use them. */
 export interface AlertsAccess {
   /** Whether the instance can send to a platform at all: it holds that platform's push credentials. */
-  offered(platform: "ios" | "android"): boolean;
+  offered(platform: "ios" | "android"): Promise<boolean>;
   /** Whether a push token looks like one of that platform's. */
   accepts(platform: "ios" | "android", pushToken: string): boolean;
   /** A new report was filed, and this many are waiting now. Phones are told without holding up the answer. */
@@ -72,7 +72,7 @@ export interface Context {
   /** The studio's mediums and modes, as the interface shows them. */
   studioMediums: () => Promise<StudioMedium[]>;
   /** Who can see a job on this instance, in the words every surface uses. */
-  privacy: () => PrivacyDescription;
+  privacy: () => Promise<PrivacyDescription>;
   /** What one result of a draft would cost, in credits, as the web's studio quotes it. */
   quote: (request: GenerationRequest) => number;
 }
@@ -158,8 +158,8 @@ export const ALERT_CHOICES: ReadonlyArray<{ kind: OperatorAlertKind; label: stri
 ];
 
 /** A phone's alerts as its Alerts page reads them. It never holds the push token. */
-const alertsOf = (context: Context, session: OperatorDeviceRecord, state: PhoneAlertState): OperatorAlerts => ({
-  offered: context.alerts.offered(session.platform),
+const alertsOf = async (context: Context, session: OperatorDeviceRecord, state: PhoneAlertState): Promise<OperatorAlerts> => ({
+  offered: await context.alerts.offered(session.platform),
   state: state.state,
   kinds: ALERT_CHOICES.map((choice) => ({ ...choice, on: state.kinds.includes(choice.kind) })),
   until: state.until,
@@ -726,6 +726,7 @@ export const OPERATIONS: Operation[] = [
   { name: "operator_list_plans", description: "Operator: the provider's plans and allowances.", method: "GET", path: "/operator/plans", output: ["Plan"], input: object({}), operator: true, mobile: "read", run: async (context) => operator(context).provider.plans.listPlans() },
   { name: "operator_list_keys", description: "Operator: engine access keys.", method: "GET", path: "/operator/keys", input: object({}), operator: true, run: async (context) => (await operator(context).listAccessKeys()).data },
   { name: "operator_set_capability", description: "Operator: enable or disable a capability, set its markup or the surfaces it appears in.", method: "PATCH", path: "/operator/capabilities", input: object({ app: text("Capability name"), enabled: { type: "boolean" }, markup: { type: ["number", "null"] }, surfaces: { type: ["array", "null"], items: { type: "string" } } }, ["app"]), operator: true, run: async (context, input) => (await operator(context).updateCapabilitySetting(str(input, "app"), { ...(typeof input.enabled === "boolean" ? { enabled: input.enabled } : {}), ...(input.markup === null || typeof input.markup === "number" ? { markup: input.markup } : {}), ...(input.surfaces === null || Array.isArray(input.surfaces) ? { surfaces: input.surfaces === null ? null : input.surfaces.map(String) } : {}) })).data },
+  { name: "operator_reset_capabilities", description: "Operator: put every capability back as this instance was deployed with it, forgetting what was enabled, disabled, priced or placed since.", method: "DELETE", path: "/operator/capabilities", output: "Deleted", input: object({}), operator: true, run: async (context) => ({ deleted: (await operator(context).resetCapabilitySettings()).data }) },
   { name: "operator_list_compute", description: "Operator: the compute operators that ran this instance's recent jobs, with their runners, failures and median response time.", method: "GET", path: "/operator/compute", output: ["ComputeOperator"], input: object({}), operator: true, mobile: "read", run: async (context) => (await operator(context).listComputeOperators()).data },
   {
     name: "operator_list_capabilities",
@@ -787,7 +788,7 @@ export const OPERATIONS: Operation[] = [
       const kinds = ALERT_CHOICES.map((choice) => choice.kind).filter((kind) => asked?.includes(kind));
       if (!asked || kinds.length !== asked.length) throw new ApiError(400, `kinds is a list of ${ALERT_CHOICES.map((choice) => choice.kind).join(", ")}, each once.`);
       if (kinds.length === 0) return alertsOf(context, session, await context.operatorDevices.setAlerts(session, { kinds: [], pushToken: null, environment: "production" }));
-      if (!context.alerts.offered(session.platform)) throw new ApiError(409, "This service hasn't set up alerts for this kind of phone.", "alerts_not_offered");
+      if (!await context.alerts.offered(session.platform)) throw new ApiError(409, "This service hasn't set up alerts for this kind of phone.", "alerts_not_offered");
       const pushToken = str(input, "push_token");
       if (!context.alerts.accepts(session.platform, pushToken)) throw new ApiError(400, "push_token isn't an address Apple or Google gives a phone.");
       const environment = session.platform === "ios" && input.environment === "development" ? "development" : "production";

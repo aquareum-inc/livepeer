@@ -10,7 +10,7 @@ import { isDev } from "@/lib/env";
 export const metadata: Metadata = { title: "Examples" };
 
 export default async function ExamplesPage() {
-  const { surfaces } = instance();
+  const { surfaces } = await instance();
   // API code: served only with the API on. The proxy checks this too.
   if (!surfaces.api) notFound();
   const examples = await (await api()).listExampleApps();

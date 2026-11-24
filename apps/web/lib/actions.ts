@@ -174,7 +174,7 @@ export async function listMediaAction(): Promise<MediaItem[]> {
 /** The characters a user can put in a video: their own first, then public ones, mature only if shown. */
 export async function listCastableCharactersAction(): Promise<Character[]> {
   const api = await client();
-  if (!charactersEnabled()) return [];
+  if (!await charactersEnabled()) return [];
   const { shown } = await adultContent(api);
   const [mine, shared] = await Promise.all([
     api.listCharacters({ scope: "mine", includeMature: shown }),
