@@ -250,7 +250,35 @@ describe("operator device sessions", () => {
     expect(ids((await sessions.newPhones(sam.userId)).announced)).toEqual([second.device.id]);
     expect(await sessions.newPhones(rae)).toMatchObject({ announced: [{ id: second.device.id }], dismissed: [] });
     clock.now += 3_600_000;
-    expect(await sessions.newPhones(sam.userId)).toEqual({ announced: [], dismissed: [] });
+    expect(await sessions.newPhones(sam.userId)).toEqual({ announced: [], dismissed: [], marked: [] });
+  });
+
+  it("marks System for an operator from when they close the notice until they open System, and for nobody else", async () => {
+    const { sessions, issued, clock, enrol } = await enrolled();
+    const rae = "usr_demo_rae";
+    const ids = (phones: Array<{ id: string }>) => phones.map((phone) => phone.id);
+    // Not closed yet: the notice itself is showing, so there is nothing to mark.
+    expect((await sessions.newPhones(rae)).marked).toEqual([]);
+    await sessions.seeNewPhones(rae);
+
+    await sessions.dismissNewPhones(rae, [issued.device.id]);
+    await sessions.dismissNewPhones(sam.userId, [issued.device.id]);
+    expect(ids((await sessions.newPhones(rae)).marked)).toEqual([issued.device.id]);
+
+    // Rae opens System. Her mark goes; the phone is still one she closed the notice for, and still new.
+    await sessions.seeNewPhones(rae);
+    expect(await sessions.newPhones(rae)).toMatchObject({ announced: [], dismissed: [{ id: issued.device.id }], marked: [] });
+    // Sam hasn't opened System, so his mark stays.
+    expect(ids((await sessions.newPhones(sam.userId)).marked)).toEqual([issued.device.id]);
+
+    // A phone added later is announced, closed and marked afresh; the first stays seen.
+    clock.now += 3_600_000;
+    const second = (await enrol(testPhone().rawPublicKey))!;
+    await sessions.dismissNewPhones(rae, [second.device.id]);
+    expect(ids((await sessions.newPhones(rae)).marked)).toEqual([second.device.id]);
+    await sessions.seeNewPhones(rae);
+    await sessions.seeNewPhones(rae);
+    expect((await sessions.newPhones(rae)).marked).toEqual([]);
   });
 
   it("forgets a closed notice when the phone is revoked, and keeps it by ids alone", async () => {
@@ -260,7 +288,7 @@ describe("operator device sessions", () => {
     expect(JSON.stringify(await rowsOf("operator_phone_notice_dismissals"))).not.toMatch(/Sam Whitfield|sam@example\.test/);
     await sessions.revoke(issued.device.id, { userId: "usr_demo_rae", name: "Rae Lindqvist", deviceId: null, deviceName: null });
     expect(await rowsOf("operator_phone_notice_dismissals")).toEqual([]);
-    expect(await sessions.newPhones(sam.userId)).toEqual({ announced: [], dismissed: [] });
+    expect(await sessions.newPhones(sam.userId)).toEqual({ announced: [], dismissed: [], marked: [] });
   });
 
   it("lets a phone sign itself out, which ends that session only", async () => {

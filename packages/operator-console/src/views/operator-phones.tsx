@@ -1,8 +1,8 @@
 "use client";
 
 import type { OperatorPhone } from "@livepeer/api-client";
-import { Button, Sheet } from "@livepeer/ui";
-import { useState } from "react";
+import { Badge, Button, Sheet } from "@livepeer/ui";
+import { useEffect, useState } from "react";
 
 import { ago, dateTime, day } from "../components/format";
 import { Panel, Status } from "../components/parts";
@@ -10,6 +10,12 @@ import { Table } from "../components/table";
 
 export interface OperatorPhonesProps {
   phones: OperatorPhone[];
+  /** The ids of the phones added in the last two days, which the list tags as new. */
+  added: readonly string[];
+  /** How many of those the sidebar still marks on System for this operator. */
+  unseen: number;
+  /** Tells the instance this operator has the list in front of them, so the mark on System can go. */
+  seen: () => Promise<void>;
   /** Whether the instance offers the console on phones at all. */
   offered: boolean;
   /** Each answers with the phones still enrolled. */
@@ -43,7 +49,12 @@ function alertsInWords(phone: OperatorPhone): string | null {
 }
 
 /** The phones enrolled for the console. Listing and revoking them is done here on the web, never from a phone. */
-export function OperatorPhonesPanel({ phones: initial, offered, revoke, revokeAll }: OperatorPhonesProps) {
+export function OperatorPhonesPanel({ phones: initial, added, unseen, seen, offered, revoke, revokeAll }: OperatorPhonesProps) {
+  // With the list on screen the operator has what System's mark was pointing at, so the mark is taken away.
+  // It runs when the page is really open, and again if a notice is closed while it is.
+  useEffect(() => {
+    if (unseen > 0) void seen().catch(() => undefined);
+  }, [unseen, seen]);
   const [phones, setPhones] = useState(initial);
   const [asking, setAsking] = useState<OperatorPhone | "all" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -81,7 +92,10 @@ export function OperatorPhonesPanel({ phones: initial, offered, revoke, revokeAl
               header: "Phone",
               cell: (phone) => (
                 <span className="flex flex-col">
-                  <span className="font-medium">{phone.name}</span>
+                  <span className="flex items-center gap-1.5 font-medium">
+                    {phone.name}
+                    {added.includes(phone.id) ? <Badge>New</Badge> : null}
+                  </span>
                   <span className="font-mono text-[11px] text-subtle-foreground">
                     {PLATFORM[phone.platform]}
                     {alertsInWords(phone) ? <span className={phone.alerts === "not_reaching" ? "text-destructive md:hidden" : "md:hidden"}> · {alertsInWords(phone)}</span> : null}

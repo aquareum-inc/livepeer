@@ -122,6 +122,10 @@ export interface OperatorDeviceStore {
   dismissNotice(userId: string, sessionIds: readonly string[], at: string): Promise<void>;
   /** The sessions whose notice this operator has closed. */
   noticesDismissedBy(userId: string): Promise<string[]>;
+  /** Of those, the ones this operator hasn't looked at on System since closing the notice. */
+  noticesUnseenBy(userId: string): Promise<string[]>;
+  /** Notes that this operator has now seen every phone whose notice they closed. */
+  markNoticesSeen(userId: string, at: string): Promise<void>;
   /** Drops sign-ins nobody collected and nonces nobody signed by `now`. */
   sweep(now: number): Promise<void>;
 }

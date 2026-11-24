@@ -145,7 +145,7 @@ provider's opaque ids.
 | `operator_sign_in_codes` | `code_hash`, `challenge`, `platform`, `user_id`, `identity_sealed`, `expires_at` | PK `code_hash` |
 | `operator_challenges` | `nonce_hash`, `session_id`, `operation` null, `input_hash` null, `expires_at` | PK `nonce_hash`; FK `session_id` → sessions, cascade; index `session_id` |
 | `operator_push_tokens` | `session_id`, `kinds` text[], `push_sealed` null, `push_hash`, `environment`, `set_at`, `last_alert_at` null, `warned_at` null, `told_engine_down` bool | PK and FK `session_id` → sessions, cascade; unique `push_hash` |
-| `operator_phone_notice_dismissals` | `user_id`, `session_id`, `dismissed_at` | PK (`user_id`, `session_id`); FK `session_id` → sessions, cascade; index `session_id` |
+| `operator_phone_notice_dismissals` | `user_id`, `session_id`, `dismissed_at`, `seen_at` null | PK (`user_id`, `session_id`); FK `session_id` → sessions, cascade; index `session_id` |
 | `operator_audit` | `id`, `at`, `event`, `user_id`, `actor_sealed` (D1), `device_id` null, `device_name` null, `operation` null, `target` null, `detail` null | PK `id`; index `at` desc |
 
 Users' and operators' sessions stay in separate tables on purpose: the code's rule is that neither can stand
@@ -590,4 +590,5 @@ Slices 3, 4 and 6 are independent of each other once 2 is in; 5 is independent o
 
 **After the slices (24 November 2026).** `operator_phone_notice_dismissals` (migration
 `0005_phone_notice_dismissals`): which operator closed the web console's new-phone notice for which phone.
-Ids only, and a row goes with its session.
+Ids only, and a row goes with its session. `0006_phone_notice_seen` adds `seen_at`: when that operator next
+opened System, which is when the dot on System goes for them.

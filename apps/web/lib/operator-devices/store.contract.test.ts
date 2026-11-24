@@ -267,9 +267,19 @@ describe.each(implementations)("the operator device store over %s", (_kind, open
     if (opened.db) {
       const rows = await opened.db.select().from(schema.operatorPhoneNoticeDismissals);
       expect(rows).toHaveLength(3);
-      expect(rows.find((row) => row.userId === "usr_rae")).toEqual({ userId: "usr_rae", sessionId: "opd_1", dismissedAt: new Date(at(1000)) });
+      expect(rows.find((row) => row.userId === "usr_rae")).toEqual({ userId: "usr_rae", sessionId: "opd_1", dismissedAt: new Date(at(1000)), seenAt: null });
       expect(JSON.stringify(rows)).not.toMatch(/Sam Whitfield|Rae Lindqvist|example\.test/);
     }
+
+    // Seen is per operator, covers what they have closed so far, and the first time it was seen stands.
+    expect((await opened.store.noticesUnseenBy("usr_sam")).sort()).toEqual(["opd_1", "opd_2"]);
+    await opened.store.markNoticesSeen("usr_sam", at(6000));
+    await opened.store.markNoticesSeen("usr_sam", at(7000));
+    expect(await opened.store.noticesUnseenBy("usr_sam")).toEqual([]);
+    expect(await opened.store.noticesUnseenBy("usr_rae")).toEqual(["opd_1"]);
+    expect((await opened.store.noticesDismissedBy("usr_sam")).sort()).toEqual(["opd_1", "opd_2"]);
+    if (opened.db) expect((await opened.db.select().from(schema.operatorPhoneNoticeDismissals)).filter((row) => row.userId === "usr_sam").map((row) => row.seenAt)).toEqual([new Date(at(6000)), new Date(at(6000))]);
+    await opened.store.markNoticesSeen("usr_nobody", at(8000));
 
     await opened.store.remove({ ids: ["opd_1"] });
     expect(await opened.store.noticesDismissedBy("usr_rae")).toEqual([]);
