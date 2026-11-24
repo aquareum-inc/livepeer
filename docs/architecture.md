@@ -142,7 +142,7 @@ session with `client`, a PKCE `challenge` and their own `state`. The callback se
 redirects to `<bundle id>://auth` with a 60-second one-time code, only for an app named in the config's
 `mobile` block. The app exchanges the code and its verifier at `POST /api/v1/auth/device` for a device session
 (`aqd_…`; it never does operator work, whatever the person's role), sent as a bearer token. Sessions live in `apps/web/lib/devices` behind a
-`DeviceSessionStore` (a JSON file in `DATA_DIR` for now), stored as an HMAC keyed with `SESSION_SECRET`. They
+`DeviceSessionStore` (Postgres, or a JSON file in `DATA_DIR` without a database), stored as an HMAC keyed with `SESSION_SECRET`. They
 end after 90 days unused, on sign-out or revocation, when the user is suspended, or when `SESSION_SECRET`
 changes. With `surfaces.mobile` off, a device session gets 403 `mobile_off`. Sign-in addresses are built from
 the configured domain, or else the address the request came in on, so a phone reaching a development server
@@ -176,7 +176,7 @@ holds it:
   `operator(context)` guard inside each operator operation stays as the second line, and `checkAccess` (the
   web role guard) is unchanged: an `aqo_` token never opens `/operator` pages and never becomes a cookie.
 - *Record.* Every sign-in, unlock, change, refusal and revocation is written to the audit log
-  (`DATA_DIR/operator-audit.json`), shown with the enrolled phones on the web console's System page, where
+  (`operator_audit`, or `DATA_DIR/operator-audit.json` without a database), shown with the enrolled phones on the web console's System page, where
   phones are revoked. Every console page says so for two days after a phone is enrolled.
 - *Clients.* `pnpm api:openapi` writes these operations with `x-operator` and `x-mobile`;
   `packages/mobile-codegen` generates them into a separate `OperatorAPI` (Swift) and `OperatorApi` (Kotlin)
@@ -190,20 +190,26 @@ a phone that something needs its operator and where to look. Nothing can be done
   good ones, to the phones that were told); Status's own failing-jobs rule starting; a report being filed;
   a phone being enrolled. The sentences are Status's (`ATTENTION` in `operations.ts`), and
   `alerts/compose.ts` builds every notification from a closed list of them, with at most a count.
-- *Who notices.* `apps/web/instrumentation.ts` starts one watcher per server process
-  (`alerts/watcher.ts`): the only thing in the instance that runs between requests. Each minute, while the
-  console is offered on phones and some phone has alerts on, it reads the engine's health, and every five
-  minutes recent jobs, through `buildReaderClient()`: the operator client with the reader token and no admin
-  token. A lease in `DATA_DIR/operator-alerts.json` keeps a second process quiet. Reports and enrolments are
-  raised where they happen (`report_character`, `create_operator_device_session`) and sent without holding
-  up the request.
+- *Who notices.* One round of checks (`alerts/round.ts`, `runAlertRound`), which anything may ask for. On a
+  server that stays running, `apps/web/instrumentation.ts` starts a timer that asks each minute
+  (`alerts/watcher.ts`). On a host with no server between requests, a scheduler calls `GET /api/cron/alerts`
+  with `Authorization: Bearer $CRON_SECRET` each minute; setting `CRON_SECRET` is what turns the timer off.
+  Whoever asks, a round starts at most once in a little under a minute: it is claimed by one statement that
+  moves `alert_state.round_claimed_at` forward, so two servers, a timer and a scheduler, or one call tried
+  twice run it once. A round keeps nothing in memory. It tidies lapsed sign-ins and sessions; then, while
+  the console is offered on phones and some phone has alerts on, it reads the engine's health, and every
+  five minutes recent jobs, through `buildReaderClient()`: the operator client with the reader token and no
+  admin token. Reports and enrolments are raised where they happen (`report_character`,
+  `create_operator_device_session`) and sent after the request is answered (`after()`), so a function isn't
+  stopped before the send is done. `/api/health`, `doctor` and the System page say when no round has run in
+  five minutes.
 - *Where a push token lives.* On the phone's operator device session record, sealed with `SESSION_SECRET`,
   set only by `operator_set_alerts`, which needs a proof bound to that push token. It is never answered,
   logged or written to the audit log, and it ends with the record, however that ends. A phone whose console
   has idled out is kept, signed out, to its 30-day end while alerts still reach it.
 - *Sending.* `apps/web/lib/push` has one `PushSender` interface and three implementations with no
   dependency: APNs over `node:http2` with a signed ES256 token, Firebase Cloud Messaging's HTTP v1 API as a
-  service account, and one that only records to `DATA_DIR/push-outbox.json`, which mock-only mode always
+  service account, and one that only records (to `push_outbox`, or `DATA_DIR/push-outbox.json`), which mock-only mode always
   uses. Credentials are environment variables (`APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`,
   `FCM_SERVICE_ACCOUNT`); the Android app's public Firebase values are config (`mobile.android.firebase`) and
   are served in `get_instance`. A dead push token is dropped and the phone shows as not reached; refused
@@ -220,12 +226,12 @@ database is migrated and empty so far: no state has moved into it yet.
 Each kind of state the instance keeps has its own store interface, asynchronous, with one method per thing
 asked of it: `DeviceSessionStore`, `OperatorDeviceStore`, `AuditStore`, `ModerationStore`, `AlertsStore` and
 `OutboxStore`, each beside the service that holds its rules. Each has an implementation over a document
-read and written whole (`apps/web/lib/data`: a JSON file in `DATA_DIR`, or memory in tests), and the session,
-audit and moderation stores have one over Postgres (`postgres.ts` beside each); `chosenStore` picks by whether the
-instance has a database, so nothing above a store knows which it has. One contract test suite per store runs
+read and written whole (`apps/web/lib/data`: a JSON file in `DATA_DIR`, or memory in tests), and one
+over Postgres (`postgres.ts` beside each); `chosenStore` picks by whether the instance has a database, so
+nothing above a store knows which it has. One contract test suite per store runs
 against both. In Postgres a person's name and email are one sealed value per row (`lib/data/identity.ts`,
 encrypted with `SESSION_SECRET`), kept only because the provider can't yet answer `getUser`; no column reads
-as a person. The remaining stores (alerts, outbox) are files until their slice. Device sessions use it, and so does
+as a person. With a database, nothing the instance keeps is on disk. Device sessions use it, and so does
 `apps/web/lib/moderation`: reports of shared characters, what each person blocked, and what the operator took
 down. Every character read (`list_characters`, `get_character`, the web's pages and Home's cast) filters
 through `moderation().visible(userId)`; the console's Reports page decides reports.

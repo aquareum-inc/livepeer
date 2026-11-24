@@ -108,6 +108,8 @@ export interface OperatorDeviceSessions {
   revokeAll(by: AuditActor): Promise<number>;
   /** Ends every operator session a person has, for example when they are suspended. */
   revokeUser(userId: string, detail: string): Promise<number>;
+  /** Drops sign-ins nobody collected, nonces nobody signed, and sessions past their end that alerts no longer reach. */
+  sweep(): Promise<void>;
 }
 
 const base64url = (bytes: Buffer) => bytes.toString("base64url");
@@ -350,6 +352,13 @@ export function operatorDeviceSessions(store: OperatorDeviceStore, secret: strin
       const gone = await store.remove({ userId });
       for (const record of gone) await audit.write("revoked", actorOf(record), { detail });
       return gone.length;
+    },
+
+    async sweep() {
+      await store.sweep(now());
+      // A phone whose alerts are still to be told they ended is left for `alertEndings` to answer first.
+      const lapsed = (await store.sessions()).filter((entry) => !kept(entry) && !entry.alerts?.pushSealed).map((entry) => entry.id);
+      if (lapsed.length > 0) await store.remove({ ids: lapsed });
     },
   };
 }

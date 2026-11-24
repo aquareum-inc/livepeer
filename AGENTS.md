@@ -43,7 +43,9 @@ curl -fsS http://localhost:3000/api/health
 
 `/api/health` answers 200 with `{"status":"ok",…}`, or 503 with `"status":"degraded"` when the engine is
 configured but unreachable, or when its `database` field is `"unreachable"` or `"behind"` (the schema lacks
-this release's migrations; `./livepeer upgrade` applies them). `doctor` exits 0 when every check passes and 1 otherwise; each failed check
+this release's migrations; `./livepeer upgrade` applies them). Its `alerts` field is `"overdue"` when the
+console is offered on phones and nothing has run the checks behind alerts for five minutes; that doesn't
+make the answer 503, and `doctor` reports it with a fix. `doctor` exits 0 when every check passes and 1 otherwise; each failed check
 carries a `fix`.
 
 ## Configure

@@ -30,13 +30,16 @@ starts, on `setup`, on `upgrade` and on a plain `docker compose up`. If a migrat
 the app is not started, and `setup` and `upgrade` say so. `./livepeer doctor` and `/api/health` report
 whether the database is reachable and whether its schema is the one this release expects.
 
-Users' and operators' phone sessions, the operators' audit log, and reports, blocks and takedowns of shared
-characters, and what the console's Settings and Capabilities pages change are kept in the database. The
-console never writes `instance.config.json`, which stays mounted read-only: what it saves is laid over that
-file, and "Reset to deployed config" goes back to it. Alerts state is still a file in the `app-data` volume,
-and moves in the slice that follows (`docs/database.md`, section 10). Names and emails are never stored in the clear: where
-one has to be kept it is encrypted with `SESSION_SECRET`, so keep that secret with your backups or a restored
-database shows people by their ids only, and every phone signs in again.
+Everything the instance keeps is in the database: users' and operators' phone sessions, the operators' audit
+log, reports, blocks and takedowns of shared characters, what alerts have noticed and said, and what the
+console's Settings and Capabilities pages change. The console never writes `instance.config.json`, which
+stays mounted read-only: what it saves is laid over that file, and "Reset to deployed config" goes back to
+it. The `app-data` volume is no longer written to; it stays until files from before this release have been
+brought over (`docs/database.md`, section 10).
+
+Names and emails are never stored in the clear: where one has to be kept it is encrypted with
+`SESSION_SECRET`. Keep that secret with your backups, or a restored database shows people by their ids only
+and every phone signs in again.
 
 Back up and restore:
 
@@ -96,8 +99,11 @@ credentials the console on phones works as before and says alerts aren't set up.
   `FCM_SERVICE_ACCOUNT` (its JSON file as base64 on one line).
 - The server must be able to reach `api.push.apple.com`, `api.sandbox.push.apple.com` (development builds),
   `fcm.googleapis.com` and `oauth2.googleapis.com` on port 443.
-- Alerts need the long-running server this bundle starts: one watcher inside it asks the engine whether it
-  is ready once a minute. An instance that is down sends nothing, so watch the instance itself from outside.
+- Alerts are sent by a round of checks each minute. This bundle's server runs them itself, with a timer, and
+  there is nothing more to set up. On a host with no server between requests (Vercel), set `CRON_SECRET` and
+  have a scheduler call `/api/cron/alerts` each minute with it as a bearer token; that also stops the timer,
+  so don't set it here. `./livepeer doctor` and the System page say when nothing has run the checks for five
+  minutes. An instance that is down sends nothing, so watch the instance itself from outside.
 - `./livepeer doctor` says, for each platform, whether alerts are set up and what is wrong if they are half
   set. The web console's System page says the same, and whether Apple or Google last refused the credentials.
 

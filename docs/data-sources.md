@@ -129,8 +129,9 @@ as `If-None-Match` gets `304` with no body while nothing has changed. Both apps 
 render costs almost nothing.
 
 **Device sessions** belong to the instance, not the engine or the provider, so they aren't API client
-functions either. They are kept by `apps/web/lib/devices` in `DATA_DIR/device-sessions.json` (a database
-replaces the file behind the same `DeviceSessionStore` interface when the instance gets one). The file holds
+functions either. They are kept by `apps/web/lib/devices` behind the `DeviceSessionStore` interface: in Postgres
+(`device_sessions`, `device_sign_in_codes`) when the instance has `DATABASE_URL`, and in
+`DATA_DIR/device-sessions.json` when it doesn't, which is development and tests. The store holds
 an HMAC of each token keyed with `SESSION_SECRET`, never the token, and the user's builder key sealed as the
 browser session cookie holds it.
 
@@ -146,9 +147,12 @@ browser session cookie holds it.
 
 **Operator device sessions** (`aqo_…`) are what let an operator's phone open the console (`docs/mobile/plan.md`
 §18). They are a separate record, token and file from users' device sessions: `apps/web/lib/operator-devices`
-keeps sessions, pending sign-ins and pending nonces in `DATA_DIR/operator-device-sessions.json`, and the audit
-log (the newest 2,000 entries) in `DATA_DIR/operator-audit.json`, both behind the same `StateStore` interface.
-The file holds an HMAC of each token, code and nonce keyed with `SESSION_SECRET`, the phone's P-256 public
+keeps sessions, pending sign-ins and pending nonces, and the audit log (the newest 2,000 entries), behind
+`OperatorDeviceStore` and `AuditStore`: in Postgres (`operator_device_sessions`, `operator_sign_in_codes`,
+`operator_challenges`, `operator_push_tokens`, `operator_audit`), or without a database in
+`DATA_DIR/operator-device-sessions.json` and `DATA_DIR/operator-audit.json`. In Postgres a person's name and
+email are sealed with `SESSION_SECRET`, never in the clear.
+The store holds an HMAC of each token, code and nonce keyed with `SESSION_SECRET`, the phone's P-256 public
 key, and no builder key. A session ends after 7 days unused, 30 days after it was made, on sign-out or
 revocation, at five refused proofs in a row, when the person is suspended or loses the operator role in the
 console, or when `SESSION_SECRET` changes. With `surfaces.mobileConsole` off every request carrying one gets
@@ -176,7 +180,7 @@ console. A phone sends its `aqo_` token and, for a change, an `X-Operator-Proof`
 **Alerts to operators' phones** (plan §18.9) are sent by the instance itself, straight to Apple and Google
 with the publisher's own credentials (`APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `FCM_SERVICE_ACCOUNT`), from
 `apps/web/lib/push`. They are not API client functions and have no mock in the data-source map: in mock-only
-mode the sender only records what it would have sent, in `DATA_DIR/push-outbox.json`, and offers both
+mode the sender only records what it would have sent, in `push_outbox` or `DATA_DIR/push-outbox.json`, and offers both
 platforms. What triggers an alert is read through the operator client's existing functions (`getEngineHealth`
 every minute and `listJobs` every five, on a client holding the reader token and no admin token) and from the
 instance's own reports. Neither real sender has been run against Apple or Google yet.
@@ -186,8 +190,9 @@ Every other operator operation has no `mobile` mark and is refused to a phone wi
 takes only a limit (see `docs/engine-requests.md`).
 
 **Reports, blocks and characters taken down** belong to the instance too: the app stores require them of an
-app where people share characters. `apps/web/lib/moderation` keeps them in `DATA_DIR/moderation.json` behind
-the same `StateStore` interface (`apps/web/lib/data`). Who reported is kept, so a second report from the same
+app where people share characters. `apps/web/lib/moderation` keeps them behind `ModerationStore`: in Postgres
+(`character_reports`, `character_blocks`, `hidden_characters`), or without a database in
+`DATA_DIR/moderation.json`. Who reported is kept, so a second report from the same
 person updates the first, and is never sent to anyone. `list_characters`, `get_character`, the web's
 characters pages and Home's cast all leave out what the operator took down and what the person blocked.
 

@@ -32,6 +32,8 @@ export interface DeviceSessions {
   revoke(userId: string, id: string): Promise<boolean>;
   /** Ends every session the user has, for example when they are suspended. */
   revokeAll(userId: string): Promise<number>;
+  /** Drops sign-ins nobody collected and sessions idle past their end. */
+  sweep(): Promise<void>;
 }
 
 const base64url = (bytes: Buffer) => bytes.toString("base64url");
@@ -115,5 +117,7 @@ export function deviceSessions(store: DeviceSessionStore, secret: string, now: (
     revoke: async (userId, id) => (await store.remove({ id, userId })) > 0,
 
     revokeAll: (userId) => store.remove({ userId }),
+
+    sweep,
   };
 }

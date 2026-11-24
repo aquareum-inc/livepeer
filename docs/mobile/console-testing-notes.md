@@ -35,8 +35,11 @@ rule: `CLAUDE.md` and the plan hold those.
   `<DATA_DIR>/push-outbox.json` (`.data/` at the repository root unless `DATA_DIR` says otherwise), newest
   last, and offers alerts on both platforms. An iOS entry's `payload` is the APNs payload as it would be sent:
   save it to a file and `xcrun simctl push <udid> org.livepeer.app.dev <file>` shows it in the simulator.
-- **The watcher starts with the server** and holds a lease in `<DATA_DIR>/operator-alerts.json`, which also
-  holds what is currently wrong. It checks once a minute, and only while some phone has alerts on.
+- **The checks start with the server**: a timer asks for a round five seconds after it starts and then each
+  minute, and each round is claimed in `<DATA_DIR>/operator-alerts.json` (`round.claimedAt`), which also holds
+  what is currently wrong. The engine is only asked while some phone has alerts on. These notes are for an
+  instance with no `DATABASE_URL`, which is how the mock instance runs; with one, the same state is in the
+  database and there are no files to edit.
 - **Seeing an alert without an app.** A phone has to enrol a key, unlock and confirm `operator_set_alerts` with
   a proof; there is no way round that from a shell. A short Node script can stand in for the phone (sign in
   as `sam@example.test` with `client=ios&purpose=operator`, post the code with a P-256 public key, sign the

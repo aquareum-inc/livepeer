@@ -1,19 +1,22 @@
 import "server-only";
 
 import { mockMode } from "../auth/session";
+import { chosenStore } from "../data/database";
 import { jsonFileStore } from "../data/json-file";
 import { env } from "../env";
 import { instance } from "../instance";
 import { apnsSender } from "./apns";
 import { readApnsCredentials, readFcmCredentials } from "./credentials";
 import { fcmSender } from "./fcm";
+import { postgresOutboxStore } from "./postgres";
 import { documentOutboxStore, recordingSender, type OutboxContents } from "./recording";
 import type { PushPlatform, PushSender } from "./types";
 
 /** Where a platform stands: able to send, not set up (which is fine: alerts are optional), or set up wrongly. */
 export type PushSetup = { state: "ready"; detail: string } | { state: "none"; detail: string } | { state: "problem"; detail: string };
 
-export const fileOutbox = () => documentOutboxStore(jsonFileStore<OutboxContents>("push-outbox.json", (value) => ({ sent: value.sent ?? [] })));
+/** Where mock-only mode writes down what it would have sent: Postgres while the instance has a database, a file while it doesn't. */
+const outbox = chosenStore({ postgres: postgresOutboxStore, file: () => documentOutboxStore(jsonFileStore<OutboxContents>("push-outbox.json", (value) => ({ sent: value.sent ?? [] }))) });
 
 /**
  * Whether the instance can send to each platform, in words safe to show an operator. iPhone needs the APNs key
@@ -63,7 +66,7 @@ export async function pushSender(): Promise<PushSender> {
 
   let sender: PushSender;
   if (mockMode()) {
-    sender = recordingSender(fileOutbox());
+    sender = recordingSender(outbox());
   } else {
     const setup = await pushSetup();
     const apns = readApnsCredentials(env);

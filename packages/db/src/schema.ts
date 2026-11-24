@@ -205,3 +205,43 @@ export const capabilitySettings = pgTable("capability_settings", {
   surfaces: text("surfaces").array(),
   updatedAt: time("updated_at").notNull().defaultNow(),
 });
+
+/**
+ * What the instance has noticed and said to operators' phones, and when the checks last ran. One row, so a
+ * restart, a second server or a function that has just started doesn't say it all again.
+ */
+export const alertState = pgTable("alert_state", {
+  /** Always "alerts": there is one. */
+  id: text("id").primaryKey(),
+  /** Whether phones have been told the engine isn't ready. */
+  engineDown: boolean("engine_down").notNull().default(false),
+  /** Checks in a row that disagree with `engine_down`. */
+  engineStreak: integer("engine_streak").notNull().default(0),
+  /** The sessions that were told, so "ready again" goes to them and nobody else. */
+  engineTold: text("engine_told").array().notNull().default(sql`'{}'::text[]`),
+  jobsFailing: boolean("jobs_failing").notNull().default(false),
+  jobsLastSeenAt: time("jobs_last_seen_at"),
+  /** When recent jobs were last read: they are read less often than the engine is asked. */
+  jobsReadAt: time("jobs_read_at"),
+  reportsLastSentAt: time("reports_last_sent_at"),
+  reportsUnannounced: boolean("reports_unannounced").notNull().default(false),
+  /** When a round of checks was last started. Whoever moves this forward runs the round; nobody else does. */
+  roundClaimedAt: time("round_claimed_at"),
+});
+
+/** When Apple or Google last refused the instance's own credentials. Cleared by a send they accept. */
+export const pushRefusals = pgTable("push_refusals", {
+  platform: text("platform", { enum: ["ios", "android"] }).primaryKey(),
+  at: time("at").notNull(),
+  detail: text("detail").notNull(),
+});
+
+/** What mock-only mode would have sent, newest last. Nothing here ever reaches Apple or Google. */
+export const pushOutbox = pgTable("push_outbox", {
+  seq: bigint("seq", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  at: time("at").notNull(),
+  platform: text("platform", { enum: ["ios", "android"] }).notNull(),
+  environment: text("environment", { enum: ["production", "development"] }).notNull(),
+  /** The payload as it would have been handed over, less the push token. */
+  payload: jsonb("payload").notNull(),
+});

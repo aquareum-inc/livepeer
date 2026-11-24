@@ -2,9 +2,19 @@ import "server-only";
 
 import type { SystemCheck } from "@livepeer/operator-console";
 
+import { roundStatus } from "../alerts/round";
 import { env } from "../env";
 import { instance } from "../instance";
 import { pushSetup } from "../push";
+
+/** "just now", "40 seconds ago", "2 minutes ago". */
+const ago = (ms: number): string => (ms < 10_000 ? "just now" : ms < 90_000 ? `${Math.round(ms / 1000)} seconds ago` : `${Math.round(ms / 60_000)} minutes ago`);
+
+/** What to do when nothing is running the rounds of checks, by how the instance says they are run. */
+const alertChecksFix = () =>
+  env("CRON_SECRET")
+    ? "CRON_SECRET is set, so a scheduler has to call /api/cron/alerts every minute with it as a bearer token (on Vercel, a cron in vercel.json; every minute needs the Pro plan). Or unset CRON_SECRET on a host whose server stays running, and it runs them itself."
+    : "This host isn't keeping a server running between requests, so nothing runs the checks. Set CRON_SECRET and have a scheduler call /api/cron/alerts every minute with it as a bearer token.";
 
 async function probe(url: URL, token?: string): Promise<number> {
   try {
@@ -40,6 +50,9 @@ export async function runDoctor(): Promise<SystemCheck[]> {
     const setup = await pushSetup();
     add("Alerts to iPhone", setup.ios.state !== "problem", setup.ios.state === "none" ? "not set up (optional)" : setup.ios.detail, "Set APNS_KEY (the .p8 file as base64 on one line), APNS_KEY_ID and APNS_TEAM_ID in .env, and mobile.ios.bundleId in the config");
     add("Alerts to Android", setup.android.state !== "problem", setup.android.state === "none" ? "not set up (optional)" : setup.android.detail, "Set FCM_SERVICE_ACCOUNT (the service account's JSON as base64 on one line) in .env, and mobile.android.firebase in the config from the same Firebase project");
+    // Alerts are only sent by the rounds of checks. With nothing running them, phones are told nothing and nothing says so.
+    const round = await roundStatus();
+    add("Alert checks", round.status !== "overdue", round.status === "running" && round.lastAt !== null ? `running (last round ${ago(Date.now() - round.lastAt)})` : round.status === "starting" ? "starting: the first round hasn't run yet" : "nothing has run them in the last five minutes", alertChecksFix());
   }
 
   if (mockOnly) {

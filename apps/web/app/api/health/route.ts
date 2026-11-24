@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { roundStatus } from "@/lib/alerts/round";
 import { databaseStatus } from "@/lib/data/database";
 import { env } from "@/lib/env";
 import { instance } from "@/lib/instance";
@@ -26,8 +27,11 @@ export async function GET() {
   // "behind" is a database that hasn't had this release's migrations: the app must not serve on it.
   const database = await databaseStatus();
   const ok = engine !== "unreachable" && database !== "unreachable" && database !== "behind";
+  // Whether anything is running the checks behind operators' alerts. Said here for `doctor`; it doesn't make
+  // the instance unhealthy, since everything else works without them.
+  const alerts = database === "unreachable" ? "unknown" : (await roundStatus().catch(() => ({ status: "unknown" as const }))).status;
   return NextResponse.json(
-    { status: ok ? "ok" : "degraded", instance: config.name, mode: mockOnly ? "mock-only" : "live", surfaces: config.surfaces, engine, database },
+    { status: ok ? "ok" : "degraded", instance: config.name, mode: mockOnly ? "mock-only" : "live", surfaces: config.surfaces, engine, database, alerts },
     { status: ok ? 200 : 503 },
   );
 }

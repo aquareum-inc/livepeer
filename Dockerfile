@@ -18,6 +18,8 @@ ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 DATA_DIR=/data
 RUN addgroup -S app && adduser -S app -G app && mkdir -p /data && chown app:app /data
 COPY --from=build --chown=app:app /app/apps/web/.next/standalone ./
 COPY --from=build --chown=app:app /app/apps/web/.next/static ./apps/web/.next/static
+# The standalone output leaves the site's own files (the default logo among them) for the image to bring.
+COPY --chown=app:app apps/web/public ./apps/web/public
 COPY --chown=app:app packages/config/presets ./presets
 COPY --from=build --chown=app:app /app/packages/db/dist/migrate.cjs ./migrate.cjs
 COPY --chown=app:app packages/db/migrations ./migrations

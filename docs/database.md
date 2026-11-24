@@ -1,7 +1,7 @@
 # A Postgres database for the instance: plan
 
-Status: **approved on 24 November 2026 with every recommendation in section 0 as written. Slices 1 to 5 are
-built; slices 6 to 8 are not.** What slice 1 changed from the plan is listed under the slices table in section 10.
+Status: **approved on 24 November 2026 with every recommendation in section 0 as written. Slices 1 to 6 are
+built; slices 7 and 8 are not.** What slice 1 changed from the plan is listed under the slices table in section 10.
 
 The instance keeps its own state as JSON files in `DATA_DIR`, and the operator console writes
 `instance.config.json` to disk. That ties an instance to a host with a persistent disk and one server
@@ -526,12 +526,36 @@ A deleted account's reports keep no sender, and two such reports of one characte
   made asynchronous was checked by script as well. Worth a lint rule (`no-floating-promises`,
   `no-misused-promises`) before the next change of this kind; the repo has no linter today.
 
+**Slice 6 as built (24 November 2026).** Tables `alert_state`, `push_refusals`, `push_outbox` (migration
+`0004_alerts`); `runAlertRound()`; `GET /api/cron/alerts`; `CRON_SECRET`. With this slice nothing the instance
+keeps is a file when it has a database. Differences from sections 2 and 6:
+
+- Which phones were told the engine isn't ready is `alert_state.engine_told`, a list of session ids on the
+  one row, not a `told_engine_down` column on each push token: it is one fact about the alert, read and
+  written with the rest of its state.
+- The claim compares against the server's clock passed in, not the database's `now()`, so the rules can be
+  tested with a clock. Two servers a few seconds apart still can't both get the round.
+- A round is claimed, and lapsed sign-ins and sessions are swept, whether or not the console is on phones.
+  The engine is asked nothing unless it is and some phone has alerts on, as before.
+- A server that stays running asks for its first round five seconds after it starts, not a minute, so
+  `doctor` run straight after `setup` already finds the checks running.
+- "No schedule" is reported as the health check's `alerts` field (`running`, `starting`, `overdue`, `off`),
+  a row in `livepeer doctor`, and "Alert checks" on the System page. It is reported whenever the console is
+  on phones and no round has run for five minutes, whether or not `CRON_SECRET` is set, since a host with no
+  server and no scheduler is exactly the case that would otherwise be silent. A server that runs the rounds
+  itself is "starting" for its first 90 seconds. It does not make the health
+  check fail: everything but alerts works without it.
+- Sends a request sets off are handed to `after()` and still tracked in the process, which tests wait on.
+
 **Found while testing the bundle, and fixed.** The bundle's `.env` carries `DATA_DIR=` empty, and Compose
 passed that to the app in place of the image's own `DATA_DIR=/data`. The app then tried to write its JSON
 files beside the server, where its user may not write (checked in a running container: `mkdir` is refused).
 So in the Compose bundle nothing the instance kept in files could be written: phone sign-in, reports and
 alerts state. `compose.yaml` now sets `DATA_DIR: /data` itself. For slice 7 this means a Compose instance has
 no session files to import; the import matters for instances run some other way with `DATA_DIR` set.
+
+The image also left out the site's own static files (`apps/web/public`), so the default logo was a 404 in
+the bundle. The Dockerfile now copies them.
 
 Slices 3, 4 and 6 are independent of each other once 2 is in; 5 is independent of all three.
 

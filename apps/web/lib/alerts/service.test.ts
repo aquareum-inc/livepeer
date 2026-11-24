@@ -6,7 +6,7 @@ import { auditLog } from "../operator-devices/audit";
 import { ABSOLUTE_DAYS, ALERTS_WARNING_DAYS, operatorDeviceSessions } from "../operator-devices/sessions";
 import { TEST_CHALLENGE, TEST_SECRET, TEST_VERIFIER, emptyAudit, emptyOperatorDevices, testPhone } from "../operator-devices/testing";
 import type { PushNotification, PushResult, PushSender, PushTarget } from "../push/types";
-import { LEASE_MS, TESTS_PER_HOUR, alertsService, memoryAlertsStore } from "./service";
+import { ROUND_EVERY_MS, TESTS_PER_HOUR, alertsService, memoryAlertsStore } from "./service";
 
 const DAY = 86_400_000;
 const sam = { userId: "usr_demo_sam", name: "Sam Whitfield", email: "sam@example.test", role: "operator" as const };
@@ -234,18 +234,27 @@ describe("alerts that end with the session", () => {
   });
 });
 
-describe("the lease", () => {
-  it("lets one process run the checks, and another take over only when it has lapsed", async () => {
+describe("a round of checks", () => {
+  it("is started by one caller at a time, a little under a minute apart, whoever asks", async () => {
     const { alerts, clock } = setup();
-    expect(await alerts.lease("process-a")).toBe(true);
-    expect(await alerts.lease("process-b")).toBe(false);
-    clock.now += 60_000;
-    expect(await alerts.lease("process-a")).toBe(true);
-    clock.now += LEASE_MS - 1;
-    expect(await alerts.lease("process-b")).toBe(false);
+    expect(await alerts.lastRoundAt()).toBeNull();
+    expect(await alerts.claimRound()).toEqual({ jobsReadAt: null });
+    // A second server, a scheduler as well as a timer, or the same call tried again: nothing to do.
+    expect(await alerts.claimRound()).toBeNull();
+    clock.now += ROUND_EVERY_MS - 1;
+    expect(await alerts.claimRound()).toBeNull();
     clock.now += 1;
-    expect(await alerts.lease("process-b")).toBe(true);
-    expect(await alerts.lease("process-a")).toBe(false);
+    expect(await alerts.claimRound()).toEqual({ jobsReadAt: null });
+    expect(await alerts.lastRoundAt()).toBe(clock.now);
+  });
+
+  it("remembers when recent jobs were read, for whichever caller runs the next round", async () => {
+    const { alerts, clock } = setup();
+    await alerts.claimRound();
+    await alerts.jobsRead();
+    const readAt = clock.now;
+    clock.now += 60_000;
+    expect(await alerts.claimRound()).toEqual({ jobsReadAt: readAt });
   });
 });
 

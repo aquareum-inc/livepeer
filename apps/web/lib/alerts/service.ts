@@ -13,19 +13,22 @@ import { decide, quietState, type Alert, type AlertState, type Observation } fro
 export const TESTS_PER_HOUR = 3;
 /** How a test alert is named in the audit log. */
 const TEST = "test";
-/** How long a process keeps the right to run the watcher's checks without renewing it. */
-export const LEASE_MS = 150_000;
+/**
+ * A round of checks is started at most this often, whoever asks: a timer, a scheduler, a second server, or
+ * the same call tried again. Just under a minute, so a caller that is a little early still gets its turn.
+ */
+export const ROUND_EVERY_MS = 50_000;
 
-/** What the instance keeps about its alerts, in DATA_DIR/operator-alerts.json. */
+/** What the instance keeps about its alerts when it has no database, in DATA_DIR/operator-alerts.json. */
 export interface AlertsContents {
-  /** The one server process that runs the checks, and until when. Another takes over once this lapses. */
-  lease: { holder: string; until: number } | null;
+  /** When a round of checks was last started, and when it last read recent jobs. */
+  round: { claimedAt: number | null; jobsReadAt: number | null };
   state: AlertState;
   /** When Apple or Google last refused the instance's own credentials, for the System page. Cleared by a send they accept. */
   refused: Partial<Record<PushPlatform, { at: string; detail: string }>>;
 }
 
-export const emptyAlerts = (): AlertsContents => ({ lease: null, state: quietState(), refused: {} });
+export const emptyAlerts = (): AlertsContents => ({ round: { claimedAt: null, jobsReadAt: null }, state: quietState(), refused: {} });
 
 /** Where the instance keeps what it has noticed and said. One method per thing the alerts need of it. */
 export interface AlertsStore {
@@ -33,8 +36,16 @@ export interface AlertsStore {
   advance<R>(change: (state: AlertState) => { state: AlertState; result: R }): Promise<R>;
   /** Notes which phones were told the engine isn't ready, so "ready again" goes to them and nobody else. */
   setEngineTold(sessionIds: string[]): Promise<void>;
-  /** Gives or renews the right to run the checks. False while another holder's has not lapsed. */
-  lease(holder: string, input: { now: number; until: number }): Promise<boolean>;
+  /**
+   * Starts a round of checks at `now`, unless one was started less than `every` milliseconds before. The one
+   * caller that gets an answer runs the round, and is told when recent jobs were last read; every other
+   * caller gets null and does nothing.
+   */
+  claimRound(now: number, every: number): Promise<{ jobsReadAt: number | null } | null>;
+  /** Notes when recent jobs were read. */
+  jobsRead(at: number): Promise<void>;
+  /** When a round of checks was last started, or null if none ever was. */
+  lastRoundAt(): Promise<number | null>;
   refusals(): Promise<AlertsContents["refused"]>;
   /** Notes that a platform refused the instance's own credentials, or with null that it has accepted them since. */
   setRefusal(platform: PushPlatform, refusal: { at: string; detail: string } | null): Promise<void>;
@@ -55,12 +66,20 @@ export function documentAlertsStore(document: StateStore<AlertsContents>): Alert
         contents.state.engine.told = sessionIds;
       });
     },
-    async lease(holder, { now, until }) {
+    async claimRound(now, every) {
       return document.update((contents) => {
-        if (contents.lease && contents.lease.holder !== holder && contents.lease.until > now) return false;
-        contents.lease = { holder, until };
-        return true;
+        if (contents.round.claimedAt !== null && now - contents.round.claimedAt < every) return null;
+        contents.round.claimedAt = now;
+        return { jobsReadAt: contents.round.jobsReadAt };
       });
+    },
+    async jobsRead(at) {
+      document.update((contents) => {
+        contents.round.jobsReadAt = at;
+      });
+    },
+    async lastRoundAt() {
+      return document.read().round.claimedAt;
     },
     async refusals() {
       return document.read().refused;
@@ -89,6 +108,11 @@ export interface AlertsDependencies {
   enabled: () => Promise<boolean>;
   /** The instance's name: every notification's title. */
   name: () => Promise<string>;
+  /**
+   * Keeps the host from stopping before something started for a request has finished, where the host can
+   * stop between requests. Called with each send a request sets off.
+   */
+  keepAlive?: (work: Promise<unknown>) => void;
   now?: () => number;
 }
 
@@ -97,8 +121,12 @@ export interface Alerts extends AlertsAccess {
   observe(observation: Observation): Promise<void>;
   /** Tells phones whose alerts are about to end with their session, and those whose alerts just did. */
   endings(): Promise<void>;
-  /** Whether this process may run the checks now: it holds the lease, or took it. */
-  lease(holder: string): Promise<boolean>;
+  /** Starts a round of checks if one is due. Null when another was started too recently to start one now. */
+  claimRound(): Promise<{ jobsReadAt: number | null } | null>;
+  /** Notes that recent jobs were read just now. */
+  jobsRead(): Promise<void>;
+  /** When a round of checks was last started, or null if none ever was. */
+  lastRoundAt(): Promise<number | null>;
   /** When each platform's credentials were last refused. */
   refusals(): Promise<AlertsContents["refused"]>;
   /** Resolves when everything being sent has been handed over. */
@@ -109,7 +137,7 @@ export interface Alerts extends AlertsAccess {
  * The instance's alerts to operators' phones: the rules, who is told, and what happens to each send. Every
  * send is written to the audit log with the phone it went to; a push token never is.
  */
-export function alertsService({ store, sessions, audit, sender, enabled, name, now = Date.now }: AlertsDependencies): Alerts {
+export function alertsService({ store, sessions, audit, sender, enabled, name, keepAlive, now = Date.now }: AlertsDependencies): Alerts {
   const sending = new Set<Promise<unknown>>();
 
   /** Sends one notification to one phone and deals with the answer. True when Apple or Google took it. */
@@ -157,10 +185,14 @@ export function alertsService({ store, sessions, audit, sender, enabled, name, n
     for (const alert of step.alerts) await deliver(alert, step.told);
   };
 
-  /** Runs something without holding up the request that caused it, and never lets it fail that request. */
+  /**
+   * Runs something without holding up the request that caused it, and never lets it fail that request. On a
+   * host that stops between requests the host is asked to wait for it.
+   */
   const background = (work: Promise<unknown>): void => {
     const tracked = work.catch(() => undefined).finally(() => sending.delete(tracked));
     sending.add(tracked);
+    keepAlive?.(tracked);
   };
 
   return {
@@ -192,7 +224,9 @@ export function alertsService({ store, sessions, audit, sender, enabled, name, n
       await Promise.all(ended.map((target) => send(target, endingNotification(title, null), "alerts ended with the session")));
     },
 
-    lease: (holder) => store.lease(holder, { now: now(), until: now() + LEASE_MS }),
+    claimRound: () => store.claimRound(now(), ROUND_EVERY_MS),
+    jobsRead: () => store.jobsRead(now()),
+    lastRoundAt: () => store.lastRoundAt(),
 
     refusals: () => store.refusals(),
 

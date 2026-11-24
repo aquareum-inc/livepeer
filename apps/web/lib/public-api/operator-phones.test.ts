@@ -9,7 +9,7 @@ vi.mock("server-only", () => ({}));
 
 import { POST as mcp } from "../../app/api/mcp/route";
 import { alerts } from "../alerts";
-import { check } from "../alerts/watcher";
+import { roundStatus, runAlertRound } from "../alerts/round";
 import { seal } from "../auth/seal";
 import { SESSION_COOKIE } from "../auth/session";
 import { GET as route } from "../../app/api/v1/[...path]/route";
@@ -473,38 +473,95 @@ describe("alerts on an operator's phone", () => {
     expect(await operatorDevices().alertTargets(null, { only: [device.id] })).toEqual([]);
   });
 
-  it("are watched for by one round of checks that only reads, and holds the lease while it does", async () => {
+  /** What the instance keeps about its rounds. */
+  const round = () => (JSON.parse(readFileSync(dataFile("operator-alerts.json"), "utf8")) as { round: { claimedAt: number | null; jobsReadAt: number | null }; state: { engine: { down: boolean } } });
+  /** Moves what the instance remembers of its rounds into the past, as if that long had gone by since. */
+  const later = (ms: number) => {
+    const kept = round();
+    writeFileSync(dataFile("operator-alerts.json"), JSON.stringify({ ...kept, round: { claimedAt: kept.round.claimedAt === null ? null : kept.round.claimedAt - ms, jobsReadAt: kept.round.jobsReadAt === null ? null : kept.round.jobsReadAt - ms } }));
+  };
+
+  it("are watched for by a round of checks that only reads, started by one caller at a time", async () => {
     const device = await enrol();
     await turnOn(device, ["engine_not_ready", "jobs_failing", "reports_waiting"]);
-    const watcher = { holder: "this-process", jobsReadAt: 0, checking: false };
-    await check(watcher);
-    await check(watcher);
-    const state = JSON.parse(readFileSync(dataFile("operator-alerts.json"), "utf8")) as { lease: { holder: string }; state: { engine: { down: boolean } } };
-    expect(state.lease.holder).toBe("this-process");
-    // The mock engine is ready, so nobody is told it isn't.
-    expect(state.state.engine.down).toBe(false);
-    expect(bodies()).not.toContain("The engine isn't ready");
-    expect(watcher.jobsReadAt).toBeGreaterThan(0);
+    // Two callers at once, as a timer and a scheduler would be: one round runs.
+    expect((await Promise.all([runAlertRound(), runAlertRound()])).sort()).toEqual([false, true]);
+    expect(await runAlertRound()).toBe(false);
+    const first = round().round;
+    expect(first.jobsReadAt).not.toBeNull();
 
-    // A second process finds the lease taken and does nothing: it doesn't even read the jobs.
-    const other = { holder: "another-process", jobsReadAt: 0, checking: false };
-    await check(other);
-    expect(other.jobsReadAt).toBe(0);
+    later(60_000);
+    expect(await runAlertRound()).toBe(true);
+    // The mock engine is ready on both checks, so nobody is told it isn't.
+    expect(round().state.engine.down).toBe(false);
+    expect(bodies()).not.toContain("The engine isn't ready");
+    // Recent jobs were read on the first round and are not read again a minute later.
+    expect(round().round.jobsReadAt).toBe((first.jobsReadAt ?? 0) - 60_000);
+    later(5 * 60_000);
+    expect(await runAlertRound()).toBe(true);
+    expect(round().round.jobsReadAt).toBeGreaterThan((first.jobsReadAt ?? 0) - 60_000);
+
+    expect(await roundStatus()).toMatchObject({ status: "running" });
+    // With no round for five minutes, nothing is running the checks. A server that runs them itself and has
+    // only just started is given a moment; where a scheduler runs them, there is nothing to wait for.
+    expect((await roundStatus(Date.now() + 5 * 60_000)).status).toBe(process.uptime() < 90 ? "starting" : "overdue");
+    vi.stubEnv("CRON_SECRET", "a-secret-only-the-scheduler-holds");
+    expect((await roundStatus(Date.now() + 5 * 60_000)).status).toBe("overdue");
+    vi.stubEnv("CRON_SECRET", "");
   });
 
-  it("send nothing while the console is off on phones", async () => {
+  it("send nothing while the console is off on phones, though the round still runs and tidies up", async () => {
     const device = await enrol();
     await turnOn(device, ["reports_waiting"]);
     const before = bodies().length;
     configure({ mobile: true, mobileConsole: false });
-    alerts().reportFiled(9);
-    alerts().phoneAdded("opd_someone");
-    await alerts().settled();
-    const watcher = { holder: "this-process", jobsReadAt: 0, checking: false };
-    await check(watcher);
-    expect(bodies()).toHaveLength(before);
-    expect(watcher.jobsReadAt).toBe(0);
-    configure({ mobile: true, mobileConsole: true });
+    try {
+      alerts().reportFiled(9);
+      alerts().phoneAdded("opd_someone");
+      await alerts().settled();
+      later(10 * 60_000);
+      const jobsReadBefore = round().round.jobsReadAt;
+      expect(await runAlertRound()).toBe(true);
+      expect(bodies()).toHaveLength(before);
+      // Nothing was asked of the engine: recent jobs weren't read.
+      expect(round().round.jobsReadAt).toBe(jobsReadBefore);
+      expect(await roundStatus()).toEqual({ status: "off", lastAt: null });
+    } finally {
+      configure({ mobile: true, mobileConsole: true });
+    }
+  });
+
+  it("are run by a scheduler through a route that exists only for the holder of CRON_SECRET", async () => {
+    const { GET } = await import("../../app/api/cron/alerts/route");
+    const call = (authorization?: string) => GET(new NextRequest("http://localhost/api/cron/alerts", authorization ? { headers: { authorization } } : {}));
+    // No secret set: there is no such page, whatever is sent.
+    expect((await call("Bearer anything")).status).toBe(404);
+    vi.stubEnv("CRON_SECRET", "a-secret-only-the-scheduler-holds");
+    try {
+      expect((await call()).status).toBe(404);
+      expect((await call("Bearer a-secret-somebody-guessed")).status).toBe(404);
+      expect((await call("a-secret-only-the-scheduler-holds")).status).toBe(404);
+      later(60_000);
+      const first = await call("Bearer a-secret-only-the-scheduler-holds");
+      expect([first.status, await first.json()]).toEqual([200, { ran: true }]);
+      // The same call tried again, as a scheduler does after a timeout, runs nothing twice.
+      expect(await (await call("Bearer a-secret-only-the-scheduler-holds")).json()).toEqual({ ran: false });
+    } finally {
+      vi.stubEnv("CRON_SECRET", "");
+    }
+  });
+
+  it("leave the timer unstarted where a scheduler runs the rounds", async () => {
+    const { startAlertWatcher } = await import("../alerts/watcher");
+    const held = globalThis as { livepeerAlertWatcher?: NodeJS.Timeout };
+    vi.stubEnv("CRON_SECRET", "a-secret-only-the-scheduler-holds");
+    startAlertWatcher();
+    expect(held.livepeerAlertWatcher).toBeUndefined();
+    vi.stubEnv("CRON_SECRET", "");
+    startAlertWatcher();
+    expect(held.livepeerAlertWatcher).toBeDefined();
+    clearInterval(held.livepeerAlertWatcher);
+    delete held.livepeerAlertWatcher;
   });
 
   it("the instance says what the Android app starts Firebase with, and nothing that sends", async () => {
