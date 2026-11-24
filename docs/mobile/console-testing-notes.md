@@ -119,6 +119,13 @@ rule: `CLAUDE.md` and the plan hold those.
   `xcrun simctl spawn <udid> notifyutil -s com.apple.BiometricKit.enrollmentChanged 1` then
   `xcrun simctl spawn <udid> notifyutil -p com.apple.BiometricKit.enrollmentChanged`. Match:
   `xcrun simctl spawn <udid> notifyutil -p com.apple.BiometricKit_Sim.pearl.match`.
+- **Showing the console to someone from the simulator.** There is no face to match, so every unlock and every
+  change would need the match command above. Turn the prompts off for one simulator with
+  `xcrun simctl spawn <udid> defaults write org.livepeer.app.dev ConsoleSkipsFaceID -bool YES` (back with
+  `-bool NO`), then relaunch the app. The console then opens and confirms changes without asking, and needs
+  no face enrolled. It exists only in simulator builds (`DeviceKey.skipsMatch`); a build for a phone has no
+  such switch. Leave it off when testing the lock itself: the locked, cancelled and "set up Face ID" states
+  can't be reached with it on.
 - **The simulator can't hold a key behind a face.** `DeviceKey` has a simulator-only path that makes the key
   without the biometric condition and asks for the match itself. The device path has never run on a phone.
 - **The system "Wants to Use … to Sign In" alert** may not show in a screenshot. Its Continue button is at about
