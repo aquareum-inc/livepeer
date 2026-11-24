@@ -1,15 +1,15 @@
 # A Postgres database for the instance: plan
 
 Status: **approved on 24 November 2026 with every recommendation in section 0 as written. Slices 1 to 6 are
-built; slices 7 and 8 are not, and each waits on the project owner.**
+built. Slice 7's import was dropped by the project owner on 24 November 2026. Slice 8 is not built.**
 
-- **Slice 7 (the one-time import of `DATA_DIR` files) may have nothing to do.** Testing found that the
-  Compose bundle could never write those files (see "Found while testing the bundle" in section 10), so no
-  bundle has sessions, reports or alerts state to bring over. The import would only serve an instance run
-  some other way with `DATA_DIR` set by hand. Recommendation: don't build it; such an instance's phones sign
-  in again. That reverses D5, so it is the owner's call. The docs sweep that slice 7 also listed is done.
+- **Slice 7: no import.** Testing found that the Compose bundle could never write the `DATA_DIR` files (see
+  "Found while testing the bundle" in section 10), so no bundle has sessions, reports or alerts state to
+  bring over. This reverses D5 and replaces section 4.4. An instance run some other way with `DATA_DIR` set
+  by hand keeps its files untouched, and its phones sign in again once it has `DATABASE_URL`. The docs sweep
+  slice 7 also listed is done. The bundle's `app-data` volume is no longer written to.
 - **Slice 8 (Vercel) needs the owner's Vercel and Neon accounts**, and nothing is created in either without
-  being asked for first. What slice 1 changed from the plan is listed under the slices table in section 10.
+  being asked for first.
 
 The instance keeps its own state as JSON files in `DATA_DIR`, and the operator console writes
 `instance.config.json` to disk. That ties an instance to a host with a persistent disk and one server
@@ -507,8 +507,8 @@ challenge is made, through a `sweep` method on each store, until the alerts roun
   ("Sam's iPhone"), so it often contains a first name. Sealing it too is a small change if you want it.
 - Test alerts are limited by counting the audit log (three an hour per phone), and requests by two columns
   on the session row. Neither is held in memory any more, except request counts in JSON mode.
-- Until slice 7's import, a phone enrolled on an instance that kept sessions in files signs in again once
-  that instance gets `DATABASE_URL`.
+- A phone enrolled on an instance that kept sessions in files signs in again once that instance gets
+  `DATABASE_URL`: there is no import (see the status at the top).
 
 **Slice 4 as built (24 November 2026).** Tables `character_reports`, `character_blocks` and
 `hidden_characters` (migration `0002_moderation`). One difference from section 2: `reporter_id` is nullable.
