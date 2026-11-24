@@ -6,7 +6,7 @@ import { and, count, desc, eq, gte, inArray, like, lte, ne, schema, sql, type Da
 import { identitySeal } from "../data/identity";
 import type { AuditStore, OperatorDeviceRecord, OperatorDeviceStore, PendingOperatorCode } from "./store";
 
-const { operatorDeviceSessions: sessions, operatorSignInCodes: codes, operatorChallenges: challenges, operatorPushTokens: pushTokens, operatorAudit: audit } = schema;
+const { operatorDeviceSessions: sessions, operatorSignInCodes: codes, operatorChallenges: challenges, operatorPushTokens: pushTokens, operatorPhoneNoticeDismissals: dismissals, operatorAudit: audit } = schema;
 
 /** Postgres's code for a row that points at a row that isn't there. */
 const FOREIGN_KEY_VIOLATION = "23503";
@@ -158,6 +158,17 @@ export function postgresOperatorDeviceStore(db: Database, secret: string): Opera
     },
     async warned(ids, at) {
       if (ids.length > 0) await db.update(pushTokens).set({ warnedAt: new Date(at) }).where(inArray(pushTokens.sessionId, [...ids]));
+    },
+    async dismissNotice(userId, sessionIds, at) {
+      if (sessionIds.length === 0) return;
+      // Chosen from the sessions that are there, so a phone revoked a moment ago is passed over, not refused.
+      await db
+        .insert(dismissals)
+        .select(db.select({ userId: sql<string>`${userId}`.as("user_id"), sessionId: sessions.id, dismissedAt: sql<Date>`${new Date(at)}::timestamptz`.as("dismissed_at") }).from(sessions).where(inArray(sessions.id, [...sessionIds])))
+        .onConflictDoNothing();
+    },
+    async noticesDismissedBy(userId) {
+      return (await db.select({ sessionId: dismissals.sessionId }).from(dismissals).where(eq(dismissals.userId, userId))).map((row) => row.sessionId);
     },
     async sweep(now) {
       await db.delete(codes).where(lte(codes.expiresAt, new Date(now)));

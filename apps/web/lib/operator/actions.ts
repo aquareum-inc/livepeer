@@ -205,3 +205,16 @@ export async function revokeAllOperatorPhonesAction(): Promise<OperatorPhone[]> 
   revalidatePath("/operator", "layout");
   return operatorDevices().list();
 }
+
+/**
+ * Closes the notice that these phones were added, for the operator who asked and nobody else. The phones stay
+ * marked on System until they are two days old.
+ */
+export async function dismissNewPhonesAction(phoneIds: string[]): Promise<void> {
+  await operatorApi();
+  const session = await getSession();
+  if (!session) throw new Error("Operator role required");
+  const ids = Array.isArray(phoneIds) ? phoneIds.filter((id): id is string => typeof id === "string").slice(0, 100) : [];
+  await operatorDevices().dismissNewPhones(session.userId, ids);
+  revalidatePath("/operator", "layout");
+}

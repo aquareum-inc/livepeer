@@ -6,7 +6,7 @@ vi.mock("server-only", () => ({}));
 
 const { auditLog, AUDIT_LIMIT } = await import("./audit");
 const { confirmMessage, inputHash, readPublicKey, signed, unlockMessage } = await import("./proof");
-const { operatorDeviceSessions, OPERATOR_DEVICE_TOKEN_PREFIX, ABSOLUTE_DAYS, IDLE_DAYS, MAX_FAILED_PROOFS, REQUESTS_PER_MINUTE, UNLOCK_SECONDS } = await import("./sessions");
+const { operatorDeviceSessions, OPERATOR_DEVICE_TOKEN_PREFIX, ABSOLUTE_DAYS, IDLE_DAYS, MAX_FAILED_PROOFS, NEW_PHONE_HOURS, REQUESTS_PER_MINUTE, UNLOCK_SECONDS } = await import("./sessions");
 const { sql } = await import("@livepeer/db");
 const { emptyDatabase, everythingKept, rowsOf, testDatabase, useTestDatabase } = await import("../data/testing");
 const { TEST_CHALLENGE, TEST_SECRET, TEST_VERIFIER, testAudit, testOperatorDevices, testPhone } = await import("./testing");
@@ -224,6 +224,43 @@ describe("operator device sessions", () => {
     await enrol(testPhone().rawPublicKey);
     expect(await sessions.revokeAll(by)).toBe(2);
     expect(await sessions.list()).toEqual([]);
+  });
+
+  it("announces a new phone to each operator until they close it, the one who added it included, and for two days", async () => {
+    const { sessions, clock, issued, enrol } = await enrolled();
+    const rae = "usr_demo_rae";
+    const ids = (phones: Array<{ id: string }>) => phones.map((phone) => phone.id);
+    expect(ids((await sessions.newPhones(sam.userId)).announced)).toEqual([issued.device.id]);
+    expect(ids((await sessions.newPhones(rae)).announced)).toEqual([issued.device.id]);
+
+    await sessions.dismissNewPhones(rae, [issued.device.id]);
+    expect(await sessions.newPhones(rae)).toMatchObject({ announced: [], dismissed: [{ id: issued.device.id, user_name: "Sam Whitfield" }] });
+    // Closed for Rae only: Sam, whose account added the phone, still sees it.
+    expect(await sessions.newPhones(sam.userId)).toMatchObject({ announced: [{ id: issued.device.id }], dismissed: [] });
+
+    // A second phone is announced to Rae too, newest first, and the first stays closed.
+    clock.now += 3_600_000;
+    const second = (await enrol(testPhone().rawPublicKey))!;
+    expect(ids((await sessions.newPhones(rae)).announced)).toEqual([second.device.id]);
+    expect(ids((await sessions.newPhones(rae)).dismissed)).toEqual([issued.device.id]);
+    expect(ids((await sessions.newPhones(sam.userId)).announced)).toEqual([second.device.id, issued.device.id]);
+
+    // Two days after the first was added it is no longer new to anyone; the second still is for an hour.
+    clock.now += NEW_PHONE_HOURS * 3_600_000 - 3_600_000;
+    expect(ids((await sessions.newPhones(sam.userId)).announced)).toEqual([second.device.id]);
+    expect(await sessions.newPhones(rae)).toMatchObject({ announced: [{ id: second.device.id }], dismissed: [] });
+    clock.now += 3_600_000;
+    expect(await sessions.newPhones(sam.userId)).toEqual({ announced: [], dismissed: [] });
+  });
+
+  it("forgets a closed notice when the phone is revoked, and keeps it by ids alone", async () => {
+    const { sessions, issued } = await enrolled();
+    await sessions.dismissNewPhones(sam.userId, [issued.device.id, "opd_never_was"]);
+    expect(await rowsOf("operator_phone_notice_dismissals")).toEqual([expect.objectContaining({ user_id: sam.userId, session_id: issued.device.id })]);
+    expect(JSON.stringify(await rowsOf("operator_phone_notice_dismissals"))).not.toMatch(/Sam Whitfield|sam@example\.test/);
+    await sessions.revoke(issued.device.id, { userId: "usr_demo_rae", name: "Rae Lindqvist", deviceId: null, deviceName: null });
+    expect(await rowsOf("operator_phone_notice_dismissals")).toEqual([]);
+    expect(await sessions.newPhones(sam.userId)).toEqual({ announced: [], dismissed: [] });
   });
 
   it("lets a phone sign itself out, which ends that session only", async () => {

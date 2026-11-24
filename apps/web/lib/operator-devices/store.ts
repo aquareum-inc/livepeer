@@ -115,6 +115,13 @@ export interface OperatorDeviceStore {
   alerted(ids: readonly string[], at: string): Promise<void>;
   /** Notes that these phones were told their alerts are about to end. */
   warned(ids: readonly string[], at: string): Promise<void>;
+  /**
+   * Notes that an operator closed the notice that these phones were added. Kept by the operator's id and the
+   * session's, once each; a session that is gone is passed over. The rows go when the session goes.
+   */
+  dismissNotice(userId: string, sessionIds: readonly string[], at: string): Promise<void>;
+  /** The sessions whose notice this operator has closed. */
+  noticesDismissedBy(userId: string): Promise<string[]>;
   /** Drops sign-ins nobody collected and nonces nobody signed by `now`. */
   sweep(now: number): Promise<void>;
 }

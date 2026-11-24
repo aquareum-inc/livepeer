@@ -34,7 +34,7 @@ const implementations: Array<[string, () => Promise<Opened>]> = [
     "Postgres",
     async () => {
       const { db, close } = await testDatabase();
-      const tables = [schema.operatorPushTokens, schema.operatorChallenges, schema.operatorDeviceSessions, schema.operatorSignInCodes, schema.operatorAudit];
+      const tables = [schema.operatorPhoneNoticeDismissals, schema.operatorPushTokens, schema.operatorChallenges, schema.operatorDeviceSessions, schema.operatorSignInCodes, schema.operatorAudit];
       return {
         store: postgresOperatorDeviceStore(db, TEST_SECRET),
         audit: postgresAuditStore(db, TEST_SECRET),
@@ -247,6 +247,33 @@ describe.each(implementations)("the operator device store over %s", (_kind, open
     const kept = await opened.kept();
     expect(kept).toContain("usr_rae");
     for (const secret of ["Sam Whitfield", "Rae Lindqvist", "sam@example.test", token, code, unlocking.nonce, forChange, "ab".repeat(32)]) expect(kept, secret).not.toContain(secret);
+  });
+
+  it("remembers whose notice was closed for which phone, once, by ids only, and forgets it with the session", async () => {
+    await opened.store.createSession(session());
+    await opened.store.createSession(session({ id: "opd_2", tokenHash: "token-2", userId: "usr_rae", name: "Rae Lindqvist", email: "rae@example.test" }));
+    expect(await opened.store.noticesDismissedBy("usr_rae")).toEqual([]);
+
+    await opened.store.dismissNotice("usr_rae", ["opd_1"], at(1000));
+    // Closing it again, twice at once, and for a phone that is gone, changes nothing and refuses nothing.
+    await Promise.all([opened.store.dismissNotice("usr_rae", ["opd_1", "opd_gone"], at(2000)), opened.store.dismissNotice("usr_rae", ["opd_1"], at(3000))]);
+    await opened.store.dismissNotice("usr_rae", [], at(4000));
+    expect(await opened.store.noticesDismissedBy("usr_rae")).toEqual(["opd_1"]);
+    // One operator closing it closes it for nobody else, the one who added the phone included.
+    expect(await opened.store.noticesDismissedBy("usr_sam")).toEqual([]);
+
+    await opened.store.dismissNotice("usr_sam", ["opd_1", "opd_2"], at(5000));
+    expect((await opened.store.noticesDismissedBy("usr_sam")).sort()).toEqual(["opd_1", "opd_2"]);
+    if (opened.db) {
+      const rows = await opened.db.select().from(schema.operatorPhoneNoticeDismissals);
+      expect(rows).toHaveLength(3);
+      expect(rows.find((row) => row.userId === "usr_rae")).toEqual({ userId: "usr_rae", sessionId: "opd_1", dismissedAt: new Date(at(1000)) });
+      expect(JSON.stringify(rows)).not.toMatch(/Sam Whitfield|Rae Lindqvist|example\.test/);
+    }
+
+    await opened.store.remove({ ids: ["opd_1"] });
+    expect(await opened.store.noticesDismissedBy("usr_rae")).toEqual([]);
+    expect(await opened.store.noticesDismissedBy("usr_sam")).toEqual(["opd_2"]);
   });
 
   it("keeps no name and no email where they can be read, and opens them for nobody once the secret has changed", async () => {

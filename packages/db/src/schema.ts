@@ -121,6 +121,22 @@ export const operatorPushTokens = pgTable(
   (table) => [uniqueIndex("operator_push_tokens_push_hash").on(table.pushHash)],
 );
 
+/**
+ * An operator closed the notice that a phone was added. One row per operator and phone, so the notice stays
+ * for every operator who hasn't closed it. A row ends with its session, however that ends.
+ */
+export const operatorPhoneNoticeDismissals = pgTable(
+  "operator_phone_notice_dismissals",
+  {
+    userId: text("user_id").notNull(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => operatorDeviceSessions.id, { onDelete: "cascade" }),
+    dismissedAt: time("dismissed_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.sessionId] }), index("operator_phone_notice_dismissals_session_id").on(table.sessionId)],
+);
+
 /** What operators' phones did and were refused. Never a token, a key or a request body. */
 export const operatorAudit = pgTable(
   "operator_audit",
