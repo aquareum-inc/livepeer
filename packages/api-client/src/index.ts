@@ -1,6 +1,6 @@
 import { isMockOnly, resolveSource } from "./data-sources";
 import { agentModelsFrom, isLanguageApp } from "./runner-model";
-import { listOfferingsLive, type EngineConfig } from "./live/engine";
+import { EngineError, getAllowanceLive, listOfferingsLive, type EngineConfig } from "./live/engine";
 import { assistantText, runChatJob, type ChatTurn } from "./live/jobs";
 import type { ConversationStore, StoredConversation, StoredMessage } from "./conversation-store";
 import { createStoredKey, listStoredKeys, readStoredPreferences, revokeStoredKey, runStoredCapability, updateStoredPreferences, verifyStoredKey } from "./mock/account";
@@ -825,6 +825,34 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     },
 
     async getCreditBalance() {
+      if (resolveSource("getCreditBalance", env) === "live" && engine?.token) {
+        try {
+          const allowance = await getAllowanceLive(engine);
+          const available = allowance.available ?? { amount: "0", currency: "USD" };
+          const granted = allowance.granted ?? available;
+          const spent = allowance.spent ?? { amount: "0", currency: available.currency };
+          return {
+            data: {
+              credits: balanceInCredits({ available }, pricing),
+              allowance: {
+                granted: granted.amount,
+                spent: spent.amount,
+                available: available.amount,
+                currency: available.currency,
+              },
+            },
+            source: "live" as const,
+          };
+        } catch (error) {
+          if (error instanceof EngineError && error.status === 404) {
+            return {
+              data: { credits: 0, allowance: { granted: "0", spent: "0", available: "0", currency: "USD" } },
+              source: "live" as const,
+            };
+          }
+          throw error;
+        }
+      }
       await latency(80, 160);
       return mock(await balance());
     },

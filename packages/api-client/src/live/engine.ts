@@ -1,4 +1,4 @@
-import type { Offering } from "../types";
+import type { Allowance, Offering } from "../types";
 
 export interface EngineConfig {
   url: string;
@@ -31,4 +31,12 @@ async function get<T>(config: EngineConfig, path: string): Promise<T> {
 /** GET /v1/offerings — public, no credential needed. */
 export function listOfferingsLive(config: EngineConfig): Promise<Offering[]> {
   return get<Offering[]>(config, "/v1/offerings");
+}
+
+/**
+ * GET /v1/allowance for the bearer key's own actor. Omitting `actor_id` is the caller's allocation,
+ * which is the builder the signed-in session spends as.
+ */
+export function getAllowanceLive(config: EngineConfig): Promise<Allowance> {
+  return get<Allowance>(config, "/v1/allowance");
 }

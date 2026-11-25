@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createApiClient, createMockProvider } from "./index";
+
+afterEach(() => vi.unstubAllGlobals());
 
 const client = () => createApiClient({ env: { MOCK_ONLY: "1" }, provider: createMockProvider(), user: { id: "usr_demo_adam", name: "Adam Soffer" } });
 
@@ -105,5 +107,32 @@ describe("keys and preferences", () => {
     expect((await api.updatePreferences({ adultContent: true })).data.adultContent).toBe(false);
     expect((await api.updatePreferences({ ageConfirmed: true, adultContent: true })).data.adultContent).toBe(true);
     expect((await api.updatePreferences({ ageConfirmed: false })).data.adultContent).toBe(false);
+  });
+});
+
+describe("live credit balance", () => {
+  it("reads the builder key's own allowance and converts it to credits", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({
+        allocation_id: "alloc_1",
+        status: "active",
+        granted: { amount: "100", currency: "USD" },
+        spent: { amount: "0.50", currency: "USD" },
+        available: { amount: "99.50", currency: "USD" },
+      }), { status: 200 })),
+    );
+    const api = createApiClient({
+      engine: { url: "http://engine.test", token: "lpk_builder" },
+      pricing: { creditsPerUsd: 100, default: 1.3 },
+      user: { id: "someone-else", name: "John Mull" },
+    });
+    const result = await api.getCreditBalance();
+    expect(result.source).toBe("live");
+    expect(result.data.credits).toBe(9950);
+    expect(result.data.allowance.available).toBe("99.50");
+    const call = vi.mocked(fetch).mock.calls[0] as unknown as [URL | string, RequestInit];
+    expect(String(call[0])).toBe("http://engine.test/v1/allowance");
+    expect(call[1].headers).toMatchObject({ Authorization: "Bearer lpk_builder" });
   });
 });

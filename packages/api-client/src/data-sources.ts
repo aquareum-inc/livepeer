@@ -8,7 +8,7 @@ export const DATA_SOURCES = {
   listOfferings: "live",
   // Live when the engine is configured and an offering has a language app.
   listAgentModels: "live",
-  getCreditBalance: "mock",
+  getCreditBalance: "live",
   listShowcase: "mock",
   listPromptStarters: "mock",
   createGeneration: "mock",
