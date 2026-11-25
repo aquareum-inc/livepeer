@@ -42,6 +42,26 @@ const LANGUAGE_APP = /^chat$|(^|\/)chat\//;
 export function isLanguageApp(app: string): boolean {
   return LANGUAGE_APP.test(app);
 }
+
+/**
+ * The language app a chat runs when the user has not picked one.
+ *
+ * A ready app whose name contains `qwen` wins (the historical `blueclaw/chat/qwen3.8-27b`). Otherwise the
+ * plain `chat` app wins: that is how the Qwen 3.8 27B runner advertises today. Anything else falls through
+ * to the first ready language app.
+ */
+export function chooseLanguageApp(
+  offerings: ReadonlyArray<{ app: string; ready_count: number }>,
+  agentModel: string | null | undefined,
+): string {
+  if (agentModel && isLanguageApp(agentModel)) return agentModel;
+  const ready = offerings.filter((offering) => isLanguageApp(offering.app) && offering.ready_count > 0);
+  const named = ready.find((offering) => /qwen/i.test(offering.app));
+  if (named) return named.app;
+  const plain = ready.find((offering) => offering.app === "chat");
+  if (plain) return plain.app;
+  return ready[0]?.app ?? offerings.find((offering) => isLanguageApp(offering.app))?.app ?? "chat";
+}
 const NAMED_MODEL = /(^|\/)chat\/([^/]+)$/;
 
 /**

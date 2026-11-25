@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createApiClient } from "./index";
-import { agentModelsFrom, appModel, runnerModel } from "./runner-model";
+import { agentModelsFrom, appModel, chooseLanguageApp, runnerModel } from "./runner-model";
 import type { Offering } from "./types";
 
 const standard = JSON.stringify({ runner_contract: 1, model: { name: "qwen3.8-27b", source: "hf:cyankiwi/Qwen3.8-27B-AWQ-INT4" }, limits: { context_tokens: 4096 } });
@@ -31,6 +31,20 @@ describe("runner models", () => {
 function offering(app: string, ready = 1): Offering {
   return { app, modes: ["single-shot"], rate_low: null, rate_high: null, rate_status: "ok", stale: false, runner_count: 1, ready_count: ready, observed_at: "2026-11-18T00:00:00Z" };
 }
+
+describe("chooseLanguageApp", () => {
+  it("prefers a ready Qwen app, then the plain chat app, over the first language app", () => {
+    const offerings = [offering("anlivepeer/chat/gemma4-26b"), offering("chat"), offering("text-to-image")];
+    expect(chooseLanguageApp(offerings, null)).toBe("chat");
+    expect(chooseLanguageApp([offering("anlivepeer/chat/gemma4-26b"), offering("blueclaw/chat/qwen3.8-27b")], null)).toBe("blueclaw/chat/qwen3.8-27b");
+  });
+
+  it("keeps an explicit language model and skips a busy Qwen app", () => {
+    const offerings = [offering("chat", 0), offering("anlivepeer/chat/gemma4-26b")];
+    expect(chooseLanguageApp(offerings, "anlivepeer/chat/gemma4-26b")).toBe("anlivepeer/chat/gemma4-26b");
+    expect(chooseLanguageApp(offerings, null)).toBe("anlivepeer/chat/gemma4-26b");
+  });
+});
 
 describe("agent models", () => {
   it("lists language apps by their runners' model, or the model in their name", () => {

@@ -1,5 +1,5 @@
 import { isMockOnly, resolveSource } from "./data-sources";
-import { agentModelsFrom, isLanguageApp } from "./runner-model";
+import { agentModelsFrom, chooseLanguageApp, isLanguageApp } from "./runner-model";
 import { EngineError, getAllowanceLive, listOfferingsLive, type EngineConfig } from "./live/engine";
 import { assistantText, runChatJob, type ChatTurn } from "./live/jobs";
 import type { ConversationStore, StoredConversation, StoredMessage } from "./conversation-store";
@@ -101,7 +101,7 @@ export { EngineError, type EngineConfig } from "./live/engine";
 export { assistantText, runChatJob, type ChatJobRequest, type ChatJobResult, type ChatCompletion, type ChatTurn } from "./live/jobs";
 export type { ConversationStore, StoredConversation, StoredMessage } from "./conversation-store";
 export { quoteCredits } from "./mock/store";
-export { agentModelsFrom, appModel, runnerModel } from "./runner-model";
+export { agentModelsFrom, appModel, chooseLanguageApp, runnerModel } from "./runner-model";
 export * from "./operator";
 export * from "./workspaces";
 export type { CharacterFilter } from "./mock/characters";
@@ -448,17 +448,11 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     };
   }
 
-  /** Pick the language app for a chat job. Prefers agent_model if it is an offering app name. */
+  /** Pick the language app for a chat job. An explicit language model wins; otherwise Qwen, then the first ready app. */
   async function resolveLanguageApp(agentModel: string | null | undefined): Promise<string> {
-    if (agentModel && isLanguageApp(agentModel)) return agentModel;
-    if (!engine) return "chat";
+    if (!engine) return chooseLanguageApp([], agentModel);
     const offerings = await listOfferingsLive(engine);
-    const languageApps = offerings.filter((o) => isLanguageApp(o.app) && o.ready_count > 0);
-    if (languageApps.length === 0) {
-      const anyLanguage = offerings.find((o) => isLanguageApp(o.app));
-      return anyLanguage?.app ?? "chat";
-    }
-    return languageApps[0]!.app;
+    return chooseLanguageApp(offerings, agentModel);
   }
 
   /** Build the messages array from stored messages, bounded by MAX_CONTEXT_TURNS. */
