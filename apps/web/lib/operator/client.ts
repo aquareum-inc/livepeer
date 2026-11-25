@@ -19,7 +19,8 @@ export async function paymentProvider(readOnly = false): Promise<PaymentProvider
   if ((await instance()).payments?.provider === "batteries" && url && !mockOnly) {
     const reader = env("ENGINE_READER_TOKEN");
     const admin = readOnly ? undefined : env("ENGINE_ADMIN_TOKEN");
-    return createBatteriesProvider({ url, ...(reader ? { reader } : {}), ...(admin ? { admin } : {}) });
+    const clearinghouseUrl = (await instance()).engine?.clearinghouseUrl ?? env("CLEARINGHOUSE_URL");
+    return createBatteriesProvider({ url, ...(clearinghouseUrl ? { clearinghouseUrl } : {}), ...(reader ? { reader } : {}), ...(admin ? { admin } : {}) });
   }
   return mockProvider();
 }
@@ -55,11 +56,12 @@ export function buildReaderClient(): Promise<OperatorClient> {
 async function build(readOnly: boolean): Promise<OperatorClient> {
   const config = await instance();
   const url = config.engine?.url ?? env("ENGINE_URL");
+  const clearinghouseUrl = config.engine?.clearinghouseUrl ?? env("CLEARINGHOUSE_URL");
   const reader = env("ENGINE_READER_TOKEN");
   const admin = readOnly ? undefined : env("ENGINE_ADMIN_TOKEN");
   const mockOnly = env("MOCK_ONLY");
   return createOperatorClient({
-    ...(url ? { engine: { url, ...(reader ? { reader } : {}), ...(admin ? { admin } : {}) } } : {}),
+    ...(url ? { engine: { url, ...(clearinghouseUrl ? { clearinghouseUrl } : {}), ...(reader ? { reader } : {}), ...(admin ? { admin } : {}) } } : {}),
     provider: await paymentProvider(readOnly),
     env: mockOnly ? { MOCK_ONLY: mockOnly } : {},
     pricing: await pricing(),

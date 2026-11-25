@@ -1,6 +1,8 @@
 import { isMockOnly, resolveSource } from "./data-sources";
 import { agentModelsFrom, isLanguageApp } from "./runner-model";
 import { listOfferingsLive, type EngineConfig } from "./live/engine";
+import { assistantText, runChatJob, type ChatTurn } from "./live/jobs";
+import type { ConversationStore, StoredConversation, StoredMessage } from "./conversation-store";
 import { createStoredKey, listStoredKeys, readStoredPreferences, revokeStoredKey, runStoredCapability, updateStoredPreferences, verifyStoredKey } from "./mock/account";
 import { createStoredCharacter, listStoredCharacters, readStoredCharacter, type CharacterFilter } from "./mock/characters";
 import {
@@ -64,6 +66,7 @@ import type {
   Conversation,
   ConversationSummary,
   CreatedApiKey,
+  Message,
   CreditBalance,
   DataSource,
   Generation,
@@ -95,6 +98,8 @@ export * from "./types";
 export * from "./provider";
 export { DATA_SOURCES, isMockOnly, resolveSource, type ApiFunctionName } from "./data-sources";
 export { EngineError, type EngineConfig } from "./live/engine";
+export { assistantText, runChatJob, type ChatJobRequest, type ChatJobResult, type ChatCompletion, type ChatTurn } from "./live/jobs";
+export type { ConversationStore, StoredConversation, StoredMessage } from "./conversation-store";
 export { quoteCredits } from "./mock/store";
 export { agentModelsFrom, appModel, runnerModel } from "./runner-model";
 export * from "./operator";
@@ -281,6 +286,12 @@ export interface ApiClientOptions {
    * listing and refused when asked for by name. Defaults to everything on the network.
    */
   offers?: (app: string) => boolean;
+  /**
+   * Persistent conversation store. When supplied together with an engine that has a token,
+   * conversation functions go live: messages are stored across restarts and the agent calls
+   * the network for chat completions. Without it the mock in-memory agent is used.
+   */
+  conversationStore?: ConversationStore;
 }
 
 /** A capability the instance doesn't offer was asked for by name. */
@@ -371,6 +382,131 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       },
     };
   };
+
+  // ---------------------------------------------------------------------------
+  // Live conversation helpers — used when a ConversationStore and an engine with
+  // a token are both available and the data-source says "live".
+  // ---------------------------------------------------------------------------
+  const store = options.conversationStore;
+  const liveConversations = !!(store && engine?.token && resolveSource("createConversation", env) === "live");
+  /** Bounded context window: the last N turns sent to the model. */
+  const MAX_CONTEXT_TURNS = 40;
+
+  let liveConversationSeq = 0;
+  function nextId(prefix: string): string {
+    liveConversationSeq += 1;
+    return `${prefix}_${Date.now().toString(36)}${liveConversationSeq.toString(36)}`;
+  }
+
+  function titleFor(text: string): string {
+    const clean = text.replace(/\s+/g, " ").trim();
+    return clean.length > 48 ? `${clean.slice(0, 46)}…` : clean;
+  }
+
+  /** Convert stored messages to the rich Message[] the UI expects. */
+  function toUiMessages(stored: StoredMessage[]): Message[] {
+    return stored.map((msg): Message => {
+      if (msg.role === "user") {
+        return {
+          id: msg.id,
+          role: "user",
+          text: msg.content,
+          cast: null,
+          agent_model: msg.agentModel,
+          created_at: msg.createdAt,
+        };
+      }
+      return {
+        id: msg.id,
+        role: "agent",
+        state: "done",
+        steps: [
+          {
+            id: `stp_${msg.id}`,
+            kind: "tool",
+            title: "Chat completion",
+            detail: msg.agentModel ? `Answered by ${msg.agentModel}` : "Answered by the network",
+            app: msg.agentModel ?? "chat",
+            state: "done",
+          },
+        ],
+        text: msg.content,
+        generation_ids: [],
+        analysis: null,
+        elapsed_ms: 0,
+        created_at: msg.createdAt,
+      };
+    });
+  }
+
+  function toUiConversation(record: StoredConversation, messages: StoredMessage[]): Conversation {
+    return {
+      id: record.id,
+      title: record.title,
+      updated_at: record.updatedAt,
+      messages: toUiMessages(messages),
+    };
+  }
+
+  /** Pick the language app for a chat job. Prefers agent_model if it is an offering app name. */
+  async function resolveLanguageApp(agentModel: string | null | undefined): Promise<string> {
+    if (agentModel && isLanguageApp(agentModel)) return agentModel;
+    if (!engine) return "chat";
+    const offerings = await listOfferingsLive(engine);
+    const languageApps = offerings.filter((o) => isLanguageApp(o.app) && o.ready_count > 0);
+    if (languageApps.length === 0) {
+      const anyLanguage = offerings.find((o) => isLanguageApp(o.app));
+      return anyLanguage?.app ?? "chat";
+    }
+    return languageApps[0]!.app;
+  }
+
+  /** Build the messages array from stored messages, bounded by MAX_CONTEXT_TURNS. */
+  function buildChatTurns(messages: StoredMessage[]): ChatTurn[] {
+    const recent = messages.slice(-MAX_CONTEXT_TURNS);
+    return recent.map((msg): ChatTurn => ({
+      role: msg.role === "user" ? "user" : "assistant",
+      content: msg.content,
+    }));
+  }
+
+  /** Run a chat completion and store the result. Returns the assistant's stored message. */
+  async function runAndStoreReply(
+    conversationId: string,
+    messages: StoredMessage[],
+    agentModel: string | null | undefined,
+  ): Promise<StoredMessage> {
+    const app = await resolveLanguageApp(agentModel);
+    const turns = buildChatTurns(messages);
+    const result = await runChatJob(engine!, {
+      app,
+      path: "/v1/chat/completions",
+      method: "POST",
+      mode: "immediate",
+      payload: {
+        messages: turns,
+        stream: false,
+        chat_template_kwargs: { enable_thinking: false },
+      },
+      timeout_s: 55,
+      operation_ref: conversationId,
+    });
+    const reply = assistantText(result.completion);
+    const now = new Date().toISOString();
+    const assistantMsg: StoredMessage = {
+      id: nextId("msg"),
+      conversationId,
+      role: "assistant",
+      content: reply,
+      agentModel: app,
+      jobId: result.jobId,
+      usage: result.completion.usage ?? null,
+      createdAt: now,
+    };
+    await store!.addMessage(assistantMsg);
+    await store!.touch(conversationId, now);
+    return assistantMsg;
+  }
 
   return {
     async listAccounts() {
@@ -562,10 +698,23 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     },
 
     async listConversations() {
+      if (liveConversations) {
+        const records = await store!.list(user.id, workspaceId);
+        return {
+          data: records.map((r): ConversationSummary => ({ id: r.id, title: r.title, updated_at: r.updatedAt })),
+          source: "live" as const,
+        };
+      }
       await latency(60, 140);
       return mock(listStoredConversations(home));
     },
     async getConversation(id) {
+      if (liveConversations) {
+        const record = await store!.get(id, user.id, workspaceId);
+        if (!record) return { data: null, source: "live" as const };
+        const messages = await store!.listMessages(id);
+        return { data: toUiConversation(record, messages), source: "live" as const };
+      }
       await latency(60, 140);
       return mock(readStoredConversation(id, home));
     },
@@ -573,6 +722,33 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       mustOffer(input.app);
       mustOffer(input.agent_model);
       await mustSpend();
+      if (liveConversations) {
+        const now = new Date().toISOString();
+        const conversationId = nextId("cnv");
+        const record: StoredConversation = {
+          id: conversationId,
+          userId: user.id,
+          workspaceId,
+          title: titleFor(input.text),
+          agentModel: input.agent_model ?? null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await store!.create(record);
+        const userMsg: StoredMessage = {
+          id: nextId("msg"),
+          conversationId,
+          role: "user",
+          content: input.text,
+          agentModel: input.agent_model ?? null,
+          jobId: null,
+          usage: null,
+          createdAt: now,
+        };
+        await store!.addMessage(userMsg);
+        const assistantMsg = await runAndStoreReply(conversationId, [userMsg], input.agent_model);
+        return { data: toUiConversation(record, [userMsg, assistantMsg]), source: "live" as const };
+      }
       await latency(200, 380);
       return mock(createStoredConversation(input, home));
     },
@@ -580,10 +756,37 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       mustOffer(input.app);
       mustOffer(input.agent_model);
       await mustSpend();
+      if (liveConversations) {
+        const record = await store!.get(conversationId, user.id, workspaceId);
+        if (!record) return { data: null, source: "live" as const };
+        const now = new Date().toISOString();
+        const userMsg: StoredMessage = {
+          id: nextId("msg"),
+          conversationId,
+          role: "user",
+          content: input.text,
+          agentModel: input.agent_model ?? null,
+          jobId: null,
+          usage: null,
+          createdAt: now,
+        };
+        await store!.addMessage(userMsg);
+        const prior = await store!.listMessages(conversationId);
+        await runAndStoreReply(conversationId, prior, input.agent_model ?? record.agentModel);
+        const allMessages = await store!.listMessages(conversationId);
+        return {
+          data: toUiConversation({ ...record, updatedAt: now }, allMessages),
+          source: "live" as const,
+        };
+      }
       await latency(200, 380);
       return mock(sendStoredMessage(conversationId, input, home));
     },
     async deleteConversation(id) {
+      if (liveConversations) {
+        const deleted = await store!.delete(id, user.id, workspaceId);
+        return { data: deleted, source: "live" as const };
+      }
       await latency(80, 160);
       return mock(deleteStoredConversation(id, home));
     },

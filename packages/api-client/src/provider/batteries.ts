@@ -23,13 +23,29 @@ interface EngineGrant {
  * Clearinghouse Batteries, reached through the engine. It is a budget ledger: grants and
  * allocations are live; it has no users, plans, credit packs or invoices, and says so.
  * `reader` is the auditor token for reads; `admin` is used only for writes.
+ *
+ * `url` is the work-half (ENGINE_URL) for `/v1/allowance` reads.
+ * `clearinghouseUrl` is the clearinghouse half for `/v1/clearinghouse/*` writes.
+ * When `clearinghouseUrl` is absent it falls back to `url`.
+ *
+ * Grant and allocation writes use the public tenant-admin routes (credential-scoped, no tenant
+ * id in the URL) so they work from hosts that cannot reach the private admin listener.
  */
-export function createBatteriesProvider(engine: { url: string; reader?: string; admin?: string; applicationId?: string }): PaymentProvider {
+export function createBatteriesProvider(engine: {
+  url: string;
+  clearinghouseUrl?: string;
+  reader?: string;
+  admin?: string;
+  tenantId?: string;
+}): PaymentProvider {
   const unsupported = (operation: string) => async (): Promise<never> => {
     throw new UnsupportedByProvider("Clearinghouse Batteries", operation);
   };
-  const call = async <T>(method: "GET" | "POST", path: string, token: string | undefined, body?: unknown): Promise<T> => {
-    const config: EngineConfig = { url: engine.url, ...(token ? { token } : {}) };
+  /** Resolved clearinghouse base, falling back to the work-half URL. */
+  const chBase = engine.clearinghouseUrl ?? engine.url;
+
+  const call = async <T>(method: "GET" | "POST", path: string, token: string | undefined, body?: unknown, baseUrl?: string): Promise<T> => {
+    const config: EngineConfig = { url: baseUrl ?? engine.url, ...(token ? { token } : {}) };
     const response = await fetch(new URL(path, config.url), {
       method,
       headers: { ...(config.token ? { Authorization: `Bearer ${config.token}` } : {}), ...(body ? { "content-type": "application/json" } : {}) },
@@ -51,11 +67,16 @@ export function createBatteriesProvider(engine: { url: string; reader?: string; 
     created_at: grant.metadata.created_at ?? "",
   });
   const statusOf = (value: string): Allocation["status"] => (value === "paused" || value === "revoked" ? value : "active");
+  /**
+   * Public tenant-admin allocation path: the credential scopes the request to the tenant,
+   * so no tenant id appears in the URL. All allocation writes go through CLEARINGHOUSE_URL.
+   */
   const allocationPath = (userId: string) =>
-    `/v1/admin/applications/${encodeURIComponent(engine.applicationId ?? "default")}/actors/${encodeURIComponent(userId)}/allocation`;
+    `/v1/clearinghouse/actors/${encodeURIComponent(userId)}/allocation`;
   const input = (amount: Money) => ({ amount: amount.amount, currency: amount.currency });
   const readAllocation = async (userId: string): Promise<Allocation | null> => {
     try {
+      // /v1/allowance is on the work half (ENGINE_URL).
       const allowance = await call<Allowance>("GET", `/v1/allowance?actor_id=${encodeURIComponent(userId)}`, engine.reader);
       const currency = allowance.available?.currency ?? allowance.granted?.currency ?? "USD";
       return {
@@ -88,21 +109,26 @@ export function createBatteriesProvider(engine: { url: string; reader?: string; 
 
     budgets: {
       async listGrants() {
-        return (await call<EngineGrant[]>("GET", "/v1/admin/grants", engine.admin)).map(toGrant);
+        // M4: GET /v1/clearinghouse/tenants lists tenants (which wrap grants).
+        return (await call<EngineGrant[]>("GET", "/v1/clearinghouse/tenants", engine.admin, undefined, chBase)).map(toGrant);
       },
       async createGrant({ label, amount }) {
-        return toGrant(await call<EngineGrant>("POST", "/v1/admin/grants", engine.admin, { name: label, amount: input(amount), operation_ref: crypto.randomUUID() }));
+        // M4: POST /v1/clearinghouse/tenants onboards a tenant (name, amount, operation_ref).
+        return toGrant(await call<EngineGrant>("POST", "/v1/clearinghouse/tenants", engine.admin, { name: label, amount: input(amount), operation_ref: crypto.randomUUID() }, chBase));
       },
       async fundGrant(id, amount) {
-        return toGrant(await call<EngineGrant>("POST", "/v1/admin/grant/fund", engine.admin, { grant_id: id, amount: input(amount), operation_ref: crypto.randomUUID() }));
+        // M4: POST /v1/clearinghouse/tenants/{tenant_id}/grant/top-up
+        return toGrant(await call<EngineGrant>("POST", `/v1/clearinghouse/tenants/${encodeURIComponent(id)}/grant/top-up`, engine.admin, { amount: input(amount), operation_ref: crypto.randomUUID() }, chBase));
       },
       getAllocation: readAllocation,
-      async provisionAllocation({ userId, grantId, amount }) {
-        await call("POST", allocationPath(userId), engine.admin, { grant_id: grantId, amount: input(amount), operation_ref: crypto.randomUUID() });
+      async provisionAllocation({ userId, amount }) {
+        // M4 AllotBody: {amount, label?, operation_ref} — no grant_id.
+        await call("POST", allocationPath(userId), engine.admin, { amount: input(amount), operation_ref: crypto.randomUUID() }, chBase);
         return (await readAllocation(userId)) as Allocation;
       },
       async topUpAllocation(userId, amount) {
-        await call("POST", `${allocationPath(userId)}/fund`, engine.admin, { amount: input(amount), operation_ref: crypto.randomUUID() });
+        // M4: .../fund → .../top-up
+        await call("POST", `${allocationPath(userId)}/top-up`, engine.admin, { amount: input(amount), operation_ref: crypto.randomUUID() }, chBase);
         return (await readAllocation(userId)) as Allocation;
       },
     },

@@ -38,7 +38,7 @@ export interface JobFailure {
 export interface EngineJob {
   id: string;
   actor_id: string;
-  application_id: string;
+  tenant_id: string;
   operation_ref: string | null;
   mode: "immediate" | "async";
   app: string;
@@ -51,9 +51,9 @@ export interface EngineJob {
   completed_at: string | null;
 }
 
-/** `GET /v1/admin/actors` item. */
+/** `GET /v1/clearinghouse/actors` item. */
 export interface KnownActor {
-  application_id: string;
+  tenant_id: string;
   actor_id: string;
   label: string;
   name: string | null;
@@ -68,15 +68,15 @@ export interface KnownActor {
   } | null;
   first_seen_at: string | null;
   last_seen_at: string | null;
-  provisioned: boolean;
+  allotted: boolean;
 }
 
-/** `GET /v1/admin/keys` item. */
+/** `GET /v1/clearinghouse/keys` item. */
 export interface AccessKey {
   key_id: string;
   kind: "actor" | "admin" | "auditor" | "service";
   actor_id: string;
-  application_id: string;
+  tenant_id: string;
   permissions: string[];
   label: string;
   created_at: string;

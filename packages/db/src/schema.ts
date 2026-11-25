@@ -263,3 +263,50 @@ export const pushOutbox = pgTable("push_outbox", {
   /** The payload as it would have been handed over, less the push token. */
   payload: jsonb("payload").notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Conversations — persisted chat threads, so restarts don't lose them.
+// ---------------------------------------------------------------------------
+
+/** A chat conversation between a user and the agent. */
+export const conversations = pgTable(
+  "conversations",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    /** Null in a personal account; the workspace's id in a shared one. */
+    workspaceId: text("workspace_id"),
+    title: text("title").notNull(),
+    /** The language model chosen for the conversation, as an offering app name. */
+    agentModel: text("agent_model"),
+    createdAt: time("created_at").notNull(),
+    updatedAt: time("updated_at").notNull(),
+  },
+  (table) => [
+    index("conversations_user_workspace").on(table.userId, table.workspaceId),
+    index("conversations_updated_at").on(table.updatedAt),
+  ],
+);
+
+/** One message in a conversation: a user turn or an assistant reply. */
+export const conversationMessages = pgTable(
+  "conversation_messages",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["user", "assistant"] }).notNull(),
+    content: text("content").notNull(),
+    /** The language model the user picked for this turn, or that answered it. */
+    agentModel: text("agent_model"),
+    /** The Livepeer network's job id for the assistant's reply, when it ran a job. */
+    jobId: text("job_id"),
+    /** Token usage from the runner, as JSON: `{ prompt_tokens, completion_tokens, total_tokens }`. */
+    usage: jsonb("usage"),
+    createdAt: time("created_at").notNull(),
+  },
+  (table) => [
+    index("conversation_messages_conversation_id").on(table.conversationId),
+  ],
+);

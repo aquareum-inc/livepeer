@@ -59,5 +59,6 @@ export function loadConfig(options: LoadOptions = {}): LoadedConfig {
   }
 
   if (env.ENGINE_URL) config.engine = { ...config.engine, url: env.ENGINE_URL };
+  if (env.CLEARINGHOUSE_URL) config.engine = { ...config.engine, clearinghouseUrl: env.CLEARINGHOUSE_URL };
   return { config, file: source, source: source ? "file" : env.INSTANCE_CONFIG_JSON ? "environment" : "preset" };
 }

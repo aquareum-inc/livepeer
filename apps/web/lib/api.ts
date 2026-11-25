@@ -5,6 +5,7 @@ import { cache } from "react";
 import { isCapabilityEnabled } from "@livepeer/config";
 
 import { getSession } from "./auth/session";
+import { conversationStore } from "./conversations";
 import { env } from "./env";
 import { instance } from "./instance";
 import { describeApps } from "./models";
@@ -16,7 +17,7 @@ import { describeApps } from "./models";
 export async function api(): Promise<ApiClient> {
   const session = await getSession();
   if (!session) return apiFor(null);
-  return apiFor({ id: session.userId, name: session.name }, "offered", await workspaceOf(session));
+  return apiFor({ id: session.userId, name: session.name }, "offered", await workspaceOf(session), false, session.builderKey ?? null);
 }
 
 /**
@@ -36,13 +37,20 @@ export async function workspaceOf(session: { userId: string; workspaceId?: strin
  * tell a mode the operator withdrew from one no operator offers yet). Never run anything with a `network` client.
  * `workspaceId` is the workspace the person is working in; callers must have checked they belong (`workspaceOf`).
  * `viaApiKey` is for a workspace's API key, which has no person behind it.
+ * `builderKey` is the signed-in user's builder API key, used as the bearer token for paid engine jobs.
  */
-export async function apiFor(user: { id: string; name: string } | null, scope: "offered" | "network" = "offered", workspaceId: string | null = null, viaApiKey = false): Promise<ApiClient> {
+export async function apiFor(
+  user: { id: string; name: string } | null,
+  scope: "offered" | "network" = "offered",
+  workspaceId: string | null = null,
+  viaApiKey = false,
+  builderKey: string | null = null,
+): Promise<ApiClient> {
   const config = await instance();
   const url = config.engine?.url ?? env("ENGINE_URL");
   const mockOnly = env("MOCK_ONLY");
   return createApiClient({
-    ...(url ? { engine: { url } } : {}),
+    ...(url ? { engine: builderKey ? { url, token: builderKey } : { url } } : {}),
     describeApps: async (apps) => (await describeApps(apps)).data,
     env: mockOnly ? { MOCK_ONLY: mockOnly } : {},
     ...(scope === "offered" ? { offers: (app: string) => isCapabilityEnabled(app, config.capabilities) } : {}),
@@ -54,6 +62,7 @@ export async function apiFor(user: { id: string; name: string } | null, scope: "
       default: config.pricing?.markup?.default ?? 1.3,
       ...(config.pricing?.markup?.perApp ? { perApp: config.pricing.markup.perApp } : {}),
     },
+    conversationStore: conversationStore(),
   });
 }
 

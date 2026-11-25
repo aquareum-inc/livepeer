@@ -39,9 +39,13 @@ export interface InstanceConfig {
   domain?: string;
   engine?: {
     /**
-     * Engine REST API base URL. ENGINE_URL overrides it.
+     * Engine work-half REST API base URL. ENGINE_URL overrides it.
      */
     url?: string;
+    /**
+     * Clearinghouse REST API base URL. CLEARINGHOUSE_URL overrides it. Defaults to `url` when empty.
+     */
+    clearinghouseUrl?: string;
   };
   /**
    * Which parts of the product this instance serves.

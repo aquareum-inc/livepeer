@@ -5,14 +5,14 @@ import { joinUserRows } from "./user-rows";
 
 const person = (id: string, name: string, email: string): ProviderUser => ({ id, name, email, role: "user", status: "active", created_at: "2026-11-01T00:00:00Z" });
 const account = (id: string, label: string, lastSeen: string | null = null): KnownActor => ({
-  application_id: "default",
+  tenant_id: "default",
   actor_id: id,
   label,
   name: null,
   allocation: null,
   first_seen_at: null,
   last_seen_at: lastSeen,
-  provisioned: true,
+  allotted: true,
 });
 const usd = (amount: number) => ({ amount: amount.toFixed(2), currency: "USD" });
 const allocation: Allocation = { id: "alc_ines", grant_id: "grt", user_id: "usr_ines", status: "active", granted: usd(50), spent: usd(20), available: usd(30) };

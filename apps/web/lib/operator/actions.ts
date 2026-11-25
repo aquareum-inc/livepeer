@@ -27,9 +27,9 @@ export async function retryJobAction(id: string): Promise<EngineJob | null> {
   return (await (await operatorApi()).retryJob(id)).data;
 }
 
-export async function setUserStatusAction(applicationId: string, actorId: string, status: "active" | "paused"): Promise<void> {
+export async function setUserStatusAction(tenantId: string, actorId: string, status: "active" | "paused"): Promise<void> {
   try {
-    await (await operatorApi()).setActorStatus(applicationId, actorId, status);
+    await (await operatorApi()).setActorStatus(tenantId, actorId, status);
   } catch (error) {
     throw new Error(explain(error));
   }

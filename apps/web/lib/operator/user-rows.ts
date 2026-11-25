@@ -1,8 +1,8 @@
 import type { Allocation, KnownActor, Plan, ProviderUser } from "@livepeer/api-client";
 import type { UserRow } from "@livepeer/operator-console";
 
-/** The engine's default application, where accounts live unless the instance names another. */
-const DEFAULT_APPLICATION = "default";
+/** The engine's default tenant, where accounts live unless the instance names another. */
+const DEFAULT_TENANT = "default";
 
 export interface UserSources {
   /** Whether the provider can list its people. Without it, the engine's accounts stand in for them. */
@@ -19,11 +19,11 @@ function row(id: string, user: ProviderUser | null, actor: KnownActor | null, so
   const allocation = sources.allocationFor(id);
   return {
     id,
-    applicationId: actor?.application_id ?? DEFAULT_APPLICATION,
+    tenantId: actor?.tenant_id ?? DEFAULT_TENANT,
     name: user?.name ?? (actor ? actor.label || actor.name || actor.actor_id : id),
     email: user?.email ?? null,
     role: user?.role ?? "user",
-    status: allocation?.status ?? actor?.allocation?.status ?? (actor ? (actor.provisioned ? "active" : "not provisioned") : (user?.status ?? "active")),
+    status: allocation?.status ?? actor?.allocation?.status ?? (actor ? (actor.allotted ? "active" : "not allotted") : (user?.status ?? "active")),
     plan: sources.planFor(id)?.name ?? null,
     budget: allocation ? Number(allocation.granted.amount) : null,
     spent: allocation ? Number(allocation.spent.amount) : null,

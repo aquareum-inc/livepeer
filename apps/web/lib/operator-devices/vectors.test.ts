@@ -18,7 +18,7 @@ const INPUTS: Array<Record<string, unknown>> = [
   { id: "rep_8Jk2", outcome: "hidden" },
   { outcome: "dismissed", id: "rep_8Jk2" },
   { id: "usr_demo_priya", status: "paused" },
-  { status: "active", id: "usr_demo_priya", application_id: "default" },
+  { status: "active", id: "usr_demo_priya", tenant_id: "default" },
   { id: "usr \"quoted\" / ünïcode \n line", status: "paused" },
   {},
   // A list keeps the order it was given: turning alerts on, and turning them off.
@@ -45,7 +45,7 @@ describe("operator proof vectors", () => {
 
   it("put keys in order and leave nothing to a serialiser's taste", () => {
     expect(vectors.inputs[0]!.canonical).toBe('{"id":"rep_8Jk2","outcome":"hidden"}');
-    expect(vectors.inputs[3]!.canonical).toBe('{"application_id":"default","id":"usr_demo_priya","status":"active"}');
+    expect(vectors.inputs[3]!.canonical).toBe('{"id":"usr_demo_priya","status":"active","tenant_id":"default"}');
     expect(vectors.inputs[5]!.canonical).toBe("{}");
     expect(vectors.inputs[6]!.canonical).toBe(`{"environment":"development","kinds":["engine_not_ready","reports_waiting"],"push_token":"${"5a".repeat(32)}"}`);
     expect(vectors.inputs[7]!.canonical).toBe('{"kinds":[]}');

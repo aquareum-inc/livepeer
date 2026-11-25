@@ -12,13 +12,13 @@ in `apps/web/lib/public-api/operations.ts`.
 | Home | Load capability list for the picker | `listOfferings` | Not on mobile: the agent picks; casting reads `list_capability_labels` to know image to video is on offer |
 | Home | Load starting points | `listPromptStarters` | Built (iOS sample) |
 | (none yet) | Load example gallery: off Home on every client (decision 105), kept for a planned discovery view | `listShowcase` | Not on mobile (decisions 102 and 104) |
-| Home | Send a request | `createConversation` | Built (iOS sample) |
+| Home | Send a request | `createConversation` (live: runs `POST /v1/jobs` against a language offering and stores the conversation in Postgres) | Built (iOS sample) |
 | Home, Chat | Upload a photo or video from the device and attach it (the plus button; the file goes to the library first) | `requestUpload`, then `receiveUpload` through the file route | Built on iOS and Android (decision 106): the system photo picker |
 | Home | Attach or cast as a guest (the buttons are shown; using one asks to sign in) | none until signed in | Built on iOS and Android |
 | Home | Start from a starting point (its name is sent and the agent asks for the rest) | `createConversation` | Built on iOS and Android (decisions 103 and 104) |
 | Shell | List recent conversations (open sidebar) | `listConversations` | Built (slice 2): History, from Home, with search by title |
 | Chat | Open a conversation | `getConversation` | Built (iOS sample); from History by its id in slice 2 |
-| Chat | Send a follow-up | `sendMessage` | Built (iOS sample) |
+| Chat | Send a follow-up | `sendMessage` (live: includes prior turns in the job payload, bounded to 40 messages) | Built (iOS sample) |
 | Chat | Follow the agent's steps | `getConversation` | Built (iOS sample) |
 | Chat | Follow a shot rendering | `getGeneration` | Built (iOS sample) |
 | Chat | Open a shot in the studio | Navigation with the shot's prompt; `getGeneration` in the studio from slice (c). | Built (slice 3) |

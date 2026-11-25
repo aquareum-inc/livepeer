@@ -29,10 +29,10 @@
       "input": {
         "status": "active",
         "id": "usr_demo_priya",
-        "application_id": "default"
+        "tenant_id": "default"
       },
-      "canonical": "{\"application_id\":\"default\",\"id\":\"usr_demo_priya\",\"status\":\"active\"}",
-      "hash": "aNhWZEXNKm2UT-54tOiZE9QNvsGrN8j4X3kszjTAh68"
+      "canonical": "{\"id\":\"usr_demo_priya\",\"status\":\"active\",\"tenant_id\":\"default\"}",
+      "hash": "l6CZnt_PT6PXqcyxDE6UxA50iDHuYicqQ59MMZilejQ"
     },
     {
       "input": {

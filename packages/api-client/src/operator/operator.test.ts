@@ -22,8 +22,8 @@ describe("operator client, token use", () => {
     for (let call = 0; call < 3; call += 1) expect(auth(fetchMock, call)).toBe("Bearer reader-token");
     expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
       "http://engine.test/v1/jobs?limit=50",
-      "http://engine.test/v1/admin/actors",
-      "http://engine.test/v1/admin/keys",
+      "http://engine.test/v1/clearinghouse/actors",
+      "http://engine.test/v1/clearinghouse/keys",
     ]);
   });
 
@@ -51,7 +51,7 @@ describe("operator client, mock data", () => {
   it("mock jobs have the engine's shape", async () => {
     const [job] = (await mockClient().listJobs(5)).data;
     expect(Object.keys(job!).sort()).toEqual(
-      ["actor_id", "app", "application_id", "attempts", "capability", "completed_at", "created_at", "failure", "id", "mode", "model", "operation_ref", "state"],
+      ["actor_id", "app", "attempts", "capability", "completed_at", "created_at", "failure", "id", "mode", "model", "operation_ref", "state", "tenant_id"],
     );
   });
 

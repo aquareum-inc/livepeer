@@ -239,7 +239,7 @@ describe("an operator device session", () => {
     const device = await enrol();
     const input = { id: "usr_demo_priya", status: "active" };
     const proof = await proofFor(device, "operator_set_user_status", input);
-    const done = await call("operator_set_user_status", { token: device.token, input, proof, query: "status=paused&application_id=other" });
+    const done = await call("operator_set_user_status", { token: device.token, input, proof, query: "status=paused&tenant_id=other" });
     expect(done.status).toBe(200);
     expect(await lastAudit()).toMatchObject({ event: "change", detail: "active" });
   });

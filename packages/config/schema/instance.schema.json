@@ -63,7 +63,12 @@
         "url": {
           "type": "string",
           "format": "uri",
-          "description": "Engine REST API base URL. ENGINE_URL overrides it."
+          "description": "Engine work-half REST API base URL. ENGINE_URL overrides it."
+        },
+        "clearinghouseUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Clearinghouse REST API base URL. CLEARINGHOUSE_URL overrides it. Defaults to `url` when empty."
         }
       }
     },

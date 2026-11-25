@@ -368,10 +368,11 @@ async function doctor(options) {
       add("reader token", jobs.status === 200, jobs.status === 200 ? "accepted" : `refused (HTTP ${jobs.status})`, "ENGINE_READER_TOKEN must be an auditor key issued by the engine");
     }
     if (ready.status === 200 && env.ENGINE_ADMIN_TOKEN) {
-      const keys = await probe(new URL("/v1/admin/keys", env.ENGINE_URL), { authorization: `Bearer ${env.ENGINE_ADMIN_TOKEN}` });
+      const chUrl = env.CLEARINGHOUSE_URL || env.ENGINE_URL;
+      const keys = await probe(new URL("/v1/clearinghouse/keys", chUrl), { authorization: `Bearer ${env.ENGINE_ADMIN_TOKEN}` });
       add("admin token", keys.status === 200, keys.status === 200 ? "accepted" : `refused (HTTP ${keys.status})`, "ENGINE_ADMIN_TOKEN must be an admin key. An actor (builder) key gets 403 here.");
-      const grants = keys.status === 200 ? await probe(new URL("/v1/admin/grants", env.ENGINE_URL), { authorization: `Bearer ${env.ENGINE_ADMIN_TOKEN}` }) : { status: 0 };
-      add("provider", grants.status === 200, grants.status === 200 ? "reachable through the engine" : "not verified (needs a working admin token)", "Fix the admin token first; then check the payment provider container is healthy");
+      const tenants = keys.status === 200 ? await probe(new URL("/v1/clearinghouse/tenants", chUrl), { authorization: `Bearer ${env.ENGINE_ADMIN_TOKEN}` }) : { status: 0 };
+      add("provider", tenants.status === 200, tenants.status === 200 ? "reachable through the clearinghouse" : "not verified (needs a working admin token)", "Fix the admin token first; then check the payment provider container is healthy");
     }
   }
 

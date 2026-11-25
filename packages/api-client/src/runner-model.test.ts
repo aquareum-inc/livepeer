@@ -45,8 +45,8 @@ describe("agent models", () => {
     expect(agentModelsFrom([offering("chat")], [])).toEqual([]);
   });
 
-  it("serves the mock agent's models while the agent is mocked", async () => {
-    const client = createApiClient({ env: {}, engine: { url: "http://engine.invalid" } });
+  it("serves the mock agent's models in mock-only mode", async () => {
+    const client = createApiClient({ env: { MOCK_ONLY: "1" }, engine: { url: "http://engine.invalid" } });
     const result = await client.listAgentModels();
     expect(result.source).toBe("mock");
     expect(result.data.map((model) => model.model)).toContain("gemma-3-27b");

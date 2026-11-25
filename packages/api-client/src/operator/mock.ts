@@ -30,7 +30,7 @@ export function mockJobs(limit = 60): EngineJob[] {
     return {
       id,
       actor_id: USERS[index % USERS.length] as string,
-      application_id: "default",
+      tenant_id: "default",
       operation_ref: null,
       mode: "immediate",
       app,
@@ -75,7 +75,7 @@ export function setMockActorStatus(actorId: string, status: "active" | "paused")
 export function mockActors(): KnownActor[] {
   const now = anchor();
   return USERS.map((actor, index) => ({
-    application_id: "default",
+    tenant_id: "default",
     actor_id: actor,
     label: NAMES[actor] ?? actor,
     name: null,
@@ -90,25 +90,25 @@ export function mockActors(): KnownActor[] {
     },
     first_seen_at: new Date(now - (58 - index * 9) * 24 * HOUR).toISOString(),
     last_seen_at: new Date(now - index * 3.4 * HOUR).toISOString(),
-    provisioned: true,
+    allotted: true,
   }));
 }
 
 const keys: AccessKey[] = [
-  { key_id: "key_01", kind: "admin", actor_id: "operator", application_id: "default", permissions: [], label: "console", created_at: "2026-08-19T08:40:00Z", revoked_at: null },
-  { key_id: "key_02", kind: "auditor", actor_id: "console-reader", application_id: "default", permissions: [], label: "console reader", created_at: "2026-08-19T08:41:00Z", revoked_at: null },
+  { key_id: "key_01", kind: "admin", actor_id: "operator", tenant_id: "default", permissions: [], label: "console", created_at: "2026-08-19T08:40:00Z", revoked_at: null },
+  { key_id: "key_02", kind: "auditor", actor_id: "console-reader", tenant_id: "default", permissions: [], label: "console reader", created_at: "2026-08-19T08:41:00Z", revoked_at: null },
   ...USERS.map((actor, index): AccessKey => ({
     key_id: `key_${String(index + 3).padStart(2, "0")}`,
     kind: "actor",
     actor_id: actor,
-    application_id: "default",
+    tenant_id: "default",
     permissions: ["jobs.run", "jobs.read", "costs.read"],
     label: `${NAMES[actor]} · app`,
     created_at: new Date(Date.UTC(2026, 8, 2 + index * 9, 10)).toISOString(),
     revoked_at: null,
   })),
   // A workspace is one actor, so its keys are that actor's.
-  { key_id: "key_northlight_render", kind: "actor", actor_id: "wsp_northlight", application_id: "default", permissions: ["jobs.run", "jobs.read", "costs.read"], label: "Render queue", created_at: "2026-10-21T10:05:00Z", revoked_at: null },
+  { key_id: "key_northlight_render", kind: "actor", actor_id: "wsp_northlight", tenant_id: "default", permissions: ["jobs.run", "jobs.read", "costs.read"], label: "Render queue", created_at: "2026-10-21T10:05:00Z", revoked_at: null },
 ];
 let keySequence = keys.length;
 
@@ -120,7 +120,7 @@ export function mockIssueKey(input: { actor_id: string; label: string; kind: Acc
     key_id: `key_${String(keySequence).padStart(2, "0")}`,
     kind: input.kind,
     actor_id: input.actor_id,
-    application_id: "default",
+    tenant_id: "default",
     permissions: input.kind === "actor" ? ["jobs.run", "jobs.read", "costs.read"] : [],
     label: input.label,
     created_at: new Date().toISOString(),

@@ -204,7 +204,7 @@ export interface PaymentProvider {
     fundGrant(id: string, amount: Money): Promise<Grant>;
     /** `accountId` here and below is a person's id or a workspace's: whichever account owns the budget. */
     getAllocation(accountId: string): Promise<Allocation | null>;
-    provisionAllocation(input: { userId: string; grantId: string; amount: Money }): Promise<Allocation>;
+    provisionAllocation(input: { userId: string; grantId?: string; amount: Money }): Promise<Allocation>;
     /** A one-off addition to an account's allocation. A credit pack is this. */
     topUpAllocation(accountId: string, amount: Money): Promise<Allocation>;
   };

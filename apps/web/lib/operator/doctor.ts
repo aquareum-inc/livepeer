@@ -75,8 +75,9 @@ export async function runDoctor(): Promise<SystemCheck[]> {
   add("Reader token", readerStatus === 200, reader ? (readerStatus === 200 ? "accepted" : `refused (HTTP ${readerStatus})`) : "missing", "ENGINE_READER_TOKEN must be an auditor key issued by the engine");
 
   const admin = env("ENGINE_ADMIN_TOKEN");
-  const adminStatus = admin ? await probe(new URL("/v1/admin/grants", url), admin) : -1;
+  const chUrl = (await instance()).engine?.clearinghouseUrl ?? env("CLEARINGHOUSE_URL") ?? url;
+  const adminStatus = admin ? await probe(new URL("/v1/clearinghouse/tenants", chUrl), admin) : -1;
   add("Admin token", adminStatus === 200, admin ? (adminStatus === 200 ? "accepted" : `refused (HTTP ${adminStatus})`) : "missing", "ENGINE_ADMIN_TOKEN must be an admin key. An actor (builder) key is refused with 403.");
-  add("Payment provider", adminStatus === 200, adminStatus === 200 ? "reachable through the engine" : "not verified", "Fix the admin token; grants are read through it");
+  add("Payment provider", adminStatus === 200, adminStatus === 200 ? "reachable through the clearinghouse" : "not verified", "Fix the admin token; tenants are read through it");
   return checks;
 }

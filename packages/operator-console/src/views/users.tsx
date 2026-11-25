@@ -14,7 +14,7 @@ type LinkType = ComponentType<{ href: string; className?: string; children: Reac
 /** One row of the users view: the engine's actor joined with the provider's budget and plan. */
 export interface UserRow {
   id: string;
-  applicationId: string;
+  tenantId: string;
   name: string;
   email: string | null;
   role: "user" | "operator";

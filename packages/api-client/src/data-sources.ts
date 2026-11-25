@@ -6,19 +6,19 @@ import type { DataSource } from "./types";
  */
 export const DATA_SOURCES = {
   listOfferings: "live",
-  // Mock while the agent is: the menu picks a model for the mock agent, so it lists the mock agent's
-  // models. Switch to live with createConversation and sendMessage.
-  listAgentModels: "mock",
+  // Live when the engine is configured and an offering has a language app.
+  listAgentModels: "live",
   getCreditBalance: "mock",
   listShowcase: "mock",
   listPromptStarters: "mock",
   createGeneration: "mock",
   getGeneration: "mock",
-  listConversations: "mock",
-  getConversation: "mock",
-  createConversation: "mock",
-  sendMessage: "mock",
-  deleteConversation: "mock",
+  // Live when a ConversationStore and an engine token are both provided.
+  listConversations: "live",
+  getConversation: "live",
+  createConversation: "live",
+  sendMessage: "live",
+  deleteConversation: "live",
   runCapability: "mock",
   listMedia: "mock",
   deleteMedia: "mock",

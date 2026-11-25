@@ -29,7 +29,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
       keys={keys.data.filter((key) => key.actor_id === id).map((key) => ({ id: key.key_id, label: key.label, created: key.created_at, revoked: key.revoked_at !== null }))}
       workspaces={memberships.map(({ workspace, role }) => ({ id: workspace.id, name: workspace.name, role, status: workspace.status }))}
       Link={ConsoleLink}
-      setStatus={setUserStatusAction.bind(null, user.applicationId, id)}
+      setStatus={setUserStatusAction.bind(null, user.tenantId, id)}
       setRole={setUserRoleAction.bind(null, id)}
       assignPlan={assignPlanAction.bind(null, id)}
       topUp={topUpUserAction.bind(null, id)}

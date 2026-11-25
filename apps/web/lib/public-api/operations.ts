@@ -667,13 +667,13 @@ export const OPERATIONS: Operation[] = [
     method: "POST",
     path: "/operator/users/{id}/status",
     output: "Done",
-    input: object({ id: text("Actor id"), status: { enum: ["active", "paused"] }, application_id: { type: "string", default: "default" } }, ["id", "status"]),
+    input: object({ id: text("Actor id"), status: { enum: ["active", "paused"] }, tenant_id: { type: "string", default: "default" } }, ["id", "status"]),
     operator: true,
     mobile: "confirm",
     run: async (context, input) => {
       if (input.status !== "active" && input.status !== "paused") throw new ApiError(400, "status is active or paused.");
       const paused = input.status === "paused";
-      const ok = (await operator(context).setActorStatus(str(input, "application_id") || "default", str(input, "id"), paused ? "paused" : "active")).data;
+      const ok = (await operator(context).setActorStatus(str(input, "tenant_id") || "default", str(input, "id"), paused ? "paused" : "active")).data;
       // A suspended user's apps sign out on their next request.
       if (ok && paused) {
         await context.devices.revokeAll(str(input, "id"));

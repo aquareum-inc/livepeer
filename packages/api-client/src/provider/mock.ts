@@ -253,10 +253,11 @@ export function createMockProvider(): PaymentProvider {
         return allocation ? { ...allocation } : null;
       },
       async provisionAllocation({ userId, grantId, amount }) {
-        const grant = must(state.grants.find((entry) => entry.id === grantId), "grant");
+        const resolvedGrantId = grantId ?? state.grants[0]?.id ?? "";
+        const grant = must(state.grants.find((entry) => entry.id === resolvedGrantId), "grant");
         if (num(grant.funded) - num(grant.allocated) < num(amount)) throw new Error("The grant has less unallocated funding than that.");
         grant.allocated = usd(num(grant.allocated) + num(amount));
-        const allocation: Allocation = { id: id("alc"), grant_id: grantId, user_id: userId, status: "active", granted: amount, spent: usd(0), available: amount };
+        const allocation: Allocation = { id: id("alc"), grant_id: resolvedGrantId, user_id: userId, status: "active", granted: amount, spent: usd(0), available: amount };
         state.allocations = state.allocations.filter((entry) => entry.user_id !== userId).concat(allocation);
         return { ...allocation };
       },

@@ -4,15 +4,15 @@
   "registry": "ghcr.io",
   "engine": {
     "repo": "NE-Build-Track/livepeer-builder-core",
-    "ref": "15142129ebbf51103658f8ad48fd5adae052c56d"
+    "ref": "ee5975e6e475997d76918ab5ce2ab477291324b7"
   },
   "provider": {
     "repo": "livepeer/clearinghouse-batteries",
-    "ref": "ca09e47c067682fb48c3f15425546fb6aa5b6659"
+    "ref": "03bc9fb5e15b073e68986ec0261e68d7ecd9598b"
   },
   "version": "0.1.0",
   "signer": {
     "repo": "livepeer/node",
-    "ref": "406b248f6cb8728e6e7eba1809901f589060bc6b"
+    "ref": "eee09c41f46d64a34bfd9ed3c9cb649536490f13"
   }
 }

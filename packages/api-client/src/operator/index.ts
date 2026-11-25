@@ -82,7 +82,7 @@ export interface OperatorClient {
   listJobs(limit?: number): Promise<Sourced<EngineJob[]>>;
   retryJob(id: string): Promise<Sourced<EngineJob | null>>;
   listActors(): Promise<Sourced<KnownActor[]>>;
-  setActorStatus(applicationId: string, actorId: string, status: "active" | "paused"): Promise<Sourced<boolean>>;
+  setActorStatus(tenantId: string, actorId: string, status: "active" | "paused"): Promise<Sourced<boolean>>;
   listAccessKeys(): Promise<Sourced<AccessKey[]>>;
   issueAccessKey(input: { actor_id: string; label: string; kind: AccessKey["kind"] }): Promise<Sourced<{ key: AccessKey; token: string | null }>>;
   revokeAccessKey(keyId: string): Promise<Sourced<AccessKey | null>>;
@@ -237,9 +237,9 @@ export function createOperatorClient(options: OperatorClientOptions): OperatorCl
       return mock(job ? { ...job, state: "queued", failure: null, completed_at: null } : null);
     },
     listActors: () => fromEngine(read.actors, mockActors),
-    async setActorStatus(applicationId, actorId, status) {
+    async setActorStatus(_tenantId, actorId, status) {
       if (live && engine) {
-        await write.setAllocationStatus(engine, applicationId, actorId, status);
+        await write.setAllocationStatus(engine, actorId, status);
         return { data: true, source: "live" };
       }
       await latency(200, 400);
