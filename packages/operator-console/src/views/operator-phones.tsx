@@ -91,8 +91,8 @@ export function OperatorPhonesPanel({ phones: initial, added, unseen, seen, offe
               key: "phone",
               header: "Phone",
               cell: (phone) => (
-                <span className="flex flex-col">
-                  <span className="flex items-center gap-1.5 font-medium">
+                <span className="flex flex-col gap-0.5">
+                  <span className="flex items-center gap-2 font-medium">
                     {phone.name}
                     {added.includes(phone.id) ? <Badge>New</Badge> : null}
                   </span>

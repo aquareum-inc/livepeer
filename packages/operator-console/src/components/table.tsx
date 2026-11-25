@@ -45,7 +45,8 @@ export function Table<T>({ columns, rows, rowKey, caption, empty }: TableProps<T
                 <td
                   key={column.key}
                   className={cn(
-                    "h-10 px-3 align-middle first:pl-4 last:pr-4",
+                    // The height keeps one-line rows dense; the padding is what a two-line cell gets to breathe.
+                    "h-10 px-3 py-2 align-middle first:pl-4 last:pr-4",
                     column.align === "right" && "text-right",
                     column.mono && "whitespace-nowrap font-mono text-[12px] text-muted-foreground",
                     column.wide && "hidden md:table-cell",
