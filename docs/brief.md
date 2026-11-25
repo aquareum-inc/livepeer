@@ -16,7 +16,7 @@ PRODUCT BRIEF
 - People: Mike maintains the engine. Questions and requests for him go in /docs/engine-requests.md.
 
 PROJECT SETUP
-- Start from an empty repo named "aquareum", at ~/Developer/aquareum, with its remote at github.com/aquareum-inc/aquareum (private for now). The GitHub organisation may change to github.com/aquareum later, so don't hardcode the organisation name anywhere in code, docs or image tags; keep it in one config value. Package manager: pnpm. MIT licence, to match the engine.
+- The repo is "livepeer" (renamed from "aquareum" on 21 November 2026; the local folder is still ~/Developer/aquareum), with its remote at github.com/aquareum/livepeer (public; the organisation was renamed from "aquareum-inc" in late November 2026). The GitHub organisation may move to Livepeer's later, so don't hardcode the organisation name anywhere in code, docs or image tags; keep it in one config value. Package manager: pnpm. MIT licence, to match the engine.
 - Save this brief as docs/brief.md. On your first step, create a CLAUDE.md at the repo root from the RULES, DATA and PROJECT SETUP sections so the standing rules load every session.
 - Secrets live in a root .env file that is never committed. Keep a committed .env.example listing every variable with empty values and a one-line description of each. Ignore .env and .env.*.local in git.
 - This repo is separate from the engine. Don't fork or copy livepeer-builder-core into it. Treat the engine as an external service reached through its REST API, pinned to a specific version or commit and recorded in one place.
