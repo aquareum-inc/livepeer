@@ -22,8 +22,6 @@ Run it yourself with one command, or have it hosted.
 
 <img alt="The native iOS app has two sides. For your users: the library of made images and videos, and a finished chat with a generated shot. For you: the console's job list, and revenue and margin for today and the last 14 days." src="docs/readme/phones.jpg" width="100%">
 
-Screenshots use the mocked data a `MOCK_ONLY=1` instance starts with.
-
 ## This repository
 
 The user app, the operator console, the instance API and MCP server, and the bundle that starts them with a
