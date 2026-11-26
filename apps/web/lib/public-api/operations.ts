@@ -1,4 +1,4 @@
-import type { OperatorAction, OperatorRole, AccountList, Accounts, AgentModelEntry, ApiClient, CapabilityLabel, Character, Preferences, PrivacyDescription, ReportReason, DeviceSession, GenerationRequest, StudioMedium, DeviceToken, EngineJob, InstanceDescription, OfferedCapability, OperatorAlertKind, OperatorAlerts, OperatorAttention, OperatorClient, OperatorStatus } from "@livepeer/api-client";
+import type { NewOperatorInvitation, OperatorAction, OperatorRole, OperatorTeam, TeamOperator, AccountList, Accounts, AgentModelEntry, ApiClient, CapabilityLabel, Character, Preferences, PrivacyDescription, ReportReason, DeviceSession, GenerationRequest, StudioMedium, DeviceToken, EngineJob, InstanceDescription, OfferedCapability, OperatorAlertKind, OperatorAlerts, OperatorAttention, OperatorClient, OperatorStatus } from "@livepeer/api-client";
 
 import type { Moderation } from "../moderation/moderation";
 import type { AuditLog } from "../operator-devices/audit";
@@ -44,6 +44,16 @@ export interface AlertsAccess {
   test(session: OperatorDeviceRecord): Promise<"sent" | "off" | "limited" | "not_delivered">;
 }
 
+/** The team that runs the instance, as the operations change it. Each change is written to the audit log. */
+export interface TeamAccess {
+  view(role: OperatorRole): Promise<OperatorTeam>;
+  invite(actor: { userId: string; name: string }, role: OperatorRole): Promise<NewOperatorInvitation>;
+  revokeInvitation(actor: { userId: string; name: string }, id: string): Promise<boolean>;
+  add(actor: { userId: string; name: string }, person: { userId: string; name: string; email: string | null }, role: OperatorRole): Promise<TeamOperator>;
+  setRole(actor: { userId: string; name: string }, userId: string, role: OperatorRole): Promise<"done" | "missing" | "last_owner" | "from_provider">;
+  remove(actor: { userId: string; name: string }, userId: string): Promise<"done" | "missing" | "last_owner" | "from_provider">;
+}
+
 export interface Context {
   /** How the caller authenticated. An operator device is held to the phone rules in `runOperation`. */
   via: Via;
@@ -65,6 +75,8 @@ export interface Context {
   audit: AuditLog;
   /** Alerts to operators' phones. */
   alerts: AlertsAccess;
+  /** The people who run the instance, and the invitations to join them. */
+  team: TeamAccess;
   /** Reports, blocks and characters taken down. */
   moderation: Moderation;
   /** This instance, as it describes itself to clients. */
@@ -180,6 +192,19 @@ const alertsOf = async (context: Context, session: OperatorDeviceRecord, state: 
 });
 
 /** Who is revoking a phone from the web console or the API, for the audit log. */
+const TEAM_ROLES: readonly OperatorRole[] = ["owner", "member", "viewer"];
+const teamRole = (input: Record<string, unknown>): OperatorRole => {
+  const role = TEAM_ROLES.find((entry) => entry === input.role);
+  if (!role) throw new ApiError(400, `role is one of ${TEAM_ROLES.join(", ")}.`);
+  return role;
+};
+/** A change to someone's place on the team that didn't happen, as the API answers it. */
+const teamChanged = (change: "done" | "missing" | "last_owner" | "from_provider"): void => {
+  if (change === "missing") throw new ApiError(404, "That person isn't on the team.");
+  if (change === "last_owner") throw new ApiError(409, "The team needs an owner. Make someone else an owner first.", "last_owner");
+  if (change === "from_provider") throw new ApiError(409, "The identity provider makes this person an operator. Change it there.", "from_provider");
+};
+
 const revoker = (context: Context) => ({ userId: context.account?.user.id ?? "operator_token", name: context.account?.user.name ?? "Operator API token", deviceId: null, deviceName: null });
 
 /**
@@ -869,6 +894,98 @@ export const OPERATIONS: Operation[] = [
     },
   },
   { name: "operator_revoke_all_devices", description: "Operator: revoke every operator phone at once. Each operator signs in again on their phone to get the console back.", method: "DELETE", path: "/operator/devices", output: "Deleted", input: object({}), operator: true, needs: "manage_team", run: async (context) => { operator(context); return { deleted: await context.operatorDevices.revokeAll(revoker(context)) > 0 }; } },
+  {
+    name: "operator_list_team",
+    description: "Operator: the people who run this instance, each with their role and how they joined, and the caller's own role. An owner also sees the invitations still waiting.",
+    method: "GET",
+    path: "/operator/team",
+    output: "OperatorTeam",
+    input: object({}),
+    operator: true,
+    run: async (context) => {
+      operator(context);
+      if (!context.operatorRole) throw new ApiError(403, "This operation needs the operator role.");
+      return context.team.view(context.operatorRole);
+    },
+  },
+  {
+    name: "operator_create_invitation",
+    description: "Operator: invite someone to the team with a role. Answers with a link that works once and lasts 72 hours; it is shown only now. Whoever opens it and signs in joins the team.",
+    method: "POST",
+    path: "/operator/team/invitations",
+    output: "NewOperatorInvitation",
+    input: object({ role: { enum: [...TEAM_ROLES] } }, ["role"]),
+    operator: true,
+    needs: "manage_team",
+    run: async (context, input) => {
+      operator(context);
+      return context.team.invite(revoker(context), teamRole(input));
+    },
+  },
+  {
+    name: "operator_revoke_invitation",
+    description: "Operator: revoke an invitation to the team that hasn't been used. Its link stops working.",
+    method: "DELETE",
+    path: "/operator/team/invitations/{id}",
+    output: "Deleted",
+    input: object({ id: text("Invitation id, from operator_list_team") }, ["id"]),
+    operator: true,
+    needs: "manage_team",
+    run: async (context, input) => {
+      operator(context);
+      if (!await context.team.revokeInvitation(revoker(context), str(input, "id"))) throw new ApiError(404, "Invitation not found, or no longer waiting");
+      return { deleted: true };
+    },
+  },
+  {
+    name: "operator_add_operator",
+    description: "Operator: put someone who already has an account on the team, with a role. Someone already on it keeps the higher of the two roles.",
+    method: "POST",
+    path: "/operator/team",
+    output: "TeamOperator",
+    input: object({ user_id: text("The person's id, from operator_list_users"), role: { enum: [...TEAM_ROLES] } }, ["user_id", "role"]),
+    operator: true,
+    needs: "manage_team",
+    run: async (context, input) => {
+      const client = operator(context);
+      const role = teamRole(input);
+      const actor = found((await client.listActors()).data.find((entry) => entry.actor_id === str(input, "user_id")) ?? null, "User");
+      // Their email isn't known here; the name and email are kept from their own next sign-in.
+      return context.team.add(revoker(context), { userId: actor.actor_id, name: actor.name ?? actor.label ?? actor.actor_id, email: null }, role);
+    },
+  },
+  {
+    name: "operator_set_operator_role",
+    description: "Operator: change someone's role on the team. Refused for the last owner, and for someone the identity provider makes an operator.",
+    method: "PATCH",
+    path: "/operator/team/{user_id}",
+    output: "Done",
+    input: object({ user_id: text("The person's id, from operator_list_team"), role: { enum: [...TEAM_ROLES] } }, ["user_id", "role"]),
+    operator: true,
+    needs: "manage_team",
+    run: async (context, input) => {
+      operator(context);
+      teamChanged(await context.team.setRole(revoker(context), str(input, "user_id"), teamRole(input)));
+      return { ok: true };
+    },
+  },
+  {
+    name: "operator_remove_operator",
+    description: "Operator: take someone off the team, or leave it yourself. Their console stops on their next request, on the web and on their phones; their account stays. Refused for the last owner.",
+    method: "DELETE",
+    path: "/operator/team/{user_id}",
+    output: "Deleted",
+    input: object({ user_id: text("The person's id, from operator_list_team") }, ["user_id"]),
+    operator: true,
+    // Anyone may leave; taking someone else off is checked below.
+    needs: "self",
+    run: async (context, input) => {
+      operator(context);
+      if (str(input, "user_id") !== context.account?.user.id && !context.can("manage_team")) throw roleRefused();
+      teamChanged(await context.team.remove(revoker(context), str(input, "user_id")));
+      return { deleted: true };
+    },
+  },
   { name: "operator_list_audit", description: "Operator: what operators' phones did, were refused and were told, newest first: sign-ins, unlocks, changes, refusals, revocations and each alert sent.", method: "GET", path: "/operator/audit", output: ["OperatorAuditEntry"], input: object({ limit: { type: "number", default: 100 } }), operator: true, run: async (context, input) => { operator(context); return context.audit.list(Math.trunc(Number(input.limit)) || 100); } },
 ];
 

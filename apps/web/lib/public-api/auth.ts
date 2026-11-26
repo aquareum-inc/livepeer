@@ -13,6 +13,7 @@ import { DEVICE_TOKEN_PREFIX } from "../devices/sessions";
 import { env } from "../env";
 import { buildOperatorClient, buildReaderClient, operatorRoleOf } from "../operator/client";
 import { operators } from "../operators";
+import { teamManagement } from "../operators/manage";
 import { moderation } from "../moderation";
 import { mobileConsoleEnabled, operatorAudit, operatorDevices } from "../operator-devices";
 import { OPERATOR_DEVICE_TOKEN_PREFIX } from "../operator-devices/sessions";
@@ -118,5 +119,5 @@ export function carriesDeviceToken(request: NextRequest): boolean {
 
 /** Everything an operation is given besides its caller, built once per request. */
 export async function requestContext(request: NextRequest, caller: Caller): Promise<Context> {
-  return { ...caller, can: (action) => caller.operatorRole !== null && operatorCan(caller.operatorRole, action), devices: devices(), operatorDevices: operatorDevices(), audit: operatorAudit(), alerts: alerts(), moderation: moderation(), instance: await describeInstance(requestOrigin(request)), labels: capabilityLabels, agentModelMenu, studioMediums, privacy: privacyDescription, quote: quoteCredits };
+  return { ...caller, can: (action) => caller.operatorRole !== null && operatorCan(caller.operatorRole, action), devices: devices(), operatorDevices: operatorDevices(), audit: operatorAudit(), alerts: alerts(), team: teamManagement(), moderation: moderation(), instance: await describeInstance(requestOrigin(request)), labels: capabilityLabels, agentModelMenu, studioMediums, privacy: privacyDescription, quote: quoteCredits };
 }

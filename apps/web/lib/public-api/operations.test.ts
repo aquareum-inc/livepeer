@@ -11,6 +11,8 @@ import { postgresModerationStore } from "../moderation/postgres";
 import { auditLog } from "../operator-devices/audit";
 import { operatorDeviceSessions } from "../operator-devices/sessions";
 import { TEST_SECRET, testAudit, testOperatorDevices } from "../operator-devices/testing";
+import { operators } from "../operators";
+import { teamManagement } from "../operators/manage";
 import { runOperation } from "./dispatch";
 import { ApiError, OPERATIONS, matchOperation, type Account, type AlertsAccess, type Context, type DeviceAccess } from "./operations";
 
@@ -46,7 +48,7 @@ await openTestDatabase();
 const desk = moderation(postgresModerationStore(testDatabase()));
 const audit = auditLog(testAudit());
 const alerts: AlertsAccess = { offered: async () => true, accepts: () => true, reportFiled: vi.fn(), phoneAdded: vi.fn(), test: async () => "sent" };
-const base: Context = { via: "api_key", client, operator: null, operatorRole: null, can: () => false, account: null, devices, operatorDevice: null, operatorDevices: operatorDeviceSessions(testOperatorDevices(), TEST_SECRET, audit), audit, alerts, moderation: desk, privacy: async () => describePrivacy(false), instance, labels, agentModelMenu, studioMediums, quote: quoteCredits };
+const base: Context = { via: "api_key", client, operator: null, operatorRole: null, can: () => false, account: null, team: teamManagement(), devices, operatorDevice: null, operatorDevices: operatorDeviceSessions(testOperatorDevices(), TEST_SECRET, audit), audit, alerts, moderation: desk, privacy: async () => describePrivacy(false), instance, labels, agentModelMenu, studioMediums, quote: quoteCredits };
 /** A caller with a place on the team: the operator client, and what that role may do. */
 const seat = (role: OperatorRole): Pick<Context, "via" | "operator" | "operatorRole" | "can"> => ({ via: "browser", operator, operatorRole: role, can: (action) => operatorCan(role, action) });
 const owner = seat("owner");
@@ -133,6 +135,49 @@ describe("public API operations", () => {
 
     // Someone who isn't an operator is still turned away by the operation, not by a role they don't have.
     await expect(runOperation(OPERATIONS.find((operation) => operation.name === "operator_create_grant")!, base, { label: "x", amount_usd: 1 }, null)).rejects.toMatchObject({ status: 403, code: undefined });
+  });
+
+  it("runs the team: invite, add, change a role and remove, each written down, and only an owner may", async () => {
+    const sam: Account = { user: { id: "usr_demo_sam", name: "Sam Whitfield", email: "sam@example.test" }, role: "operator", deviceId: null };
+    const priya: Account = { user: { id: "usr_demo_priya", name: "Priya", email: null }, role: "operator", deviceId: null };
+    const run = (role: OperatorRole, account: Account, name: string, input: Record<string, unknown> = {}) => runOperation(OPERATIONS.find((operation) => operation.name === name)!, { ...base, ...seat(role), account }, input, null);
+    // Sam is an owner by a link from setup; nobody else is on the team yet.
+    await operators().add({ userId: "usr_demo_sam", name: "Sam Whitfield", email: "sam@example.test" }, "owner", "usr_demo_sam");
+
+    const invitation = (await run("owner", sam, "operator_create_invitation", { role: "member" })) as { id: string; path: string; role: string };
+    expect(invitation).toMatchObject({ role: "member", invited_by: "Sam Whitfield" });
+    expect(invitation.path).toMatch(/^\/join\/operator\/opi_/);
+    await expect(run("owner", sam, "operator_create_invitation", { role: "admin" })).rejects.toMatchObject({ status: 400 });
+    expect((await audit.list(1))[0]).toMatchObject({ event: "change", user_id: "usr_demo_sam", device_id: null, operation: "operator_create_invitation", target: invitation.id, detail: "member" });
+
+    const added = await run("owner", sam, "operator_add_operator", { user_id: "usr_demo_priya", role: "viewer" });
+    expect(added).toMatchObject({ user_id: "usr_demo_priya", role: "viewer", via: "added", added_by: "Sam Whitfield" });
+    await expect(run("owner", sam, "operator_add_operator", { user_id: "usr_nobody", role: "viewer" })).rejects.toMatchObject({ status: 404 });
+
+    // Everyone sees who is on the team and their own role; only an owner sees the links waiting.
+    expect(await run("owner", sam, "operator_list_team")).toMatchObject({ role: "owner", operators: [{ user_id: "usr_demo_sam" }, { user_id: "usr_demo_priya" }], invitations: [{ id: invitation.id }] });
+    expect(await run("viewer", priya, "operator_list_team")).toMatchObject({ role: "viewer", operators: [{}, {}], invitations: [] });
+
+    // A viewer and a member manage nobody, but anyone may leave.
+    for (const role of ["viewer", "member"] as const) {
+      await expect(run(role, priya, "operator_create_invitation", { role: "viewer" })).rejects.toMatchObject({ status: 403, code: "role" });
+      await expect(run(role, priya, "operator_set_operator_role", { user_id: "usr_demo_priya", role: "owner" })).rejects.toMatchObject({ status: 403, code: "role" });
+      await expect(run(role, priya, "operator_remove_operator", { user_id: "usr_demo_sam" })).rejects.toMatchObject({ status: 403, code: "role" });
+      await expect(run(role, priya, "operator_revoke_invitation", { id: invitation.id })).rejects.toMatchObject({ status: 403, code: "role" });
+    }
+
+    expect(await run("owner", sam, "operator_set_operator_role", { user_id: "usr_demo_priya", role: "member" })).toEqual({ ok: true });
+    expect((await audit.list(1))[0]).toMatchObject({ operation: "operator_set_operator_role", target: "usr_demo_priya", detail: "member" });
+    // The only owner can't step down or leave.
+    await expect(run("owner", sam, "operator_set_operator_role", { user_id: "usr_demo_sam", role: "viewer" })).rejects.toMatchObject({ status: 409, code: "last_owner" });
+    await expect(run("owner", sam, "operator_remove_operator", { user_id: "usr_demo_sam" })).rejects.toMatchObject({ status: 409, code: "last_owner" });
+
+    expect(await run("owner", sam, "operator_revoke_invitation", { id: invitation.id })).toEqual({ deleted: true });
+    await expect(run("owner", sam, "operator_revoke_invitation", { id: invitation.id })).rejects.toMatchObject({ status: 404 });
+
+    expect(await run("member", priya, "operator_remove_operator", { user_id: "usr_demo_priya" })).toEqual({ deleted: true });
+    expect((await audit.list(1))[0]).toMatchObject({ operation: "operator_remove_operator", user_id: "usr_demo_priya", target: "usr_demo_priya", detail: "left" });
+    await expect(run("owner", sam, "operator_remove_operator", { user_id: "usr_demo_priya" })).rejects.toMatchObject({ status: 404 });
   });
 
   it("every operation outside the operator's says what it answers with", async () => {

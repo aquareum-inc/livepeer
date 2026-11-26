@@ -3,8 +3,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { ConsoleLink } from "@/components/console";
-import { assignPlanAction, setUserRoleAction, setUserStatusAction, topUpUserAction } from "@/lib/operator/actions";
+import { addOperatorAction, assignPlanAction, setUserStatusAction, topUpUserAction } from "@/lib/operator/actions";
 import { operatorApi } from "@/lib/operator/client";
+import { operators } from "@/lib/operators";
 import { userRows } from "@/lib/operator/users";
 
 export const metadata: Metadata = { title: "User" };
@@ -16,6 +17,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
   const [{ people, unlinked, sources }, keys, plans] = await Promise.all([userRows(client), client.listAccessKeys(), provider.plans.listPlans()]);
   const user = [...people, ...unlinked].find((row) => row.id === id);
   if (!user) notFound();
+  const onTeam = (await operators().operators()).find((operator) => operator.user_id === id) ?? null;
   const [usage, memberships] = await Promise.all([
     provider.usage.listUsage({ userId: id, limit: 20 }).catch(() => []),
     provider.features.workspaces ? provider.workspaces.listForUser(id) : [],
@@ -30,7 +32,8 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
       workspaces={memberships.map(({ workspace, role }) => ({ id: workspace.id, name: workspace.name, role, status: workspace.status }))}
       Link={ConsoleLink}
       setStatus={setUserStatusAction.bind(null, user.applicationId, id)}
-      setRole={setUserRoleAction.bind(null, id)}
+      team={onTeam ? { role: onTeam.role, fromProvider: onTeam.via === "provider" } : null}
+      addToTeam={addOperatorAction.bind(null, id)}
       assignPlan={assignPlanAction.bind(null, id)}
       topUp={topUpUserAction.bind(null, id)}
       sources={[

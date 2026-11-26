@@ -1,7 +1,7 @@
 "use client";
 
 import { BrandBadge, BrandWordmark, cn, useTheme, type Brand } from "@livepeer/ui";
-import { Activity, ArrowLeft, Blocks, Building2, Cpu, CreditCard, Flag, Gift, KeyRound, LayoutDashboard, Moon, ReceiptText, ServerCog, Settings2, Sun, Tags, Users, type LucideIcon } from "lucide-react";
+import { Activity, ArrowLeft, Blocks, Building2, Cpu, CreditCard, Flag, Gift, KeyRound, LayoutDashboard, Moon, ReceiptText, ServerCog, Settings2, Sun, Tags, Users, UsersRound, type LucideIcon } from "lucide-react";
 import type { OperatorRole } from "@livepeer/api-client";
 import type { ComponentType, ReactNode } from "react";
 
@@ -45,6 +45,7 @@ const GROUPS: Array<{ label: string; items: Array<{ href: string; label: string;
     label: "Instance",
     items: [
       { href: "/operator/settings", label: "Settings", icon: Settings2 },
+      { href: "/operator/team", label: "Team", icon: UsersRound },
       { href: "/operator/keys", label: "Keys", icon: KeyRound },
       { href: "/operator/system", label: "System", icon: ServerCog },
     ],

@@ -1,17 +1,22 @@
 "use server";
 
-import type { AccessKey, BillingSettings, CharacterReport, CapabilitySetting, CreditPack, EngineJob, Grant, OperatorPhone, Payment, Plan, TopUpRange } from "@livepeer/api-client";
+import { OPERATOR_ROLES } from "@livepeer/api-client";
+import type { NewOperatorInvitation, OperatorRole, OperatorTeam, AccessKey, BillingSettings, CharacterReport, CapabilitySetting, CreditPack, EngineJob, Grant, OperatorPhone, Payment, Plan, TopUpRange } from "@livepeer/api-client";
 import { EngineError } from "@livepeer/api-client";
 import type { CapabilityRow, InstanceSettings } from "@livepeer/operator-console";
 import { revalidatePath } from "next/cache";
 
+import { clearSession } from "../auth/session";
 import type { Session } from "../auth/types";
+import { instance } from "../instance";
 import { devices } from "../devices";
 import { moderation } from "../moderation";
 import { operatorDevices } from "../operator-devices";
+import { TEAM_REFUSALS, teamManagement } from "../operators/manage";
 import { capabilityRows } from "./capability-rows";
 import { operatorApi, requireOperator } from "./client";
 import { currentSettings, resetSettings, saveSettings } from "./settings";
+import { userRows } from "./users";
 
 const usd = (amount: number) => ({ amount: amount.toFixed(2), currency: "USD" });
 
@@ -38,13 +43,6 @@ export async function setUserStatusAction(applicationId: string, actorId: string
     await devices().revokeAll(actorId);
     await operatorDevices().revokeUser(actorId, "suspended");
   }
-  revalidatePath("/operator/users", "layout");
-}
-
-export async function setUserRoleAction(userId: string, role: "user" | "operator"): Promise<void> {
-  await (await operatorApi("manage_team")).provider.identity.setUserRole(userId, role);
-  // The role is read when a phone signs in, so taking it away ends the console sessions it opened.
-  if (role === "user") await operatorDevices().revokeUser(userId, "operator role removed");
   revalidatePath("/operator/users", "layout");
 }
 
@@ -225,4 +223,64 @@ export async function dismissNewPhonesAction(phoneIds: string[]): Promise<void> 
   const ids = Array.isArray(phoneIds) ? phoneIds.filter((id): id is string => typeof id === "string").slice(0, 100) : [];
   await operatorDevices().dismissNewPhones(session.userId, ids);
   revalidatePath("/operator", "layout");
+}
+
+/** What a change to the team answers with: the team as it now is, or why nothing changed. */
+export type TeamResult = { ok: true; team: OperatorTeam } | { ok: false; error: string };
+
+const teamNow = async (role: OperatorRole): Promise<TeamResult> => ({ ok: true, team: await teamManagement().view(role) });
+
+/** Makes an invitation to the team. Its link is in the answer and nowhere else afterwards. */
+export async function inviteOperatorAction(role: OperatorRole): Promise<{ ok: true; invitation: NewOperatorInvitation; team: OperatorTeam } | { ok: false; error: string }> {
+  const standing = await requireOperator("manage_team");
+  if (!OPERATOR_ROLES.includes(role)) return { ok: false, error: "Choose a role for the invitation." };
+  const invitation = await teamManagement().invite(actorOf(standing.session), role);
+  revalidatePath("/operator/team");
+  return { ok: true, invitation, team: await teamManagement().view(standing.role) };
+}
+
+export async function revokeInvitationAction(id: string): Promise<TeamResult> {
+  const standing = await requireOperator("manage_team");
+  await teamManagement().revokeInvitation(actorOf(standing.session), id);
+  revalidatePath("/operator/team");
+  return teamNow(standing.role);
+}
+
+/** Puts someone who already has an account on the team. Who they are is read here, not taken from the page. */
+export async function addOperatorAction(userId: string, role: OperatorRole): Promise<{ ok: true } | { ok: false; error: string }> {
+  const standing = await requireOperator("manage_team");
+  if (!OPERATOR_ROLES.includes(role)) return { ok: false, error: "Choose a role." };
+  const { people, unlinked } = await userRows(await operatorApi("manage_team"));
+  const user = [...people, ...unlinked].find((row) => row.id === userId);
+  if (!user) return { ok: false, error: "That person no longer has an account here." };
+  await teamManagement().add(actorOf(standing.session), { userId: user.id, name: user.name, email: user.email }, role);
+  revalidatePath("/operator", "layout");
+  return { ok: true };
+}
+
+export async function setOperatorRoleAction(userId: string, role: OperatorRole): Promise<TeamResult> {
+  const standing = await requireOperator("manage_team");
+  if (!OPERATOR_ROLES.includes(role)) return { ok: false, error: "Choose a role." };
+  const change = await teamManagement().setRole(actorOf(standing.session), userId, role);
+  if (change !== "done") return { ok: false, error: TEAM_REFUSALS[change] };
+  revalidatePath("/operator", "layout");
+  // Their own role may be the one that changed.
+  return teamNow((await requireOperator()).role);
+}
+
+/**
+ * Takes someone off the team: an owner anyone, and anyone themselves. Whoever leaves has no console to come
+ * back to, so the answer for them is only that it is done.
+ */
+export async function removeOperatorAction(userId: string): Promise<TeamResult | { ok: true; left: true }> {
+  const standing = await requireOperator();
+  const leaving = userId === standing.session.userId;
+  if (!leaving) await requireOperator("manage_team");
+  const change = await teamManagement().remove(actorOf(standing.session), userId);
+  if (change !== "done") return { ok: false, error: TEAM_REFUSALS[change] };
+  revalidatePath("/operator", "layout");
+  if (!leaving) return teamNow(standing.role);
+  // With no user app there is nothing left for them to open, so leaving also signs them out.
+  if (!(await instance()).surfaces.app) await clearSession();
+  return { ok: true, left: true };
 }

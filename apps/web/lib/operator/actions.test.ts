@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  * call to `operatorApi("…")` or `requireOperator("…")` naming the change. The few that act only on the
  * caller's own place are listed here, so a new action can't be added without someone deciding.
  */
-const OWN = ["revokeOperatorPhoneAction", "seeNewPhonesAction", "dismissNewPhonesAction"];
+const OWN = ["revokeOperatorPhoneAction", "seeNewPhonesAction", "dismissNewPhonesAction", "removeOperatorAction"];
 
 const source = readFileSync(path.join(import.meta.dirname, "actions.ts"), "utf8");
 const actions = source.split(/\n(?=export async function )/).slice(1).map((body) => ({ name: /^export async function (\w+)/.exec(body)![1]!, body }));
