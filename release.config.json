@@ -1,5 +1,5 @@
 {
-  "org": "aquareum-inc",
+  "org": "aquareum",
   "repo": "livepeer",
   "registry": "ghcr.io",
   "engine": {

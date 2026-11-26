@@ -304,10 +304,10 @@ differs from the sections above:
 
 - **Team is its own page, not a section of Settings** (`/operator/team`, under Instance in the sidebar).
   Settings is one form with a Save button; everything on Team applies at once, and members and viewers
-  need to open it without being shown a form they can't use. Design decision 125.
+  need to open it without being shown a form they can't use. Design decision 126.
 - **No "Add to team" on a user's page.** Slice 5 built it; the owner's review found a Team box on every
   user's page too prominent for something true of very few people, so it was removed. A user's page shows
-  an "Operator team" panel only for someone already on the team (decision 129), and an owner adds an
+  an "Operator team" panel only for someone already on the team (decision 130), and an owner adds an
   existing user by sending them a link like anyone else. The `operator_add_operator` operation remains
   for the API.
 - **The new mock person is an address at `new.example.test`**, not "any address other than Adam's or
@@ -319,8 +319,8 @@ differs from the sections above:
 - **A role changed while a phone has the console open** shows its old buttons until Status reloads. The
   server refuses in the meantime and the app shows the refusal.
 - **Two things outside the plan, from the owner's review of the build:** a plan change on a user's or a
-  workspace's page now asks for confirmation before it saves (decision 130), and at phone width the
-  invitations table drops "Invited by" so Revoke stays on screen (decision 131).
+  workspace's page now asks for confirmation before it saves (decision 131), and at phone width the
+  invitations table drops "Invited by" so Revoke stays on screen (decision 132).
 
 Checked: the whole path in a browser on a closed, console-only mock instance (an owner makes a link, a new
 person joins as a member, sees the read-only pages, leaves and is refused at sign-in), a first-owner link
