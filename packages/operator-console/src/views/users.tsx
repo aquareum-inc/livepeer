@@ -92,6 +92,9 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
   const [suspending, setSuspending] = useState(false);
   const [adding, setAdding] = useState(false);
   const [amount, setAmount] = useState(25);
+  // A plan changes what someone is billed, so picking one asks before it saves.
+  const [choosing, setChoosing] = useState<Plan | "none" | null>(null);
+  const chosen = choosing === "none" || choosing === null ? null : choosing;
   const paused = user.status === "paused";
 
   const run = async (name: string, action: () => Promise<void>) => {
@@ -137,9 +140,9 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
       <Panel title="Plan" description={plansSupported ? "Assigning a plan takes effect on the user's next billing period." : undefined}>
         {plansSupported ? (
           <div className="flex flex-wrap gap-1.5 rounded-card border border-hairline bg-card p-3">
-            <Chip selected={user.plan === null} aria-pressed={user.plan === null} disabled={busy !== null || !can("adjust_account")} onClick={() => run("plan", () => assignPlan(null))}>No plan</Chip>
+            <Chip selected={user.plan === null} aria-pressed={user.plan === null} disabled={busy !== null || !can("adjust_account")} onClick={() => user.plan !== null && setChoosing("none")}>No plan</Chip>
             {plans.map((plan) => (
-              <Chip key={plan.id} selected={user.plan === plan.name} aria-pressed={user.plan === plan.name} disabled={busy !== null || !can("adjust_account")} onClick={() => run("plan", () => assignPlan(plan.id))}>
+              <Chip key={plan.id} selected={user.plan === plan.name} aria-pressed={user.plan === plan.name} disabled={busy !== null || !can("adjust_account")} onClick={() => user.plan !== plan.name && setChoosing(plan)}>
                 {plan.name}
               </Chip>
             ))}
@@ -214,6 +217,36 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
         <div className="flex gap-2">
           <Button className="flex-1" onClick={() => setSuspending(false)}>Cancel</Button>
           <Button variant="destructive" className="flex-1" onClick={() => { setSuspending(false); void run("status", () => setStatus("paused")); }}>Suspend</Button>
+        </div>
+      </Sheet>
+
+      <Sheet
+        open={choosing !== null}
+        onOpenChange={(open) => !open && setChoosing(null)}
+        title={chosen ? `Move ${user.name} to ${chosen.name}?` : `Take ${user.name} off ${user.plan ?? "their plan"}?`}
+        description={chosen ? "It starts at their next billing period. Until then they stay as they are." : "From their next billing period they pay for what they use from their allocation, with no monthly allowance."}
+      >
+        {chosen ? (
+          <dl className="mb-4 divide-y divide-hairline rounded-card border border-hairline bg-card text-[13px]">
+            <div className="flex justify-between gap-4 px-4 py-2.5">
+              <dt className="text-muted-foreground">Price</dt>
+              <dd className="font-mono">{usd(Number(chosen.price.amount))} / {chosen.interval}</dd>
+            </div>
+            <div className="flex justify-between gap-4 px-4 py-2.5">
+              <dt className="text-muted-foreground">Allowance</dt>
+              <dd className="font-mono">{count(chosen.allowance.credits)} credits / {chosen.allowance.period}</dd>
+            </div>
+            <div className="flex justify-between gap-4 px-4 py-2.5">
+              <dt className="text-muted-foreground">Now on</dt>
+              <dd>{user.plan ?? "No plan"}</dd>
+            </div>
+          </dl>
+        ) : null}
+        <div className="flex gap-2">
+          <Button className="flex-1" onClick={() => setChoosing(null)}>Keep {user.plan ?? "no plan"}</Button>
+          <Button variant="primary" className="flex-1" disabled={busy !== null} onClick={() => { setChoosing(null); void run("plan", () => assignPlan(chosen?.id ?? null)); }}>
+            {chosen ? "Change plan" : "Remove plan"}
+          </Button>
         </div>
       </Sheet>
 
