@@ -162,7 +162,7 @@ export function TeamView({ team: initial, me, origin, invite, revokeInvitation, 
             empty="No invitations waiting."
             columns={[
               { key: "role", header: "Role", cell: (invitation) => OPERATOR_ROLE_COPY[invitation.role].name },
-              { key: "by", header: "Invited by", cell: (invitation) => invitation.invited_by ?? "A former owner" },
+              { key: "by", header: "Invited by", cell: (invitation) => invitation.invited_by ?? "A former owner", wide: true },
               { key: "made", header: "Made", cell: (invitation) => dateTime(invitation.created_at), mono: true, align: "right", wide: true },
               { key: "expires", header: "Expires", cell: (invitation) => dateTime(invitation.expires_at), mono: true, align: "right" },
               { key: "act", header: "", align: "right", cell: (invitation) => <Button size="sm" variant="ghost" onClick={() => setRevoking(invitation)}>Revoke</Button> },

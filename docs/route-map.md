@@ -31,6 +31,7 @@ Status: **built** = exists today, otherwise the slice that builds it.
 | (sheet) | Add credits; change plan | dialogs | Packs and plans come from the provider interface. | d |
 | `/settings/workspace` | The workspace you are working in: name, members, roles, invitations, leaving | — | Shown as a Settings tab only in a workspace; a personal account is sent to `/settings`. `docs/workspaces.md`. | workspaces |
 | `/join/[token]` | An invitation: who invited you to which workspace, join or decline | — | Needs a session; a guest signs in and comes back. | workspaces |
+| `/join/operator/[token]` | An invitation to the team that runs the instance: who invited you and as what, then join | — | Public, so a signed-out visitor can read it; joining needs a sign-in from the last five minutes. Served whenever the console is on, even with no user app. | operator invitations |
 | (menu) | Account menu at the foot of the sidebar, signed in or as a guest | Account menu | Guests can look around, as on Venice: Home, the studio (composer works; Generate waits for sign-in), public characters, an empty library and the developer docs. Running anything asks them to sign in, because every job is charged to an allocation. Chats, settings, API keys and creating or calling a character need an account (`lib/auth/guard.ts`). | built |
 | `/sign-in`, `/auth/start`, `/auth/callback` | Sign-in with Apple, Coinbase, Discord, Google, wallet, email or passkey, or continue as a guest | Sign in | Methods are instance config. With the development provider every method signs in a test user; with an OIDC provider the chosen method is passed to it as a hint. Wallet sign-in is a login method only: no token features. | built |
 
@@ -56,7 +57,7 @@ Uses builder-core-console's names: actors, allocations, grants, offerings, orche
 | Route | View | From builder-core-console | Adds | Data |
 |-------|------|---------------------------|------|------|
 | `/operator` | Overview | Health (stack status, ticker) | Active users, jobs today, revenue, wholesale cost, margin | live + mock (revenue) |
-| `/operator/users`, `/[actor]` | Users | Users | Plan, API keys, usage history, suspend, roles | live (actors, allowance, keys) + mock (plan, roles) |
+| `/operator/users`, `/[actor]` | Users | Users | Plan (changed through a confirmation sheet), API keys, usage history, suspend, and the person's operator role if they are on the team | live (actors, allowance, keys) + mock (plan) |
 | `/operator/pricing` | Pricing and plans | — | Plans and allowances, markup rules, credit packs, provider feature support | mock (PymtHouse shape) |
 | `/operator/billing` | Billing | — | Payment provider, payments, invoices, refunds, adjustments, tax, currency | mock |
 | `/operator/costs` | Costs | Money, Usage | Retail vs wholesale per job and capability, pending charges | live (costs) + mock (retail) |
@@ -66,6 +67,7 @@ Uses builder-core-console's names: actors, allocations, grants, offerings, orche
 | `/operator/grants` | Grants | Operator actions (grants) | Funding, allocations, spend per grant | live (needs a real admin key) |
 | `/operator/workspaces`, `/[id]` | Workspaces | — | Shared accounts: members with role and usage, invitations, plan, budget, keys, usage, suspend | mock (provider) |
 | `/operator/settings` | Instance settings | — | Name, logo, colours, domain, sign-up, privacy defaults, surfaces, content policy | config |
+| `/operator/team` | Team | — | The operators with their role (owner, member, viewer), invitations by link, changing a role, removing, leaving. Everyone on the team can open it; only owners change it. `docs/operator-invitations.md` | the instance's own (Postgres) |
 | `/operator/keys` | API and admin keys | Operator actions (keys) | — | live |
 | `/operator/system` | System | Health, Sources & gaps | Versions, `doctor` results, data-source table | live |
 
@@ -87,7 +89,7 @@ Uses builder-core-console's names: actors, allocations, grants, offerings, orche
 | `/api/health` | Health check for the bundle and `doctor`: engine, database (`ok`, `behind`, `unreachable`, `embedded`) and whether the checks behind alerts are running |
 | `/api/cron/alerts` | Runs one round of the checks behind operators' alerts, for a scheduler on a host with no server between requests. 404 unless the request carries `Authorization: Bearer $CRON_SECRET` |
 | `/api/v1` | Index of every operation, readable without a key |
-| `/api/v1/*` | The instance's REST API: 30 operations (17 for users, 13 for operators), each calling one API client function. Authenticated by an API key, a browser session, or `OPERATOR_API_TOKEN` for operator operations. |
+| `/api/v1/*` | The instance's REST API: 82 operations (49 for users, 33 for operators), each calling one API client function. Authenticated by an API key, a browser session, or `OPERATOR_API_TOKEN` for operator operations. |
 | `/api/mcp` | MCP server (streamable HTTP, stateless) exposing the same operations as tools |
 
 The REST API and the MCP tools are generated from one list, `apps/web/lib/public-api/operations.ts`.

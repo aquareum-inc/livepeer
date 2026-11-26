@@ -43,7 +43,16 @@ To connect a real engine, set `ENGINE_URL`, `ENGINE_READER_TOKEN` and `ENGINE_AD
 ```bash
 ./livepeer doctor      # checks config, keys, engine and provider, and says what to fix
 ./livepeer upgrade     # moves the app and its pinned engine to this checkout's release
+./livepeer invite-operator   # prints a link that makes whoever opens it an owner of the console
 ```
+
+### The operator team
+
+The first time `./livepeer setup` runs it prints a link. Whoever opens it and signs in becomes the first
+owner of the operator console. Owners invite everyone else from **Team** in the console: pick a role (owner,
+member or viewer), copy the link and send it. A link works once and lasts 72 hours. If nobody can reach the
+console, `./livepeer invite-operator` prints a new owner link. The plan and its decisions are in
+[docs/operator-invitations.md](docs/operator-invitations.md).
 
 Agents: see [AGENTS.md](AGENTS.md) for exact commands, expected output and failure fixes.
 
@@ -76,7 +85,7 @@ packages/db               The instance's Postgres: schema, connection, migration
 packages/ui               Theme tokens, primitives, motion
 packages/user-app         User-app screens
 packages/operator-console Operator console screens
-packages/cli              livepeer setup | doctor | upgrade
+packages/cli              livepeer setup | doctor | upgrade | invite-operator
 deploy/                   Compose bundle and deploy templates
 docs/                     Brief, research, design brief, route map, architecture, data sources
 release.config.json       The GitHub organisation, registry and pinned engine/provider/signer versions

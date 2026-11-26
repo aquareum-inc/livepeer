@@ -93,14 +93,13 @@ in `apps/web/lib/public-api/operations.ts`.
 | Operator · Overview | See users, jobs, revenue, cost, margin, engine status | `getOverview`, `getEngineHealth`, `listJobs` | iOS and Android: Status reads `operator_status` (plan §18.8). iOS and Android stage 2: More ▸ Revenue and margin reads `operator_overview` (today, and a bar a day), and More ▸ System reads `operator_health`. |
 | Operator · Users | List users with email, budget, spent, remaining, plan | `provider.identity.listUsers`, `listActors`, `provider.budgets.getAllocation`, `provider.plans.getUserPlan` | iOS and Android: Users, searched on the instance by name or id (`operator_list_users` with `query`): name, standing, last seen, ids. Email, budget and plan aren't in that answer and aren't shown. |
 | Operator · User | Suspend or resume | `setActorStatus` | iOS and Android: from a user's page, in a tray, confirmed with a face or fingerprint (`operator_set_user_status` with a proof) |
-| Operator · User | Change role | `provider.identity.setUserRole` | Not on mobile |
-| Operator · User | Assign or remove a plan | `provider.plans.assignPlan` | Not on mobile |
+| Operator · User | Assign or remove a plan, confirmed in a sheet | `provider.plans.assignPlan` (`assignPlanAction`; needs `adjust_account`) | Not on mobile |
 | Operator · User | Add credit (manual adjustment) | `provider.budgets.topUpAllocation` | Not on mobile |
 | Operator · User | See keys and usage | `listAccessKeys`, `provider.usage.listUsage` | Not on mobile |
 | Operator · Workspaces | List workspaces with owner, members, plan, budget, spent, remaining | `listWorkspaces` | Not on mobile |
 | Operator · Workspace | See members with role and usage, invitations, keys and recent usage | `getWorkspace`, `listAccessKeys`, `provider.usage.listUsage` | Not on mobile |
 | Operator · Workspace | Suspend or resume | `setWorkspaceStatus` | Not on mobile |
-| Operator · Workspace | Assign or remove a plan | `provider.plans.assignPlan` (the workspace's id) | Not on mobile |
+| Operator · Workspace | Assign or remove a plan, confirmed in a sheet | `provider.plans.assignPlan` (the workspace's id) | Not on mobile |
 | Operator · Workspace | Add credit (manual adjustment) | `provider.budgets.topUpAllocation` (the workspace's id) | Not on mobile |
 | Operator · User | See the workspaces a person belongs to | `provider.workspaces.listForUser` | Not on mobile |
 | Operator · Pricing | See provider and features, plans, packs, markup | `provider.features`, `provider.plans.listPlans`, `provider.plans.listCreditPacks` | Not on mobile |
@@ -144,3 +143,14 @@ in `apps/web/lib/public-api/operations.ts`.
 | Operator · System | Health, versions, doctor, data sources | `getEngineHealth`, doctor checks | iOS and Android stage 2: More ▸ System reads `operator_health` (ready, discovery, cost sync, version). The doctor's checks and the data sources stay on the web: the checks name settings, and nothing a phone is sent may name one |
 | Shell (mobile) | Learn the instance's name, marks, theme, surfaces, sign-in methods and content settings | `get_instance` (the instance config; no engine call) | Built (iOS sample) |
 | Chat (mobile) | Name the capability behind each of the agent's steps | `list_capability_labels` (`listOfferings`, runner models, `capability-menu.ts`) | Built (iOS sample) |
+| Operator · Team | See the operators with their role and how they joined; as an owner, the invitations waiting | `operator_list_team` (`teamManagement().view`, `apps/web/lib/operators/manage.ts`) | Not on mobile: the team is managed on the web |
+| Operator · Team | Invite someone by link, with a role | `operator_create_invitation` (`teamManagement().invite`; on the web `inviteOperatorAction`); owners only (`manage_team`) | Not on mobile |
+| Operator · Team | Revoke an invitation | `operator_revoke_invitation` (`teamManagement().revokeInvitation`; `revokeInvitationAction`); owners only | Not on mobile |
+| Operator · Team | Change someone's role | `operator_set_operator_role` (`teamManagement().setRole`; `setOperatorRoleAction`); owners only, never the last owner or someone the identity provider made an operator | Not on mobile |
+| Operator · Team | Remove someone, or leave | `operator_remove_operator` (`teamManagement().remove`; `removeOperatorAction`); owners remove others, anyone removes themselves, never the last owner. Their console sessions and phones end at once | Not on mobile |
+| Operator · Team (API only) | Put someone who already has an account on the team | `operator_add_operator` (`teamManagement().add`); owners only. No screen offers it: the console invites by link | Not on mobile |
+| Join the team (`/join/operator/<token>`) | Read an invitation, signed in or not | `operators().read` (`apps/web/lib/operators/team.ts`) | Not on mobile |
+| Join the team | Join, after a sign-in from the last five minutes | `acceptOperatorInvitationAction` (`operators().accept`) | Not on mobile |
+| Operator · User | See the person's operator role, if they are on the team | `operators().operators()` | Not on mobile |
+| Operator · every console page | See only what your role allows; a change your role can't make is refused | `operatorCan(role, action)` (`packages/api-client/src/operator/roles.ts`), checked by every server action (`requireOperator(action)`) and operator operation (`needs`) | iOS and Android: `operator_status` carries `role`; a viewer gets a line in place of Suspend, Resume and the report decisions |
+| Command line | Print an owner's invitation link when the console can't be reached | `./livepeer invite-operator` (signed with `SESSION_SECRET`, `packages/cli/lib/operator-link.mjs`); `./livepeer setup` prints one when it first makes the secret | — |

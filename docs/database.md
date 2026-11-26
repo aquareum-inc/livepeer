@@ -148,6 +148,16 @@ provider's opaque ids.
 | `operator_phone_notice_dismissals` | `user_id`, `session_id`, `dismissed_at`, `seen_at` null | PK (`user_id`, `session_id`); FK `session_id` → sessions, cascade; index `session_id` |
 | `operator_audit` | `id`, `at`, `event`, `user_id`, `actor_sealed` (D1), `device_id` null, `device_name` null, `operation` null, `target` null, `detail` null | PK `id`; index `at` desc |
 
+**The operator team** (added with `docs/operator-invitations.md`, migration `0007_operators`)
+
+| Table | Columns | Keys and indexes |
+| --- | --- | --- |
+| `operators` | `user_id`, `role` (`owner`, `member`, `viewer`), `source` (`grant`, `claim`), `identity_sealed`, `granted_by` null, `invitation_id` null, `created_at` | PK `user_id` |
+| `operator_invitations` | `id`, `role`, `token_hash` null (null for a link signed by the command line, recorded when used), `invited_by` null, `created_at`, `expires_at`, `revoked_at` null, `accepted_by` null, `accepted_at` null | PK `id`; unique `token_hash` |
+
+An invitation holds no name or address. Accepting is one `UPDATE … RETURNING`, so a link works once even if
+two people open it together; changing or removing an owner locks the owner rows, so the last one can't go.
+
 Users' and operators' sessions stay in separate tables on purpose: the code's rule is that neither can stand
 in for the other. The cascades are the existing rule "a push token ends with the record, however that ends"
 made structural. The unique `push_hash` is the rule "a push token belongs to one phone".

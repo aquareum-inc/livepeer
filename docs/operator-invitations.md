@@ -1,11 +1,12 @@
 # Operator invitations: plan
 
-Status: **approved on 25 November 2026 with every recommendation in section 0 as written; being built.**
+Status: **approved on 25 November 2026 with every recommendation in section 0 as written; built on 25 and 26
+November 2026. Section 13 says where the build departs from the plan below, and what is not done.**
 Proposed on 24 November 2026, revised on 25 November after a review against the code (section 11 says what
 changed), with operator roles added the same day at the owner's request (D7, section 4).
 
 An instance has no way to add a second operator today unless its identity provider manages roles. This
-plan adds a **Team** section to the console's settings where an owner invites another person by link, with
+plan adds a **Team** page to the console where an owner invites another person by link, with
 one of three roles, and makes the instance's sign-up setting do what it says.
 
 ## 0. Decisions I need from you
@@ -72,7 +73,8 @@ session and the console phone enrolment:
   already ends the phones. A `claim` session lasts until its cookie expires, as today.
 - A claim operator gets a row with source `claim` written at sign-in, so Team can list them. That row grants
   nothing: a later sign-in without the claim deletes it.
-- The Role control on user detail becomes **Add to team** (an owner picks a role; writes a `grant` row, for
+- (Changed in the build, section 13: this control was removed and the page shows the role only.)
+  The Role control on user detail becomes **Add to team** (an owner picks a role; writes a `grant` row, for
   someone who already has an account) and links to Team for changes and removal. `provider.identity.setUserRole` is no longer called by the
   app; it stays in the interface for a provider that can carry the role itself (Q25).
 
@@ -119,7 +121,10 @@ way.
 - **Several owners, no transfer.** Nothing is billed to an owner, so there is no single owner to hand over
   as a workspace has. The rule is only that one must always remain.
 
-## 5. The console: Settings → Team
+## 5. The console: Team
+
+Built as its own page, `/operator/team`, beside Settings in the sidebar, not as a section of Settings
+(section 13).
 
 - **Operators:** name, email, role, how they became one ("invited by *name*", "added by *name*", "first
   owner, from setup", "from your identity provider"), since when. An owner sees a role menu and Remove on
@@ -176,7 +181,7 @@ In `/auth/callback`, before any session or device code is made:
 - `invite`: the same, plus, once workspace invitations are live, a pending workspace invitation for them.
 
 A person is **known** if the token's claim makes them an operator, or they have an operator row, or the
-payment provider has them: one new API client function, `isKnownUser(userId)`, answered by
+payment provider has them: one new API client function, `provider.identity.isKnown(userId)`, answered by
 `identity.getUser` where the provider has users (mock, PymtHouse) and by the existence of an allocation
 where it doesn't (Batteries). When real sign-up provisioning is built it goes behind the same check.
 
@@ -185,8 +190,8 @@ native apps get a new `closed` reason through `returnToApp`. With OIDC the ident
 have made its own account; the instance only declines to make a session. Whether PymtHouse can refuse
 first-time sign-ins itself is part of Q25.
 
-**Mock sign-in** gains a way to be someone new: the email method with any address other than Adam's or
-Sam's signs in as a new person derived from that address. Without it, `closed` and joining can't be tried.
+**Mock sign-in** gains a way to be someone new: the email method with an address at `new.example.test`
+signs in as a new person named from that address; any other address is still Adam (section 13). Without it, `closed` and joining can't be tried.
 
 ## 8. Storage
 
@@ -220,7 +225,7 @@ tables) and `docs/ui-actions.md`:
 | `operator_list_team` | `GET /operator/team` | Operators with their roles, pending invitations, and the caller's own role. Any role. |
 | `operator_create_invitation` | `POST /operator/team/invitations` | A role → the link, once. Owner. |
 | `operator_revoke_invitation` | `DELETE /operator/team/invitations/{id}` | Owner. |
-| `operator_add_operator` | `POST /operator/team` | An existing user's id and a role. Behind **Add to team** on user detail. Owner. |
+| `operator_add_operator` | `POST /operator/team` | An existing user's id and a role. No screen offers it since the review of the build (section 13); it remains for the API. Owner. |
 | `operator_set_operator_role` | `PATCH /operator/team/{userId}` | Owner. Refused for the last owner and for a `claim` row. |
 | `operator_remove_operator` | `DELETE /operator/team/{userId}` | Ends their console phone sessions. Owner, or anyone for themselves. Refused for the last owner and for a `claim` row. |
 | `operator_set_capability_enabled` | `PATCH /operator/capabilities/enabled` | Member. Split from `operator_set_capability`, which becomes owner-only (section 4). |
@@ -291,3 +296,44 @@ One pull request, a commit per slice:
   forwarded links turn out to matter.
 - A setting that turns invitations off for instances that want their identity provider to be the only way
   in.
+
+## 13. What the build changed, and what is left
+
+Built in the nine slices of section 10, a commit each, on 25 and 26 November 2026. Where the result
+differs from the sections above:
+
+- **Team is its own page, not a section of Settings** (`/operator/team`, under Instance in the sidebar).
+  Settings is one form with a Save button; everything on Team applies at once, and members and viewers
+  need to open it without being shown a form they can't use. Design decision 125.
+- **No "Add to team" on a user's page.** Slice 5 built it; the owner's review found a Team box on every
+  user's page too prominent for something true of very few people, so it was removed. A user's page shows
+  an "Operator team" panel only for someone already on the team (decision 129), and an owner adds an
+  existing user by sending them a link like anyone else. The `operator_add_operator` operation remains
+  for the API.
+- **The new mock person is an address at `new.example.test`**, not "any address other than Adam's or
+  Sam's": existing tests and the phone testing notes sign in as Adam with arbitrary addresses.
+- **`invite` sign-up behaves as `closed`.** The plan's extra rule (a waiting workspace invitation admits
+  you) needs workspace invitations to be live, and they are still mocked.
+- **`isKnownUser` became `provider.identity.isKnown`**, on the provider interface with the other identity
+  functions.
+- **A role changed while a phone has the console open** shows its old buttons until Status reloads. The
+  server refuses in the meantime and the app shows the refusal.
+- **Two things outside the plan, from the owner's review of the build:** a plan change on a user's or a
+  workspace's page now asks for confirmation before it saves (decision 130), and at phone width the
+  invitations table drops "Invited by" so Revoke stays on screen (decision 131).
+
+Checked: the whole path in a browser on a closed, console-only mock instance (an owner makes a link, a new
+person joins as a member, sees the read-only pages, leaves and is refused at sign-in), a first-owner link
+from the command line, and a viewer on iOS and Android. Screenshots of Team as each role, each state of the
+join page and Settings as a viewer are in `docs/screenshots/` in dark and light at desktop and phone
+width; the phone screens are in `docs/screenshots/mobile/`.
+
+Not done:
+
+- The report page as a viewer was not opened in the Android emulator; the user page was.
+- Nothing is connected to PymtHouse, so every provider answer in this build is the mock's or Batteries'.
+  Q25 is still open.
+- Email delivery (section 12). The owner asked about it after the build: the recommendation is to wait for
+  John's answer on whether PymtHouse sends invitation emails (Q20 covers workspaces only), and otherwise
+  to add an optional mail setting on the instance, with copy-link staying the default.
+

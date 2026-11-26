@@ -137,6 +137,26 @@ AES-256-GCM sealed, httpOnly, SameSite=Lax cookie keyed by `SESSION_SECRET`, hol
 builder key. `BUILDER_API_KEY` is a dev shortcut. The mock provider and role switcher exist in dev only.
 `/operator/*` is guarded in `proxy.ts` and again in the layout.
 
+**Who is an operator.** Either the sign-in token says so (an OIDC `roles` or `groups` claim; such a person
+is always an owner and the console can't change them), or the instance's own `operators` table has a row
+for them, put there by an invitation link (`docs/operator-invitations.md`). The table holds the provider's
+opaque user id, one of three roles and a sealed name and email. A session whose role comes from the table
+is checked against it on every request (`current()` in `apps/web/lib/auth/session.ts`), so removing someone
+ends their console at once, on the web and on their phone. The session also carries when the person signed
+in: accepting an invitation needs a sign-in from the last five minutes.
+
+**Operator roles are one rule.** `operatorCan(role, action)` in `packages/api-client/src/operator/roles.ts`:
+an owner does everything; a member looks after people and jobs (suspend, top up, refund, retry, decide
+reports, switch a capability off); a viewer changes nothing. Every server action names the action it needs
+(`requireOperator(action)`), every operator operation declares it (`needs`), and the screens hide with the
+same function. A test reads the actions' source so none can skip the check. A viewer's API client is built
+with the reader token and never holds the admin token.
+
+**Sign-up is enforced at the callback.** With `signUp` set to `closed` or `invite`, `/auth/callback` admits
+operators, people the payment provider already knows (`provider.identity.isKnown`) and a sign-in that
+carries a waiting operator invitation, and sends everyone else back to sign-in with `closed`. `invite`
+behaves as `closed` until workspace invitations are live.
+
 The native apps sign in through the same `/auth/start` and `/auth/callback`, opened in the system's auth
 session with `client`, a PKCE `challenge` and their own `state`. The callback sets no cookie for them: it
 redirects to `<bundle id>://auth` with a 60-second one-time code, only for an app named in the config's

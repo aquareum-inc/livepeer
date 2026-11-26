@@ -62,6 +62,19 @@ carries a `fix`.
   (`operator_reset_capabilities`) forgets every capability change. A field the console has saved wins over
   the same field in the file until it is reset there.
 
+## The first operator
+
+`./livepeer setup --json` includes `owner_invitation` (`url`, `expiresAt`) the first time it makes
+`SESSION_SECRET`: whoever opens that link and signs in becomes the first owner of the operator console. For
+another owner link later:
+
+```bash
+./livepeer invite-operator --json     # {"ok":true,"url":"…","expires_at":"…"}; add --url <public address> if the config has no domain
+```
+
+A link works once. Owners invite everyone else from Team in the console, with a role (owner, member,
+viewer). See `docs/operator-invitations.md`.
+
 ## Upgrade
 
 ```bash

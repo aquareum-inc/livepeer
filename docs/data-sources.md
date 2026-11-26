@@ -98,6 +98,9 @@ Reads use `ENGINE_READER_TOKEN`; writes use `ENGINE_ADMIN_TOKEN`.
 | `listWorkspaces`, `getWorkspace`, `setWorkspaceStatus` | mock | `provider.workspaces.list`, `get`, `listMembers`, `listInvitations`, `setStatus`, with `budgets.getAllocation`, `plans.getUserPlan` and `usage.getUsageByMember` for each | reader / admin | Blocked by Q18 to Q24. A workspace's plan and top-up use the same provider functions as a user's, given the workspace's id. Invitation links are never sent to the console. |
 | Instance settings | real | writes `instance.config.json`, validated | — | Read-only when the file is mounted read-only (the Compose bundle). |
 | Doctor | real | probes engine and tokens | reader, admin | Same checks as `livepeer doctor`. |
+| `operators().signIn`, `role`, `operators`, `invitations`, `invite`, `revoke`, `read`, `accept`, `add`, `setRole`, `remove` (`apps/web/lib/operators`), and `teamManagement()` over them | live (the instance's own state) | Postgres: `operators`, `operator_invitations` | none (no engine call) | The team that runs the instance and its invitations (`docs/operator-invitations.md`). Holds the provider's opaque user id, a role and a sealed name and email; an invitation is a hash of its token, a role and an expiry, with no address. |
+| `provider.identity.isKnown` | per `payments.provider` | mock: the user exists. Batteries: an allocation exists for the id | reader | Decides who may sign in when sign-up is `closed` or `invite`. PymtHouse to follow (Q25). |
+| `operatorCan`, `OPERATOR_ROLE_COPY` | pure (`packages/api-client/src/operator/roles.ts`) | — | — | What an owner, a member and a viewer may do. A viewer's console is built with the reader token only. |
 
 ## Instance API and MCP
 
