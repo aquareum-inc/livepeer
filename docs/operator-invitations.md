@@ -1,8 +1,8 @@
 # Operator invitations: plan
 
-Status: **proposed on 24 November 2026, revised on 25 November 2026 after a review against the code (section
-11 says what changed). Operator roles added the same day at the owner's request (D7, section 4). Not
-approved, nothing built.**
+Status: **approved on 25 November 2026 with every recommendation in section 0 as written; being built.**
+Proposed on 24 November 2026, revised on 25 November after a review against the code (section 11 says what
+changed), with operator roles added the same day at the owner's request (D7, section 4).
 
 An instance has no way to add a second operator today unless its identity provider manages roles. This
 plan adds a **Team** section to the console's settings where an owner invites another person by link, with

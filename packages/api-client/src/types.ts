@@ -633,6 +633,48 @@ export interface OperatorUnlock {
   unlocked_until: string;
 }
 
+/** What an operator may do in the console. Whether the console opens at all is the session's `operator` role. */
+export type OperatorRole = "owner" | "member" | "viewer";
+
+/** One person on the team that runs the instance. */
+export interface TeamOperator {
+  user_id: string;
+  name: string;
+  email: string | null;
+  role: OperatorRole;
+  /**
+   * How they came to be on the team: an invitation, added from the users list, the first owner's link from
+   * setup, or the identity provider's own operator role, which the console can't change.
+   */
+  via: "invitation" | "added" | "setup" | "provider";
+  /** The owner who invited or added them, by name. Null for the first owner and for someone from the provider. */
+  added_by: string | null;
+  since: string;
+}
+
+/** An invitation to the team that hasn't been used, revoked or run out. Its link is shown once, when it is made. */
+export interface OperatorInvitation {
+  id: string;
+  role: OperatorRole;
+  /** The owner who made it, by name. Null once they have left the team. */
+  invited_by: string | null;
+  created_at: string;
+  expires_at: string;
+}
+
+/** The team, with the caller's own role in it. */
+export interface OperatorTeam {
+  role: OperatorRole;
+  operators: TeamOperator[];
+  invitations: OperatorInvitation[];
+}
+
+/** A new invitation, with the one sight of its link. */
+export interface NewOperatorInvitation extends OperatorInvitation {
+  /** The path to send, relative to the instance's address. */
+  path: string;
+}
+
 /** One line of the record of what operators' phones did and were refused. */
 export interface OperatorAuditEntry {
   id: string;

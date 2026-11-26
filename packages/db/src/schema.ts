@@ -160,6 +160,44 @@ export const operatorAudit = pgTable(
   (table) => [uniqueIndex("operator_audit_seq").on(table.seq), index("operator_audit_device_at").on(table.deviceId, table.at)],
 );
 
+/**
+ * The people who run this instance, with what each may do. A `grant` row is what makes its person an
+ * operator. A `claim` row only records that someone whose identity provider calls them an operator has
+ * signed in, so the team list can show them: it grants nothing, and goes when they next sign in without it.
+ */
+export const operators = pgTable("operators", {
+  userId: text("user_id").primaryKey(),
+  role: text("role", { enum: ["owner", "member", "viewer"] }).notNull(),
+  source: text("source", { enum: ["grant", "claim"] }).notNull(),
+  /** The person's name and email as the provider gave them at their last sign-in. */
+  identitySealed: text("identity_sealed").notNull(),
+  /** The owner who invited or added them. Null for the first owner (a link from setup) and for a claim. */
+  grantedBy: text("granted_by"),
+  invitationId: text("invitation_id"),
+  createdAt: time("created_at").notNull(),
+});
+
+/**
+ * An invitation to the team: a link that works once. Only the HMAC of its token is kept, and no address. A
+ * link made by the CLI is signed, not stored, and gets its row (with no token hash and no inviter) when it
+ * is used, which is what makes it work once.
+ */
+export const operatorInvitations = pgTable(
+  "operator_invitations",
+  {
+    id: text("id").primaryKey(),
+    role: text("role", { enum: ["owner", "member", "viewer"] }).notNull(),
+    tokenHash: text("token_hash"),
+    invitedBy: text("invited_by"),
+    createdAt: time("created_at").notNull(),
+    expiresAt: time("expires_at").notNull(),
+    revokedAt: time("revoked_at"),
+    acceptedBy: text("accepted_by"),
+    acceptedAt: time("accepted_at"),
+  },
+  (table) => [uniqueIndex("operator_invitations_token_hash").on(table.tokenHash), index("operator_invitations_expires_at").on(table.expiresAt)],
+);
+
 /** A report of a shared character, for the operator to decide. */
 export const characterReports = pgTable(
   "character_reports",
