@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { useState, type ComponentType, type ReactNode } from "react";
 
 import { ago, count, dateTime, day, label, usd } from "../components/format";
+import { PlanChangeSheet, type PlanChoice } from "../components/plan-change";
 import { ConsolePage, GapNote, Panel, Stat, Status } from "../components/parts";
 import { Table } from "../components/table";
 import { useOperatorCan } from "../shell/role";
@@ -93,8 +94,7 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
   const [adding, setAdding] = useState(false);
   const [amount, setAmount] = useState(25);
   // A plan changes what someone is billed, so picking one asks before it saves.
-  const [choosing, setChoosing] = useState<Plan | "none" | null>(null);
-  const chosen = choosing === "none" || choosing === null ? null : choosing;
+  const [choosing, setChoosing] = useState<PlanChoice>(null);
   const paused = user.status === "paused";
 
   const run = async (name: string, action: () => Promise<void>) => {
@@ -220,35 +220,7 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
         </div>
       </Sheet>
 
-      <Sheet
-        open={choosing !== null}
-        onOpenChange={(open) => !open && setChoosing(null)}
-        title={chosen ? `Move ${user.name} to ${chosen.name}?` : `Take ${user.name} off ${user.plan ?? "their plan"}?`}
-        description={chosen ? "It starts at their next billing period. Until then they stay as they are." : "From their next billing period they pay for what they use from their allocation, with no monthly allowance."}
-      >
-        {chosen ? (
-          <dl className="mb-4 divide-y divide-hairline rounded-card border border-hairline bg-card text-[13px]">
-            <div className="flex justify-between gap-4 px-4 py-2.5">
-              <dt className="text-muted-foreground">Price</dt>
-              <dd className="font-mono">{usd(Number(chosen.price.amount))} / {chosen.interval}</dd>
-            </div>
-            <div className="flex justify-between gap-4 px-4 py-2.5">
-              <dt className="text-muted-foreground">Allowance</dt>
-              <dd className="font-mono">{count(chosen.allowance.credits)} credits / {chosen.allowance.period}</dd>
-            </div>
-            <div className="flex justify-between gap-4 px-4 py-2.5">
-              <dt className="text-muted-foreground">Now on</dt>
-              <dd>{user.plan ?? "No plan"}</dd>
-            </div>
-          </dl>
-        ) : null}
-        <div className="flex gap-2">
-          <Button className="flex-1" onClick={() => setChoosing(null)}>Keep {user.plan ?? "no plan"}</Button>
-          <Button variant="primary" className="flex-1" disabled={busy !== null} onClick={() => { setChoosing(null); void run("plan", () => assignPlan(chosen?.id ?? null)); }}>
-            {chosen ? "Change plan" : "Remove plan"}
-          </Button>
-        </div>
-      </Sheet>
+      <PlanChangeSheet choice={choosing} name={user.name} kind="person" current={user.plan} busy={busy !== null} onClose={() => setChoosing(null)} onConfirm={(planId) => { setChoosing(null); void run("plan", () => assignPlan(planId)); }} />
 
       <Sheet open={adding} onOpenChange={setAdding} title="Add credit" description={`A one-off top-up of ${user.name}'s allocation, as a manual adjustment.`}>
         <div className="mb-4 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Amount">
