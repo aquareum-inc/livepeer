@@ -6,6 +6,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 vi.mock("server-only", () => ({}));
 
+import { operatorLink } from "../../../../packages/cli/lib/operator-link.mjs";
+import { invitationIn } from "./links";
 import { postgresOperatorTeamStore } from "./postgres";
 import type { OperatorTeamStore, Person } from "./store";
 import { INVITATION_HOURS, operatorTeam, signedLinkMessage } from "./team";
@@ -70,6 +72,18 @@ describe("the operator team", () => {
       const [id, , signature] = link.split(".");
       expect(await team().accept(`${id}.${Math.floor((T0 + 9 * HOUR) / 1000)}.${signature}`, sam)).toBeNull();
       expect(await team().operators()).toEqual([]);
+    });
+
+    it("is the one the CLI prints: livepeer setup and livepeer invite-operator sign what the instance checks", async () => {
+      const { url, expiresAt } = operatorLink({ secret: SECRET, origin: "https://video.example.com/", now: T0 });
+      expect(url).toMatch(/^https:\/\/video\.example\.com\/join\/operator\/ops_[\w-]+\.\d+\.[\w-]+$/);
+      const printed = invitationIn(new URL(url).pathname)!;
+      expect(await team().read(printed)).toEqual({ state: "waiting", role: "owner", invitedBy: null, expiresAt });
+      expect(Date.parse(expiresAt) - T0).toBe(INVITATION_HOURS * HOUR);
+      expect(await team().accept(printed, sam)).toMatchObject({ role: "owner" });
+      // Signed for another instance, it opens nothing here.
+      const elsewhere = operatorLink({ secret: "x".repeat(32), origin: "https://video.example.com", now: T0 });
+      expect(await team().read(invitationIn(new URL(elsewhere.url).pathname)!)).toEqual({ state: "unknown" });
     });
 
     it("is used by one of two people who open it at the same moment", async () => {
