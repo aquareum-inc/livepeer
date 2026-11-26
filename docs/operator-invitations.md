@@ -1,6 +1,7 @@
 # Operator invitations: plan
 
-Status: **proposed on 24 November 2026, not approved, nothing built.**
+Status: **proposed on 24 November 2026, revised on 25 November 2026 after a review against the code (section
+10 says what changed). Not approved, nothing built.**
 
 An instance has no way to add a second operator today unless its identity provider manages roles. This
 plan adds a **Team** section to the console's settings where an operator invites another person by link, and
@@ -12,27 +13,31 @@ Each has a recommendation; the rest of the plan assumes it.
 
 | # | Decision | Recommendation |
 | --- | --- | --- |
-| D1 | How an invitation reaches the person. Workspace invitations assume the provider holds them and sends the email (Q20). | **A link the operator copies and sends themselves.** The instance keeps a hash of the token, the role and an expiry, and no email address. It works today, with any provider and with mock data, and an operator usually invites a handful of people they already talk to. If PymtHouse later holds invitations and sends email (Q20), the email becomes a second way to deliver the same link. |
+| D1 | How an invitation reaches the person. Workspace invitations assume the provider holds them and sends the email (Q20). | **A link the operator copies and sends themselves.** The instance keeps a hash of the token and an expiry, and no email address. It works today with any provider, and an operator usually invites a handful of people they already talk to. If PymtHouse later sends invitation emails (Q20), the email becomes a second way to deliver the same link. |
 | D2 | Make `auth.signUp` enforced in the same build. It is copy on the sign-in page today and nothing checks it (section 1). | **Yes.** An invitation only means something if a closed instance refuses everyone else. |
-| D3 | How the first operator gets in on a new instance. | **`./livepeer setup` prints a one-time invitation link** for the first operator, and `./livepeer invite-operator` prints another later (for a lost or locked-out instance). The bundle has no built-in account and no default password. |
-| D4 | Removing an operator. | **Any operator can remove any other, never the last one.** An operator can't remove themselves while they are the only one. Removal sets the role back to `user` and keeps the account. |
+| D3 | How the first operator gets in on a new instance. | **`./livepeer setup` prints a one-time link** for the first operator, and `./livepeer invite-operator` prints another later (for a locked-out instance). The CLI signs the link with `SESSION_SECRET` from `.env`, so it needs no running app and no account or default password exists. On Vercel the same command is run locally with the project's `SESSION_SECRET`. |
+| D4 | Removing an operator. | **Any operator can remove any other, or themselves, but never the last one.** Removal takes away console access at the next request and keeps the account. |
 | D5 | How long a link lasts. | **72 hours, single use**, revocable from the Team section until it's used. |
+| D6 | **Where the fact "this person is an operator" is kept.** Today it has no working home (section 1). | **In the instance's own database: one row per operator, holding the provider's opaque user id.** A person is an operator if their identity provider's token says so, or they have a row. Being an operator is a fact about the instance, not about billing; Batteries has no users at all; and it fits the rule that the app stores ids and a role and nothing else. If PymtHouse can later hold the role and put it in the sign-in token (Q25), the rows can move there. |
 
 ## 1. What exists today
 
-- The session's role comes from the identity provider. With OIDC, a session is `operator` when the
-  provider's `roles` or `groups` claim contains `operator` (`apps/web/lib/auth/oidc-provider.ts`). With the
-  mock provider, the role is the provider user's `role`, which `identity.setUserRole` changes.
-- An operator can promote someone who already has an account: Users → a person → Role
-  (`setUserRoleAction` in `apps/web/lib/operator/actions.ts`, calling `provider.identity.setUserRole`).
-  Taking the role away ends that person's console phone sessions.
-- `auth.signUp` is `open`, `invite` or `closed`. The `full` preset is `open` and the `headless` preset is
-  `closed`. Only `apps/web/app/sign-in/page.tsx` reads it, to choose a sentence. Nothing refuses a new account
-  and nothing issues an invitation.
+- **The session's role comes from the sign-in token and nowhere else.** With OIDC, the only sign-in a real
+  instance can use, a session is `operator` when the `roles` or `groups` claim contains `operator`
+  (`apps/web/lib/auth/oidc-provider.ts`). The mock sign-in has two fixed people, Adam (user) and Sam
+  (operator). The role is sealed into the cookie for 8 hours and the guard, `requireOperator` and the phone
+  enrolment all read it from there.
+- **The Role control on user detail doesn't grant access.** `setUserRoleAction` calls
+  `provider.identity.setUserRole`, which changes the payment provider's user record: in the mock, a row in
+  memory; in Batteries, unsupported. Sign-in never reads that record, so a promoted person still signs in as
+  a user. Demoting someone does end their console phone sessions, but their browser session keeps the console
+  until the cookie expires.
+- **`auth.signUp` is not enforced.** It is `open`, `invite` or `closed` (`full` preset: `open`; `headless`:
+  `closed`). Only `apps/web/app/sign-in/page.tsx` reads it, to choose a sentence.
+- **Nothing is provisioned at sign-up yet.** `createSession` gives every session the development builder
+  key; per-user provisioning with the admin token is still to come.
 
-So on a console-only instance (`surfaces.app` off) a teammate can only become an operator through the
-identity provider's groups: nobody can make an account to be promoted, and the Users page lists only people
-who already have one.
+So on any real instance, a teammate can only become an operator through the identity provider's groups.
 
 ## 2. Who this is for, and what it is not
 
@@ -40,115 +45,178 @@ who already have one.
   plan, keys and three roles (`docs/workspaces.md`). The operator team is the list of people who can run this
   instance: one per instance, no budget, one role, nothing to switch between. They share the shape of an
   invitation link and a join page, not their data or permissions.
-- **Instances whose identity provider manages roles** (a generic OIDC provider, where the `roles` or
-  `groups` claim decides) don't get invitations. The provider decides who is an operator, so an invitation from the console would be undone at
-  the next sign-in. The Team section lists the current operators and says to change the group in the
-  provider.
+- **Instances that manage operators in their identity provider** keep doing so: the claim still works, and
+  those people appear in Team marked "from your identity provider", without Remove. Invitations work beside
+  it. (The first draft turned invitations off under OIDC; with D6 there is no need.)
 
-## 3. The console: Settings → Team
+## 3. The operator role, after this change (D6)
 
-- **Operators:** name, email (read from the provider at display time), how they became one (invited by whom,
-  or "from your identity provider"), last console sign-in, and Remove. Remove is refused for the last
-  operator (D4).
-- **Pending invitations:** who made it, when it expires, Copy link and Revoke. The link is shown once, when
-  it's made; afterwards the row shows only that it exists, because only a hash is stored.
+One function, `effectiveRole(identity)`, used by `/auth/callback` for the browser session, the user device
+session and the console phone enrolment:
+
+- `operator` if the token's claim says so (source `claim`), or the instance has an operator row for the
+  user id (source `grant`); otherwise `user`.
+- The session records the source. For a `grant` session, the proxy's guard and `requireOperator` check that
+  the row still exists on every console request (one indexed read; the proxy already reads settings from the
+  database). Removal therefore takes effect at once in the browser, and `operatorDevices().revokeUser`
+  already ends the phones. A `claim` session lasts until its cookie expires, as today.
+- A claim operator gets a row with source `claim` written at sign-in, so Team can list them. That row grants
+  nothing: a later sign-in without the claim deletes it.
+- The Role control on user detail becomes **Make operator** (writes a `grant` row, for someone who already
+  has an account) and links to Team for removal. `provider.identity.setUserRole` is no longer called by the
+  app; it stays in the interface for a provider that can carry the role itself (Q25).
+
+## 4. The console: Settings → Team
+
+- **Operators:** name, email, how they became one ("invited by *name*", "added by *name*", "first operator,
+  from setup", "from your identity provider"), since when, and Remove. Names and emails come from the same
+  sealed snapshot the device sessions use (`docs/database.md` D1), since Batteries can't look a user up.
+- **Pending invitations:** who made it, when it expires, and Revoke. The link is shown once, when it's
+  made; afterwards the row shows only that it exists, because only a hash is stored.
 - **Invite an operator** makes a link and shows it with "Send this to the person you're inviting. Anyone with
   it can become an operator of *Instance* until it's used or expires on *date*."
-- Operator phones and the audit log stay where they are (System). Inviting, joining and removal are written
-  to the audit log as their own events.
+- Inviting, revoking, joining, adding and removing are written to the existing audit log as `change`
+  entries with the operation's name and the person's id as the target.
+- States: loading, an error state, and the empty state for invitations ("No invitations waiting"). The
+  operators list is never empty.
 - On phones: none of this. It belongs with "Stays on the web" in `docs/mobile/plan.md` §18.3.
 
-## 4. Accepting: `/join/operator/<token>`
+## 5. Accepting: `/join/operator/<token>`
+
+The page lives outside the user app's route group. `surfacePathServed` serves it whenever the console is on
+(today every path outside `/operator` and sign-in is 404 on a console-only instance), and the guard lists it
+as public, so it can be read signed out. The existing `/join/<token>` for workspaces is untouched.
 
 1. The page checks the token. An expired, used or revoked one says so and nothing else.
 2. A visitor who isn't signed in sees "*Inviter* invited you to run *Instance*" and signs in with any method
-   the instance offers. The token travels in the sign-in flow cookie, so sign-up is allowed for this one
-   sign-in even when `signUp` is `closed` or `invite`.
+   the instance offers. `/auth/start` records the token in the sealed flow cookie, which is what lets a new
+   person through a `closed` or `invite` instance for this one sign-in (section 6).
 3. Once signed in, the page names the account: "You'll become an operator of *Instance* as *Name*
-   (*email*)", with "Not you? Use another account". **Accept** needs a sign-in in the last 5 minutes, the same
-   rule as enrolling a console phone, so an old session left open somewhere can't accept a forwarded link.
-4. Accepting marks the token used in the same statement that reads it (`DELETE … RETURNING`), calls
-   `provider.identity.setUserRole(userId, "operator")`, reseals the session cookie with the new role and
-   opens `/operator`.
+   (*email*)", with "Not you? Use another account".
+4. **Accept** needs a sign-in in the last 5 minutes, the rule for enrolling a console phone. The session
+   cookie gains the sign-in time (`authenticatedAt`) for this. Someone signed in longer ago is sent through
+   `/auth/start` with `fresh` and comes back. As for phones, an identity provider that doesn't report
+   `auth_time` can't satisfy this.
+5. Accepting takes the invitation and writes the operator row in one transaction, reseals the cookie as an
+   operator and opens `/operator`. Two people racing for one link: one wins, the other sees "already used".
 
-**Someone who already has an account** (the same person who uses the user app) keeps it. Matching is by the
-account that accepts, not by email, so nothing is merged. Their builder key, credits, plan, jobs and
-workspaces are unchanged. Their phone's user session stays a user session; the console on a phone still
-needs its own operator sign-in (§18.2 of the mobile plan).
+**Someone who already has an account** keeps it. Matching is by the account that accepts, not by email, so
+nothing is merged. Their builder key, credits, plan, jobs and workspaces are unchanged. Their phone's user
+session stays a user session; the console on a phone still needs its own operator sign-in (mobile plan
+§18.2).
 
-**A new person on a console-only instance** gets an identity in the provider and no builder account, because
-there is no user app for them to spend in. On an instance with both, they get a builder account at first use
-of the user app, as anyone does.
+**A new person on a console-only instance** gets a session and an operator row, and nothing in the payment
+provider: no user record, no allocation, no builder key.
 
-## 5. Sign-up enforced (D2)
+**Known limit:** a new person who signs in with a link and then doesn't accept has a user session on an
+instance that is closed to sign-ups, until the cookie expires. They were trusted with more than that.
 
-In `/auth/callback`, before a session is made:
+## 6. Sign-up enforced (D2)
+
+In `/auth/callback`, before any session or device code is made:
 
 - `open`: as today.
-- `invite`: a new identity is refused unless the flow carries a valid operator invitation, or, once
-  workspace invitations are live, a pending workspace invitation for that person.
-- `closed`: a new identity is refused unless the flow carries a valid operator invitation.
+- `closed`: an unknown person is refused unless the flow carries a valid operator invitation.
+- `invite`: the same, plus, once workspace invitations are live, a pending workspace invitation for them.
 
-"New" means the provider has no user for the identity (`identity.getUser` returns null). A refused visitor
-lands on `/sign-in?error=closed` with the sentence the sign-in page already has. An existing user can always
-sign in. The native apps get the same refusal through `returnToApp` with a new `closed` reason.
+A person is **known** if the token's claim makes them an operator, or they have an operator row, or the
+payment provider has them: one new API client function, `isKnownUser(userId)`, answered by
+`identity.getUser` where the provider has users (mock, PymtHouse) and by the existence of an allocation
+where it doesn't (Batteries). When real sign-up provisioning is built it goes behind the same check.
 
-With OIDC, the identity provider may already have created its own account; the instance only refuses to make
-a session or provision anything for it. With PymtHouse, whether it can refuse first-time sign-ins itself is
-part of Q25.
+A refused visitor lands on `/sign-in?error=closed` with the sentence the sign-in page already has; the
+native apps get a new `closed` reason through `returnToApp`. With OIDC the identity provider may already
+have made its own account; the instance only declines to make a session. Whether PymtHouse can refuse
+first-time sign-ins itself is part of Q25.
 
-## 6. Storage
+**Mock sign-in** gains a way to be someone new: the email method with any address other than Adam's or
+Sam's signs in as a new person derived from that address. Without it, `closed` and joining can't be tried.
 
-One new table in the instance's Postgres (`docs/database.md` §2):
+## 7. Storage
+
+Two new tables in the instance's Postgres (`docs/database.md` §2), one migration:
 
 | Table | Columns | Keys and indexes |
 | --- | --- | --- |
-| `operator_invitations` | `id`, `token_hash`, `invited_by` (provider user id), `created_at`, `expires_at`, `revoked_at` null, `accepted_by` null, `accepted_at` null | PK `id`; unique `token_hash`; index `expires_at` |
+| `operators` | `user_id`, `source` (`grant` or `claim`), `identity_sealed`, `granted_by` null, `invitation_id` null, `created_at` | PK `user_id` |
+| `operator_invitations` | `id`, `token_hash` null, `invited_by` null, `created_at`, `expires_at`, `revoked_at` null, `accepted_by` null, `accepted_at` null | PK `id`; unique `token_hash`; index `expires_at` |
 
-No name or email column; the console reads both from the provider when it shows a row. Accepted and revoked
-rows are kept for 90 days so "invited by" can be shown, then swept by the alerts round with the expired
-codes. A token is 32 random bytes, hashed with the existing HMAC keyed with `SESSION_SECRET`.
+- No plaintext name or email. `identity_sealed` is the AES-256-GCM snapshot keyed with `SESSION_SECRET`,
+  refreshed at each sign-in, as on device sessions.
+- An invitation's token is 32 random bytes; only its HMAC is stored.
+- **A link from the CLI (D3)** is not in the table until it's used. It is `id.expires.signature`, signed
+  with `SESSION_SECRET`. Accepting verifies the signature and expiry and inserts the id as an accepted row
+  with no token hash and no inviter; the primary key makes it single use.
+- Used and revoked invitations are kept 90 days so "invited by" can be shown, then swept by the alerts
+  round with the expired codes. Expiry is checked on read, so it holds where the round doesn't run.
+- Removing the last `grant` row is refused unless a `claim` row remains.
 
-## 7. API client and operations
+## 8. Functions and operations
 
-Added to `apps/web/lib/public-api/operations.ts` first, each with its `output`, and to
-`docs/data-sources.md` and `docs/ui-actions.md`. All are web-only (no `mobile` mark).
+Instance state, like operator phones, in `apps/web/lib/operators/`, behind the store interface with a
+contract test. Operator operations added to `apps/web/lib/public-api/operations.ts` first, each with its
+`output`, web-only (no `mobile` mark), and listed in `docs/data-sources.md` (live, the instance's own
+tables) and `docs/ui-actions.md`:
 
 | Operation | Method and path | Notes |
 |---|---|---|
-| `operator_list_team` | `GET /operator/team` | Operators and pending invitations. Operators from `identity.listUsers` filtered by role. Reader token for the provider read. |
+| `operator_list_team` | `GET /operator/team` | Operators and pending invitations. |
 | `operator_create_invitation` | `POST /operator/team/invitations` | Returns the link once. |
 | `operator_revoke_invitation` | `DELETE /operator/team/invitations/{id}` | |
-| `operator_remove_operator` | `DELETE /operator/team/{userId}` | `setUserRole(userId, "user")`, ends their console phone sessions, refused for the last operator. Replaces the Role control on user detail, which links here. |
-| `get_operator_invitation` | `GET /join/operator/{token}` | No authentication. Instance name, who invited, expiry; nothing about the instance's other operators. |
-| `accept_operator_invitation` | `POST /join/operator/{token}` | Signed in, with a recent sign-in. |
+| `operator_add_operator` | `POST /operator/team` | An existing user's id. Behind **Make operator** on user detail. |
+| `operator_remove_operator` | `DELETE /operator/team/{userId}` | Ends their console phone sessions. Refused for the last operator and for a `claim` row. |
 
-`provider.features` gains `operatorInvitations: boolean`: true for the mock provider, false for Batteries
-until it can set a role, and for PymtHouse whatever Q25 answers. With a generic OIDC sign-in the Team section
-is read-only whatever the provider says, because the claim decides the role.
+Reading and accepting an invitation are web-only server actions (`getOperatorInvitation`,
+`acceptOperatorInvitation`), not `/api/v1` operations: accepting needs a browser session with a recent
+sign-in, which an API key or a device session can't give. Plus `isKnownUser` in the API client (section 6).
 
-## 8. Build order
+Nothing here is mocked and no provider feature flag is needed: with `MOCK_ONLY=1` the same tables run in
+the embedded Postgres.
+
+## 9. Build order
 
 One pull request, a commit per slice:
 
-1. Table, migration, invitation store with its contract tests (single use, expiry, revoke, concurrent
-   accept).
-2. Sign-up enforced in `/auth/callback` and the native hand-off, with tests for each mode.
-3. Operations and API client functions, the data-source map (`mock` for the provider calls the mock
-   implements, `live` for the instance's own table), and the docs tables.
-4. Console Team section, the join page, user detail's Role control pointing at Team.
-5. `./livepeer setup` prints the first link; `./livepeer invite-operator` prints another. `doctor` warns
-   when an instance has no operator.
-6. Screenshots (dark, light, mobile width) of Team and the join page's states, design decisions logged,
-   README and `docs/route-map.md` updated.
+1. Tables, migration, the operators and invitations store with contract tests (single use, expiry, revoke,
+   two accepts at once, last operator, CLI links).
+2. `effectiveRole`, the session's role source and sign-in time, the per-request check for `grant`
+   sessions, and the role guard tests. Sam stays an operator in mock sign-in by claim.
+3. Sign-up enforced in `/auth/callback` and the native hand-off, `isKnownUser`, the new mock person, tests
+   for each mode.
+4. Operations, the Team section, **Make operator** on user detail, audit entries.
+5. The join page and its route rules (`surfacePathServed`, the guard), accept with a fresh sign-in.
+6. `./livepeer setup` prints the first link; `./livepeer invite-operator` prints another.
+7. Screenshots (dark, light, mobile width) of Team and each state of the join page, design decisions
+   logged, and `README.md`, `docs/route-map.md`, `docs/architecture.md`, `docs/database.md` §2,
+   `docs/data-sources.md` and `docs/ui-actions.md` updated.
 
-Development sign-in already offers Adam (user) and Sam (operator); this adds a third test person with no
-account, to try joining a closed instance.
+## 10. What the review on 25 November changed
 
-## 9. Not in this build
+- **The role had nowhere to live.** The first draft granted the role with `provider.identity.setUserRole`.
+  That call never reaches sign-in, in any provider, so an accepted invitation would have been lost at the
+  next sign-in and wouldn't have worked on a real instance at all. Hence D6, the `operators` table and
+  section 3. This also fixes today's Role control, which has the same fault.
+- **Removal wasn't immediate.** The role sat in an 8-hour cookie. `grant` sessions are now checked per
+  request.
+- **Invitations now work under OIDC too**, beside the provider's groups, and the provider feature flag is
+  gone.
+- **The join page would have been a 404** on a console-only instance, the case this plan is for. Section 5
+  names the two route rules.
+- **"New person" couldn't be decided** with `identity.getUser`, which Batteries doesn't have. Section 6
+  defines "known", and adds a new person to mock sign-in so it can be tested.
+- **The CLI can't write to the database** (it is a script that calls the app over HTTP), so its links are
+  signed, not stored (D3, section 7).
+- **The fresh sign-in check needs the sign-in time in the session**, which it didn't hold.
+- Smaller: names and emails come from a sealed snapshot, not a provider lookup; the audit log uses its
+  existing `change` event; the "last console sign-in" column and the `doctor` warning are dropped, since
+  nothing records the first and the second would need a public "this instance has no operator" signal.
+
+## 11. Not in this build
 
 - Email delivery of invitations (waits for Q20 or a mail setting on the instance).
 - More than one operator role (read-only operators, billing-only operators).
 - Inviting or removing operators from a phone.
 - Restricting a link to an email address or domain. Possible later by storing a hash of the address, if
   forwarded links turn out to matter.
+- A setting that turns invitations off for instances that want their identity provider to be the only way
+  in.
