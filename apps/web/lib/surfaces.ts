@@ -1,3 +1,5 @@
+import { JOIN_PATH } from "./operators/links";
+
 /** The surfaces an instance can serve, as the instance config sets them. */
 export interface Surfaces {
   app: boolean;
@@ -28,6 +30,8 @@ export function surfacePathServed(pathname: string, surfaces: Surfaces): boolean
   if (pathname.startsWith("/api/")) return true;
   if (pathname === "/auth/start" || pathname === "/auth/callback") return surfaces.app || surfaces.console || phones;
   if (isAuthPath(pathname)) return surfaces.app || surfaces.console;
+  // An invitation to the team that runs the instance opens wherever there is a console to join.
+  if (pathname.startsWith(JOIN_PATH)) return surfaces.console;
   return surfaces.app;
 }
 

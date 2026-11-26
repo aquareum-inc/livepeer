@@ -8,6 +8,7 @@ import { useState, type FormEvent } from "react";
 import { dateTime, usd } from "../components/format";
 import { ConsolePage, GapNote, Panel } from "../components/parts";
 import { Table } from "../components/table";
+import { useOperatorCan } from "../shell/role";
 
 export interface GrantsViewProps {
   grants: Grant[];
@@ -19,6 +20,7 @@ export interface GrantsViewProps {
 }
 
 export function GrantsView({ grants: initial, unavailable, create, fund, sources }: GrantsViewProps) {
+  const can = useOperatorCan();
   const [grants, setGrants] = useState(initial);
   const [sheet, setSheet] = useState<{ mode: "create" } | { mode: "fund"; grant: Grant } | null>(null);
   const [label, setLabel] = useState("");
@@ -64,7 +66,7 @@ export function GrantsView({ grants: initial, unavailable, create, fund, sources
       title="Grants"
       description="A grant is a pool of funding. Allocations are per-user budgets carved out of a grant."
       sources={sources}
-      actions={<Button size="sm" variant="primary" disabled={unavailable !== null} onClick={() => setSheet({ mode: "create" })}><Plus />New grant</Button>}
+      actions={can("manage_grants") ? <Button size="sm" variant="primary" disabled={unavailable !== null} onClick={() => setSheet({ mode: "create" })}><Plus />New grant</Button> : null}
     >
       {unavailable ? <GapNote>{unavailable}</GapNote> : null}
       <Panel title="All grants">
@@ -80,7 +82,7 @@ export function GrantsView({ grants: initial, unavailable, create, fund, sources
             { key: "spent", header: "Spent", cell: (grant) => usd(grant.spent.amount), mono: true, align: "right" },
             { key: "free", header: "Unallocated", cell: (grant) => usd(Number(grant.funded.amount) - Number(grant.allocated.amount)), mono: true, align: "right", wide: true },
             { key: "created", header: "Created", cell: (grant) => dateTime(grant.created_at), mono: true, align: "right", wide: true },
-            { key: "act", header: "", align: "right", cell: (grant) => <Button size="sm" variant="ghost" onClick={() => setSheet({ mode: "fund", grant })}>Add funding</Button> },
+            ...(can("manage_grants") ? [{ key: "act", header: "", align: "right" as const, cell: (grant: Grant) => <Button size="sm" variant="ghost" onClick={() => setSheet({ mode: "fund", grant })}>Add funding</Button> }] : []),
           ]}
         />
       </Panel>

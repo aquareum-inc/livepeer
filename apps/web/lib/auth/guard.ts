@@ -13,6 +13,8 @@ const PUBLIC = [
   /^\/sign-in$/,
   /^\/auth\//,
   /^\/api\/health$/,
+  // An invitation to the team can be read signed out; joining asks for a sign-in.
+  /^\/join\/operator\/[^/]+$/,
   /^\/studio(\/[^/]+)?$/,
   /^\/characters$/,
   /^\/characters\/(?!new$)[^/]+$/,

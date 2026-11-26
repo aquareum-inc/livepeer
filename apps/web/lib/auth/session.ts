@@ -4,29 +4,18 @@ import { cookies } from "next/headers";
 
 import { env, isDev } from "../env";
 import { instance } from "../instance";
+import { operators } from "../operators";
 import { mockProvider } from "./mock-provider";
 import { oidcProvider } from "./oidc-provider";
 import { seal, unseal } from "./seal";
+import { mockMode, sessionSecret } from "./secret";
 import type { AuthProvider, Identity, Session } from "./types";
+
+export { mockMode, sessionSecret };
 
 export const SESSION_COOKIE = "aq_session";
 export const FLOW_COOKIE = "aq_auth_flow";
 const SESSION_HOURS = 8;
-
-/** The secret that seals cookies. Required in production; a fixed value is used only in development. */
-export function sessionSecret(): string {
-  const secret = env("SESSION_SECRET");
-  if (secret && secret.length >= 32) return secret;
-  if (process.env.NODE_ENV === "production" && !mockMode()) {
-    throw new Error("SESSION_SECRET must be set to at least 32 characters.");
-  }
-  return "development-only-session-secret-not-for-production";
-}
-
-export function mockMode(): boolean {
-  const value = env("MOCK_ONLY");
-  return value === "1" || value === "true";
-}
 
 /** The mock provider is available in development and mock-only mode, never to real end users. */
 export async function authProvider(): Promise<AuthProvider> {
@@ -41,9 +30,15 @@ export async function authProvider(): Promise<AuthProvider> {
   return mockProvider;
 }
 
-export function createSession(identity: Identity): Session {
+/**
+ * A new session for someone who has just signed in. `operatorSource` says on whose word they are an
+ * operator; `authenticatedAt` is when the provider says they actually signed in.
+ */
+export function createSession(identity: Identity, signedIn: { operatorSource?: Session["operatorSource"]; authenticatedAt?: number | null } = {}): Session {
   return {
     ...identity,
+    ...(identity.role === "operator" && signedIn.operatorSource ? { operatorSource: signedIn.operatorSource } : {}),
+    authenticatedAt: signedIn.authenticatedAt ?? null,
     // Dev shortcut: one fixed builder. Real sign-up provisions a key per user with the admin token.
     builderKey: env("BUILDER_API_KEY") ?? null,
     expiresAt: Math.floor(Date.now() / 1000) + SESSION_HOURS * 3600,
@@ -56,8 +51,20 @@ export function readSessionValue(value: string | undefined): Session | null {
   return session && session.expiresAt * 1000 > Date.now() ? session : null;
 }
 
+/**
+ * A session as it stands now. The cookie says who signed in; a place on the team that this instance granted
+ * can be taken away while the cookie is still good, so it is read again here. Someone removed from the team
+ * is a user from their next request.
+ */
+export async function current(session: Session | null): Promise<Session | null> {
+  if (session?.role !== "operator" || session.operatorSource !== "grant") return session;
+  if (await operators().granted(session.userId)) return session;
+  const { operatorSource: _gone, ...rest } = session;
+  return { ...rest, role: "user" };
+}
+
 export async function getSession(): Promise<Session | null> {
-  return readSessionValue((await cookies()).get(SESSION_COOKIE)?.value);
+  return current(readSessionValue((await cookies()).get(SESSION_COOKIE)?.value));
 }
 
 export async function writeSession(session: Session): Promise<void> {

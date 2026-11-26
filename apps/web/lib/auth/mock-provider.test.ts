@@ -17,6 +17,12 @@ describe("the development provider", () => {
     expect(await signIn({ method: "email", email: "someone@example.test" })).toMatchObject({ role: "user" });
   });
 
+  it("signs an address at new.example.test in as someone with no account", async () => {
+    expect(await signIn({ method: "email", email: " Ola.Nilsen@new.example.test" })).toEqual({ userId: "usr_new_ola-nilsen", name: "Ola Nilsen", email: "ola.nilsen@new.example.test", role: "user" });
+    // Only the email method reaches them: no other method carries an address.
+    expect(await signIn({ method: "google", email: "ola@new.example.test" })).toMatchObject({ userId: "usr_demo_adam" });
+  });
+
   it("signs the test operator in by the operator method or the operator's own address", async () => {
     expect(await signIn({ method: "operator" })).toMatchObject({ userId: "usr_demo_sam", role: "operator" });
     expect(await signIn({ method: "email", email: "sam@example.test" })).toMatchObject({ userId: "usr_demo_sam", role: "operator" });

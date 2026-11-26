@@ -190,7 +190,11 @@ fun ConsoleRoot(container: AppContainer, consoleOnly: Boolean, openBrowser: (Uri
             // The tabs stay where they were while the console is locked, under the cover, so unlocking returns
             // to the same place.
             if (stage != ConsoleSession.Stage.SignedOut && unlocks > 0) {
-                Box(if (stage == ConsoleSession.Stage.Open) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}) { ConsoleTabs(container.console, back) }
+                Box(if (stage == ConsoleSession.Stage.Open) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}) {
+                    // What the operator's role allows reaches every page from the one answer Status already has.
+                    val answered by container.console.status.state.collectAsStateWithLifecycle()
+                    CompositionLocalProvider(LocalConsoleMayChange provides answered.mayChange) { ConsoleTabs(container.console, back) }
+                }
             }
             AnimatedVisibility(stage != ConsoleSession.Stage.Open, enter = fadeIn(motion.enter()), exit = fadeOut(motion.exit())) {
                 ConsoleGate(container, back, openBrowser)
@@ -324,6 +328,9 @@ private fun ConsoleTabs(console: Console, back: (() -> Unit)?) {
 
     // Read again each time the console is unlocked.
     LaunchedEffect(unlocks) { console.load() }
+    // A change refused for the operator's role means the role has changed: ask what it is now.
+    val roleRefusals by session.roleRefusals.collectAsStateWithLifecycle()
+    LaunchedEffect(roleRefusals) { if (roleRefusals > 0) console.status.load() }
     // A decision changes what Status says is waiting, so it is read again once the instance has made one.
     LaunchedEffect(reports.changes) { if (reports.changes > 0) console.status.load() }
     // When Status hears of a different number of waiting reports than the queue holds, the queue is read again,

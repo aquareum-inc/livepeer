@@ -192,6 +192,11 @@ export interface PaymentProvider {
   identity: {
     listUsers(): Promise<ProviderUser[]>;
     getUser(id: string): Promise<ProviderUser | null>;
+    /**
+     * Whether the provider has seen this person before: a user record where it keeps them, an allocation
+     * where it doesn't. An instance that is closed to new accounts asks this at sign-in.
+     */
+    isKnown(id: string): Promise<boolean>;
     setUserStatus(id: string, status: ProviderUser["status"]): Promise<ProviderUser>;
     setUserRole(id: string, role: ProviderUser["role"]): Promise<ProviderUser>;
     /** Deletes a user and closes their allocation, on their own request. App stores require it (engine question Q14). */

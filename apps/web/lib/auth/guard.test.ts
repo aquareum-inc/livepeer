@@ -14,6 +14,14 @@ describe("role guard", () => {
     }
   });
 
+  it("lets anyone read an invitation to the team, and nothing else under it", () => {
+    expect(checkAccess("/join/operator/opi_abc", null)).toBe("allow");
+    expect(checkAccess("/join/operator/opi_abc", user)).toBe("allow");
+    // A workspace's invitation still asks for a sign-in, and a deeper path is no invitation.
+    expect(checkAccess("/join/abc", null)).toBe("sign-in");
+    expect(checkAccess("/join/operator/opi_abc/more", null)).toBe("sign-in");
+  });
+
   it("lets guests look around the product", () => {
     for (const path of ["/studio", "/studio/video", "/studio/live", "/characters", "/characters/mira", "/library", "/developers", "/developers/models", "/developers/models/livepeer/text-to-video", "/developers/examples", "/developers/playground"]) {
       expect(checkAccess(path, null)).toBe("allow");

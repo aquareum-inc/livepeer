@@ -1,13 +1,16 @@
 "use client";
 
-import type { DataSource, Plan, UsageEntry } from "@livepeer/api-client";
+import { OPERATOR_ROLE_COPY, type DataSource, type Plan, type TeamOperator, type UsageEntry } from "@livepeer/api-client";
 import { Button, Chip, Sheet } from "@livepeer/ui";
 import { ArrowLeft } from "lucide-react";
 import { useState, type ComponentType, type ReactNode } from "react";
 
-import { ago, count, dateTime, label, usd } from "../components/format";
+import { ago, count, dateTime, day, label, usd } from "../components/format";
+import { PlanChangeSheet, type PlanChoice } from "../components/plan-change";
 import { ConsolePage, GapNote, Panel, Stat, Status } from "../components/parts";
 import { Table } from "../components/table";
+import { useOperatorCan } from "../shell/role";
+import { joined } from "./team";
 
 type LinkType = ComponentType<{ href: string; className?: string; children: ReactNode }>;
 
@@ -74,7 +77,8 @@ export interface UserDetailProps {
   workspaces: Array<{ id: string; name: string; role: string; status: string }>;
   Link: LinkType;
   setStatus: (status: "active" | "paused") => Promise<void>;
-  setRole: (role: "user" | "operator") => Promise<void>;
+  /** The person's role on the team that runs the instance, or null for the many who aren't on it. */
+  team: TeamOperator | null;
   assignPlan: (planId: string | null) => Promise<void>;
   topUp: (amountUsd: number) => Promise<void>;
   sources: ReadonlyArray<{ name: string; source: DataSource }>;
@@ -82,12 +86,15 @@ export interface UserDetailProps {
 
 const TOP_UPS = [10, 25, 50, 100];
 
-export function UserDetailView({ user, plans, plansSupported, usage, keys, workspaces, Link, setStatus, setRole, assignPlan, topUp, sources }: UserDetailProps) {
+export function UserDetailView({ user, plans, plansSupported, usage, keys, workspaces, Link, setStatus, team, assignPlan, topUp, sources }: UserDetailProps) {
+  const can = useOperatorCan();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [suspending, setSuspending] = useState(false);
   const [adding, setAdding] = useState(false);
   const [amount, setAmount] = useState(25);
+  // A plan changes what someone is billed, so picking one asks before it saves.
+  const [choosing, setChoosing] = useState<PlanChoice>(null);
   const paused = user.status === "paused";
 
   const run = async (name: string, action: () => Promise<void>) => {
@@ -109,10 +116,12 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
       sources={sources}
       actions={
         <>
-          <Button size="sm" onClick={() => setAdding(true)}>Add credit</Button>
-          <Button size="sm" variant={paused ? "primary" : "outline"} disabled={busy !== null} onClick={() => (paused ? run("status", () => setStatus("active")) : setSuspending(true))}>
-            {paused ? "Resume" : "Suspend"}
-          </Button>
+          {can("adjust_account") ? <Button size="sm" onClick={() => setAdding(true)}>Add credit</Button> : null}
+          {can("suspend_account") ? (
+            <Button size="sm" variant={paused ? "primary" : "outline"} disabled={busy !== null} onClick={() => (paused ? run("status", () => setStatus("active")) : setSuspending(true))}>
+              {paused ? "Resume" : "Suspend"}
+            </Button>
+          ) : null}
         </>
       }
     >
@@ -128,31 +137,20 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
         <Stat label="Status" value={<Status value={user.status} />} hint={`last seen ${ago(user.lastSeen)}`} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Panel title="Plan" description={plansSupported ? "Assigning a plan takes effect on the user's next billing period." : undefined}>
-          {plansSupported ? (
-            <div className="flex flex-wrap gap-1.5 rounded-card border border-hairline bg-card p-3">
-              <Chip selected={user.plan === null} aria-pressed={user.plan === null} disabled={busy !== null} onClick={() => run("plan", () => assignPlan(null))}>No plan</Chip>
-              {plans.map((plan) => (
-                <Chip key={plan.id} selected={user.plan === plan.name} aria-pressed={user.plan === plan.name} disabled={busy !== null} onClick={() => run("plan", () => assignPlan(plan.id))}>
-                  {plan.name}
-                </Chip>
-              ))}
-            </div>
-          ) : (
-            <GapNote>The connected provider doesn't support plans. This user pays for what they use from their allocation.</GapNote>
-          )}
-        </Panel>
-        <Panel title="Role" description="Operators can open this console.">
-          <div className="flex gap-1.5 rounded-card border border-hairline bg-card p-3">
-            {(["user", "operator"] as const).map((role) => (
-              <Chip key={role} selected={user.role === role} aria-pressed={user.role === role} disabled={busy !== null} onClick={() => run("role", () => setRole(role))}>
-                {role === "user" ? "User" : "Operator"}
+      <Panel title="Plan" description={plansSupported ? "Assigning a plan takes effect on the user's next billing period." : undefined}>
+        {plansSupported ? (
+          <div className="flex flex-wrap gap-1.5 rounded-card border border-hairline bg-card p-3">
+            <Chip selected={user.plan === null} aria-pressed={user.plan === null} disabled={busy !== null || !can("adjust_account")} onClick={() => user.plan !== null && setChoosing("none")}>No plan</Chip>
+            {plans.map((plan) => (
+              <Chip key={plan.id} selected={user.plan === plan.name} aria-pressed={user.plan === plan.name} disabled={busy !== null || !can("adjust_account")} onClick={() => user.plan !== plan.name && setChoosing(plan)}>
+                {plan.name}
               </Chip>
             ))}
           </div>
-        </Panel>
-      </div>
+        ) : (
+          <GapNote>The connected provider doesn't support plans. This user pays for what they use from their allocation.</GapNote>
+        )}
+      </Panel>
 
       {workspaces.length > 0 ? (
         <Panel title="Workspaces" description="Shared accounts this person belongs to. Suspending the person stops them in all of them.">
@@ -167,6 +165,21 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
               { key: "status", header: "Status", cell: (workspace) => <Status value={workspace.status} /> },
             ]}
           />
+        </Panel>
+      ) : null}
+
+      {/* A membership like the ones above, and shown only for the few who have it: most people here are not on the team. */}
+      {team ? (
+        <Panel
+          title="Operator team"
+          description="This person helps run the instance."
+          actions={<Link href="/operator/team" className="shrink-0 text-[13px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">{can("manage_team") ? "Manage on Team" : "See the team"}</Link>}
+        >
+          <div className="flex flex-col gap-1 rounded-card border border-hairline bg-card px-4 py-3 text-[13px] sm:flex-row sm:items-baseline sm:gap-4">
+            <p className="w-[88px] shrink-0 font-medium">{OPERATOR_ROLE_COPY[team.role].name}</p>
+            <p className="min-w-0 flex-1 text-muted-foreground">{OPERATOR_ROLE_COPY[team.role].can}</p>
+            <p className="shrink-0 text-[12px] text-muted-foreground sm:text-right">{joined(team)}, {day(team.since)}</p>
+          </div>
         </Panel>
       ) : null}
 
@@ -206,6 +219,8 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
           <Button variant="destructive" className="flex-1" onClick={() => { setSuspending(false); void run("status", () => setStatus("paused")); }}>Suspend</Button>
         </div>
       </Sheet>
+
+      <PlanChangeSheet choice={choosing} name={user.name} kind="person" current={user.plan} busy={busy !== null} onClose={() => setChoosing(null)} onConfirm={(planId) => { setChoosing(null); void run("plan", () => assignPlan(planId)); }} />
 
       <Sheet open={adding} onOpenChange={setAdding} title="Add credit" description={`A one-off top-up of ${user.name}'s allocation, as a manual adjustment.`}>
         <div className="mb-4 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Amount">

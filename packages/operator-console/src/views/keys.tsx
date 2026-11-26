@@ -8,6 +8,7 @@ import { useState, type FormEvent } from "react";
 import { dateTime } from "../components/format";
 import { ConsolePage, Panel, Status } from "../components/parts";
 import { Table } from "../components/table";
+import { useOperatorCan } from "../shell/role";
 
 export interface KeysViewProps {
   keys: AccessKey[];
@@ -24,6 +25,7 @@ const KINDS: Array<{ value: AccessKey["kind"]; label: string; hint: string }> = 
 const KIND_LABEL: Record<AccessKey["kind"], string> = { actor: "builder", auditor: "reader", admin: "admin", service: "service" };
 
 export function KeysView({ keys: initial, issue, revoke, sources }: KeysViewProps) {
+  const can = useOperatorCan();
   const [keys, setKeys] = useState(initial);
   const [creating, setCreating] = useState(false);
   const [kind, setKind] = useState<AccessKey["kind"]>("actor");
@@ -59,7 +61,7 @@ export function KeysView({ keys: initial, issue, revoke, sources }: KeysViewProp
       title="API and admin keys"
       description="Engine access keys. Builder keys act as one account; reader keys read across accounts; admin keys can change anything."
       sources={sources}
-      actions={<Button size="sm" variant="primary" onClick={() => setCreating(true)}><Plus />Issue key</Button>}
+      actions={can("manage_keys") ? <Button size="sm" variant="primary" onClick={() => setCreating(true)}><Plus />Issue key</Button> : null}
     >
       <Panel title="All keys">
         <Table
@@ -73,7 +75,7 @@ export function KeysView({ keys: initial, issue, revoke, sources }: KeysViewProp
             { key: "actor", header: "Account", cell: (key) => key.actor_id, mono: true, wide: true },
             { key: "status", header: "Status", cell: (key) => <Status value={key.revoked_at ? "revoked" : "active"} /> },
             { key: "created", header: "Created", cell: (key) => dateTime(key.created_at), mono: true, align: "right", wide: true },
-            { key: "act", header: "", align: "right", cell: (key) => (key.revoked_at ? null : <Button size="sm" variant="ghost" onClick={() => setRevoking(key)}>Revoke</Button>) },
+            ...(can("manage_keys") ? [{ key: "act", header: "", align: "right" as const, cell: (key: AccessKey) => (key.revoked_at ? null : <Button size="sm" variant="ghost" onClick={() => setRevoking(key)}>Revoke</Button>) }] : []),
           ]}
         />
       </Panel>

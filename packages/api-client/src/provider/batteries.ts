@@ -81,6 +81,8 @@ export function createBatteriesProvider(engine: { url: string; reader?: string; 
     identity: {
       listUsers: unsupported("listing users"),
       getUser: unsupported("reading a user"),
+      // Batteries keeps no users. Someone it has given an allocation to has been here before.
+      isKnown: async (userId) => (await readAllocation(userId)) !== null,
       setUserStatus: unsupported("changing a user's status"),
       setUserRole: unsupported("roles"),
       deleteUser: unsupported("deleting a user (engine question Q14)"),

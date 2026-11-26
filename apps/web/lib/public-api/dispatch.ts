@@ -1,4 +1,4 @@
-import { ApiError, type Context, type Operation } from "./operations";
+import { ApiError, roleRefused, type Context, type Operation } from "./operations";
 
 /**
  * What an operator device session may call besides the operator operations marked for phones: what the app
@@ -14,12 +14,15 @@ const target = (input: Record<string, unknown>): string | null => (typeof input.
  * Runs an operation for a caller. This is the only place an operation's `run` is called for a request, and
  * the one place the rules for an operator's phone are applied, in order, refusing at the first failure:
  * the console is offered on phones; the operation is one a phone may call (an allow-list: no mark means web
- * only); a read needs an unlocked session; a change needs its own unused proof for exactly this operation
+ * only); the caller's role on the team allows it; a read needs an unlocked session; a change needs its own unused proof for exactly this operation
  * and input. Refusals and changes are written to the audit log. The `operator(context)` guard inside each
  * operator operation stays as the second line.
  */
 export async function runOperation(operation: Operation, context: Context, input: Record<string, unknown>, proof: string | null): Promise<unknown> {
-  if (context.via !== "operator_device") return operation.run(context, input);
+  if (context.via !== "operator_device") {
+    if (!roleAllows(operation, context)) throw roleRefused();
+    return operation.run(context, input);
+  }
 
   const session = context.operatorDevice;
   // An operator-device caller without its session can't be checked, so it can't be served.
@@ -40,6 +43,8 @@ export async function runOperation(operation: Operation, context: Context, input
   }
   if (!operation.mobile) throw await refusal(403, "This is done on the web console, not on a phone.", "web_only");
 
+  if (!roleAllows(operation, context)) throw await refusal(403, "Your role on this team doesn't allow that. An owner can do it, or change your role.", "role");
+
   if (operation.mobile === "read") {
     if (!context.operatorDevices.unlocked(session)) throw await refusal(401, "The console is locked on this phone.", "locked");
     return operation.run(context, input);
@@ -57,6 +62,15 @@ export async function runOperation(operation: Operation, context: Context, input
     await context.audit.write("change", actor, { operation: operation.name, target: target(input), detail: `failed: ${cause instanceof Error ? cause.message : "unknown"}`.slice(0, 200) });
     throw cause;
   }
+}
+
+/**
+ * Whether the caller's role on the team allows an operator operation. A read, and a change to the caller's
+ * own place, are open to every role; a caller who isn't an operator is turned away by the operation itself.
+ */
+function roleAllows(operation: Operation, context: Context): boolean {
+  if (!operation.operator || !operation.needs || operation.needs === "self" || !context.operator) return true;
+  return context.can(operation.needs);
 }
 
 /**

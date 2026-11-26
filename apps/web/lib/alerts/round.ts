@@ -5,6 +5,7 @@ import { env } from "../env";
 import { moderation } from "../moderation";
 import { buildReaderClient } from "../operator/client";
 import { mobileConsoleEnabled, operatorDevices } from "../operator-devices";
+import { operators } from "../operators";
 import { FAILURES_WINDOW, failedInLastHour } from "../public-api/operations";
 import { alerts } from "./index";
 
@@ -34,7 +35,7 @@ export async function runAlertRound(): Promise<boolean> {
   if (!round) return false;
 
   // What has lapsed goes here, so nothing waits for the next sign-in to be tidied.
-  await Promise.all([devices().sweep(), operatorDevices().sweep()]);
+  await Promise.all([devices().sweep(), operatorDevices().sweep(), operators().sweep()]);
 
   // With the console off on phones, or no phone listening, there is nobody to tell and nothing is asked.
   if (!(await mobileConsoleEnabled()) || !(await operatorDevices().anyAlerts())) return true;

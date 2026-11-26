@@ -200,3 +200,16 @@ hashing are pinned by `operator_proof_vectors.json`.
   fingerprint destroys it. Neither a simulator nor an emulator can show this.
 - A phone with only a weak face unlock on Android, and Android 10 to 12.
 - No UI test drives the console: a test can't answer the biometric prompt from inside.
+
+## Trying the console as each operator role
+
+- **Who is who on a mock instance.** "Sign in as the test operator" is Sam Whitfield, an owner by the
+  sign-in token. Any email address signs in as Adam Soffer, a user. An address at `new.example.test` signs
+  in as a new person named from the address, which is how a closed instance and joining by link are tried.
+- **Making someone a member or a viewer.** As Sam, open Team, make an invitation with the role, open the
+  link in another browser profile and sign in as the person. Or call `operator_add_operator` with Sam's
+  session. The phone then shows that role after Status next loads.
+- **What to look at as a viewer:** a user's page and a report, where a line replaces the buttons.
+- **A change of role while the app is open** shows the old buttons until Status reloads; the server refuses
+  in the meantime and the tray shows the refusal.
+

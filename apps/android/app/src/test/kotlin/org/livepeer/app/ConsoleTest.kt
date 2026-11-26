@@ -103,6 +103,7 @@ import org.livepeer.app.generated.OperatorAttentionOpens
 import org.livepeer.app.generated.OperatorChallenge
 import org.livepeer.app.generated.OperatorDeviceToken
 import org.livepeer.app.generated.OperatorProof
+import org.livepeer.app.generated.OperatorRole
 import org.livepeer.app.generated.OperatorStatus
 import org.livepeer.app.generated.OperatorTransport
 import org.livepeer.app.generated.OperatorUnlock
@@ -548,6 +549,19 @@ class ConsoleTest {
     }
 
     // Status
+
+    @Test
+    fun aViewerIsOfferedNoChangesAndNobodyIsBeforeTheirRoleIsKnown() = runBlocking {
+        val answer = fixture("operator_status", OperatorStatus.serializer())
+        assertEquals(OperatorRole.Owner, answer.role)
+        for ((role, may) in listOf(OperatorRole.Owner to true, OperatorRole.Member to true, OperatorRole.Viewer to false)) {
+            val model = StatusModel { answer.copy(role = role) }
+            // Nothing is offered until the instance has said which role this is.
+            assertFalse(model.state.value.mayChange)
+            model.load()
+            assertEquals(may, model.state.value.mayChange)
+        }
+    }
 
     @Test
     fun statusKeepsTheLastAnswerWhenTheInstanceCantBeReached() = runBlocking {

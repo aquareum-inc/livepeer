@@ -212,6 +212,9 @@ export function createMockProvider(): PaymentProvider {
         const user = state.users.find((entry) => entry.id === userId);
         return user ? { ...user } : null;
       },
+      async isKnown(userId) {
+        return state.users.some((entry) => entry.id === userId);
+      },
       async setUserStatus(userId, status) {
         const user = must(state.users.find((entry) => entry.id === userId), "user");
         user.status = status;

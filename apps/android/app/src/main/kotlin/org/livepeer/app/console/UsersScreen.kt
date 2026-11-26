@@ -192,7 +192,9 @@ fun UserDetailScreen(model: UsersModel, id: String, onBack: () -> Unit) {
                 ConsoleFormat.millis(allocation.updatedAt)?.let { RowRule(); FactRow("Changed", ConsoleFormat.moment(it)) }
             }
         }
-        if (user.canSuspend) {
+        if (!LocalConsoleMayChange.current) {
+            if (user.canSuspend || user.canResume) ViewerLine("suspend or resume an account")
+        } else if (user.canSuspend) {
             OutlineDestructiveButton("Suspend") {
                 change = ConsoleChange("Suspend ${user.displayName}?", "Their work stops and their phones are signed out. You can resume them at any time.", "Suspend", destructive = true) {
                     model.set(user, UserStatus.Paused, instance)

@@ -281,6 +281,7 @@ private extension OperatorStatus {
     /// Stands in while the first answer is on its way: the same rows, with nothing to read in them.
     static let placeholder = OperatorStatus(
         checkedAt: "",
+        role: .viewer,
         attention: [],
         today: OperatorStatusToday(activeUsers: 0, jobs: 0, failed: 0, revenueUsd: 0, wholesaleUsd: 0, marginUsd: 0, revenueEstimated: false),
         service: OperatorStatusService(engineReady: true, discoveryFresh: true, discoveryObservedAt: nil, costSyncAt: nil, costSyncError: nil, runningJobs: 0, engineVersion: "0.0.0")

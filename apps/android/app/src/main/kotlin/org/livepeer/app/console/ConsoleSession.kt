@@ -62,6 +62,7 @@ class ConsoleSession(
     private val _working = MutableStateFlow(false)
     private val _failure = MutableStateFlow<String?>(null)
     private val _unlocks = MutableStateFlow(0)
+    private val _roleRefusals = MutableStateFlow(0)
     private val _signingIn = MutableStateFlow<SignInMethodName?>(null)
 
     val stage: StateFlow<Stage> = _stage
@@ -77,6 +78,9 @@ class ConsoleSession(
 
     /** Counts each unlock, so screens read again when the console reopens. */
     val unlocks: StateFlow<Int> = _unlocks
+
+    /** Counts changes the instance refused because this operator's role no longer allows them. */
+    val roleRefusals: StateFlow<Int> = _roleRefusals
 
     /** The method a sign-in in the browser was started with, until it comes back. */
     val signingIn: StateFlow<SignInMethodName?> = _signingIn
@@ -297,6 +301,8 @@ class ConsoleSession(
             error.code == "locked" -> lock()
             // The change was refused and the session stands; the caller says so.
             error.code == "proof_required" -> Unit
+            // Their role on the team changed since Status last answered. The caller says so; Status is asked again.
+            error.code == "role" -> _roleRefusals.value += 1
             error.status == 401 || error.code == "mobile_console_off" || error.code == "operator_session" -> {
                 forget()
                 if (error.code == "mobile_console_off") {
@@ -347,6 +353,7 @@ class ConsoleSession(
                 "not_operator" -> "This account doesn't run $instance."
                 "mobile_console_off" -> "$instance doesn't offer its console on phones."
                 "method" -> "That way of signing in isn't offered here."
+                "closed" -> "$instance isn't taking new accounts."
                 else -> "Sign-in didn't finish. Try again."
             }
             is ApiError -> error.message

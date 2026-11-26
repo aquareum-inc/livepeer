@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * livepeer setup | doctor | upgrade
+ * livepeer setup | doctor | upgrade | invite-operator
  *
  * Non-interactive, safe to run twice, JSON on request. Exit codes:
  *   0 ok · 1 doctor found problems · 2 bad usage · 3 invalid config · 4 Docker unavailable
@@ -13,6 +13,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
+import { LINK_HOURS, operatorLink } from "../lib/operator-link.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const CONFIG_PKG = path.join(ROOT, "packages/config");
@@ -22,9 +23,10 @@ const PRESETS = ["full", "headless"];
 const USAGE = `livepeer <command> [options]
 
 Commands
-  setup     Write .env and instance.config.json, then start the bundle
-  doctor    Check config, keys, engine and provider; say what to fix
-  upgrade   Move the app and its pinned engine to this checkout's release, then restart
+  setup             Write .env and instance.config.json, then start the bundle
+  doctor            Check config, keys, engine and provider; say what to fix
+  upgrade           Move the app and its pinned engine to this checkout's release, then restart
+  invite-operator   Print a link that makes whoever opens it an owner of the console, once
 
 Options
   --preset <full|headless>   Preset to start from (setup; default: full)
@@ -34,6 +36,7 @@ Options
   --no-start                 Write files but don't start containers (setup)
   --port <n>                 Port for the app (setup; default: 3000)
   --dir <path>               Instance directory (default: the repository root)
+  --url <address>            The instance's public address (invite-operator; default: its domain, or localhost)
   --json                     Machine-readable output
   -h, --help                 Show this help`;
 
@@ -240,6 +243,13 @@ async function setup(options) {
     result.health = health.body;
     say(`ready at ${result.url}`);
   }
+
+  // 4. A new instance has nobody who can open its console. The first setup prints the way in, once.
+  if (merged.changed.includes("SESSION_SECRET")) {
+    const link = operatorLink({ secret: parseEnv(merged.text).SESSION_SECRET, origin: publicAddress(config, port) });
+    result.owner_invitation = link;
+    say(`first owner: open this link, sign in, and the console is yours. It works once, for ${LINK_HOURS} hours.\n  ${link.url}\n  For another later: livepeer invite-operator`);
+  }
   if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
@@ -410,6 +420,32 @@ async function doctor(options) {
   process.exit(ok ? EXIT.ok : EXIT.problems);
 }
 
+/** Where people reach the instance: its configured domain, or this machine. */
+function publicAddress(config, port) {
+  return config?.domain ? `https://${config.domain}` : `http://localhost:${port || 3000}`;
+}
+
+/**
+ * Prints a link that makes whoever opens it and signs in an owner, once: for an instance nobody can get
+ * into, or to add an owner without the console. Anyone holding the instance's SESSION_SECRET can make one,
+ * which is no more than that secret already allows. On a host with no checkout (Vercel), run it here with
+ * SESSION_SECRET in the environment and --url.
+ */
+async function inviteOperator(options) {
+  const { json } = options;
+  const dir = path.resolve(options.dir ?? ROOT);
+  const envFile = path.join(dir, ".env");
+  const env = existsSync(envFile) ? parseEnv(readFileSync(envFile, "utf8")) : {};
+  const secret = process.env.SESSION_SECRET || env.SESSION_SECRET || "";
+  if (secret.length < 32) fail(EXIT.usage, "no SESSION_SECRET of 32 or more characters, in the environment or in .env here. Run: livepeer setup", json);
+  const configFile = path.join(dir, "instance.config.json");
+  const origin = options.url ?? publicAddress(existsSync(configFile) ? readJson(configFile) : null, env.APP_PORT);
+  if (!/^https?:\/\/[^\s/]+/.test(origin)) fail(EXIT.usage, `--url is the instance's address, such as https://video.example.com (got "${origin}")`, json);
+  const link = operatorLink({ secret, origin });
+  if (json) process.stdout.write(`${JSON.stringify({ ok: true, url: link.url, expires_at: link.expiresAt })}\n`);
+  else process.stdout.write(`Open this link and sign in to become an owner of the console. It works once, until ${link.expiresAt}.\n  ${link.url}\n`);
+}
+
 async function upgrade(options) {
   const { json } = options;
   const dir = path.resolve(options.dir ?? ROOT);
@@ -439,6 +475,7 @@ try {
       config: { type: "string" },
       dir: { type: "string" },
       port: { type: "string" },
+      url: { type: "string" },
       "mock-only": { type: "boolean", default: false },
       network: { type: "boolean", default: false },
       "no-start": { type: "boolean", default: false },
@@ -451,7 +488,7 @@ try {
 }
 
 const [command] = parsed.positionals;
-const commands = { setup, doctor, upgrade };
+const commands = { setup, doctor, upgrade, "invite-operator": inviteOperator };
 if (parsed.values.help || !command) {
   process.stdout.write(`${USAGE}\n`);
   process.exit(command || parsed.values.help ? EXIT.ok : EXIT.usage);

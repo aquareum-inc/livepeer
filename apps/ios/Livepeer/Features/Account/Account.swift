@@ -108,11 +108,12 @@ final class Account {
     }
 
     enum SignInError: LocalizedError {
-        case notOffered, mobileOff, unfinished
+        case notOffered, mobileOff, closed, unfinished
         var errorDescription: String? {
             switch self {
             case .notOffered: "That way of signing in isn't offered here."
             case .mobileOff: "This service doesn't offer its app on phones right now."
+            case .closed: "This service isn't taking new accounts."
             case .unfinished: "Sign-in didn't finish. Try again."
             }
         }
@@ -146,6 +147,7 @@ final class Account {
         case "mobile_off":
             await instance.refresh()
             throw SignInError.mobileOff
+        case "closed": throw SignInError.closed
         case .some: throw SignInError.unfinished
         case nil: break
         }

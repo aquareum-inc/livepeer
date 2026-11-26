@@ -1,4 +1,4 @@
-import { MOCK_ONLY_DEMO_KEY, quoteCredits, createApiClient, createMockProvider, createOperatorClient, type DeviceSession, type InstanceDescription } from "@livepeer/api-client";
+import { MOCK_ONLY_DEMO_KEY, OPERATOR_ROLES, operatorCan, quoteCredits, createApiClient, createMockProvider, createOperatorClient, type DeviceSession, type InstanceDescription, type OperatorRole } from "@livepeer/api-client";
 import { describePrivacy } from "@livepeer/user-app/privacy";
 import { describeStudio } from "@livepeer/user-app/studio-mediums";
 import { describe, expect, it, vi } from "vitest";
@@ -11,6 +11,9 @@ import { postgresModerationStore } from "../moderation/postgres";
 import { auditLog } from "../operator-devices/audit";
 import { operatorDeviceSessions } from "../operator-devices/sessions";
 import { TEST_SECRET, testAudit, testOperatorDevices } from "../operator-devices/testing";
+import { operators } from "../operators";
+import { teamManagement } from "../operators/manage";
+import { runOperation } from "./dispatch";
 import { ApiError, OPERATIONS, matchOperation, type Account, type AlertsAccess, type Context, type DeviceAccess } from "./operations";
 
 const provider = createMockProvider();
@@ -45,7 +48,10 @@ await openTestDatabase();
 const desk = moderation(postgresModerationStore(testDatabase()));
 const audit = auditLog(testAudit());
 const alerts: AlertsAccess = { offered: async () => true, accepts: () => true, reportFiled: vi.fn(), phoneAdded: vi.fn(), test: async () => "sent" };
-const base: Context = { via: "api_key", client, operator: null, account: null, devices, operatorDevice: null, operatorDevices: operatorDeviceSessions(testOperatorDevices(), TEST_SECRET, audit), audit, alerts, moderation: desk, privacy: async () => describePrivacy(false), instance, labels, agentModelMenu, studioMediums, quote: quoteCredits };
+const base: Context = { via: "api_key", client, operator: null, operatorRole: null, can: () => false, account: null, team: teamManagement(), devices, operatorDevice: null, operatorDevices: operatorDeviceSessions(testOperatorDevices(), TEST_SECRET, audit), audit, alerts, moderation: desk, privacy: async () => describePrivacy(false), instance, labels, agentModelMenu, studioMediums, quote: quoteCredits };
+/** A caller with a place on the team: the operator client, and what that role may do. */
+const seat = (role: OperatorRole): Pick<Context, "via" | "operator" | "operatorRole" | "can"> => ({ via: "browser", operator, operatorRole: role, can: (action) => operatorCan(role, action) });
+const owner = seat("owner");
 const adam: Account = { user: { id: "usr_demo_adam", name: "Adam Soffer", email: "adam@example.test" }, role: "user", deviceId: "dev_1" };
 
 describe("public API operations", () => {
@@ -80,11 +86,11 @@ describe("public API operations", () => {
   it("refuses operator operations without the operator role", async () => {
     const overview = OPERATIONS.find((operation) => operation.name === "operator_overview")!;
     await expect(overview.run(base, {})).rejects.toBeInstanceOf(ApiError);
-    await expect(overview.run({ ...base, operator }, {})).resolves.toHaveProperty("jobs_today");
+    await expect(overview.run({ ...base, ...owner }, {})).resolves.toHaveProperty("jobs_today");
   });
 
   it("an agent can administer a user: suspend, top up, assign a plan", async () => {
-    const run = (name: string, input: Record<string, unknown>) => OPERATIONS.find((operation) => operation.name === name)!.run({ ...base, operator }, input);
+    const run = (name: string, input: Record<string, unknown>) => OPERATIONS.find((operation) => operation.name === name)!.run({ ...base, ...owner }, input);
     await run("operator_set_user_status", { id: "usr_demo_priya", status: "paused" });
     expect((await provider.budgets.getAllocation("usr_demo_priya"))?.status).toBe("paused");
     expect(devices.revokeAll).toHaveBeenCalledWith("usr_demo_priya");
@@ -93,6 +99,85 @@ describe("public API operations", () => {
     expect(Number((await provider.budgets.getAllocation("usr_demo_priya"))?.available.amount)).toBeCloseTo(before + 10);
     await run("operator_assign_plan", { id: "usr_demo_priya", plan_id: "pln_studio" });
     expect((await provider.plans.getUserPlan("usr_demo_priya"))?.id).toBe("pln_studio");
+  });
+
+  it("every operator operation that changes something says what role it needs, and no read does", async () => {
+    for (const operation of OPERATIONS.filter((entry) => entry.operator)) {
+      if (operation.method === "GET") expect(operation.needs, operation.name).toBeUndefined();
+      else expect(operation.needs, operation.name).toBeDefined();
+    }
+    expect(OPERATIONS.filter((operation) => operation.needs && !operation.operator)).toEqual([]);
+  });
+
+  it("holds each operator to their role on the team, whatever the operation itself would do", async () => {
+    const run = (role: OperatorRole, name: string, input: Record<string, unknown> = {}) => runOperation(OPERATIONS.find((operation) => operation.name === name)!, { ...base, ...seat(role) }, input, null);
+    const refused = { status: 403, code: "role" };
+
+    // Everyone reads.
+    for (const role of OPERATOR_ROLES) await expect(run(role, "operator_overview")).resolves.toHaveProperty("jobs_today");
+
+    // A viewer changes nothing.
+    await expect(run("viewer", "operator_set_user_status", { id: "usr_demo_priya", status: "paused" })).rejects.toMatchObject(refused);
+    await expect(run("viewer", "operator_set_capability_enabled", { app: "text-to-video", enabled: false })).rejects.toMatchObject(refused);
+    await expect(run("viewer", "operator_top_up_user", { id: "usr_demo_priya", amount_usd: 5 })).rejects.toMatchObject(refused);
+
+    // A member looks after people and jobs, and can switch a capability off, but sets no price and funds no grant.
+    await expect(run("member", "operator_top_up_user", { id: "usr_demo_priya", amount_usd: 5 })).resolves.toBeDefined();
+    await expect(run("member", "operator_set_capability_enabled", { app: "text-to-video", enabled: false })).resolves.toMatchObject({ enabled: false });
+    await expect(run("member", "operator_set_capability", { app: "text-to-video", markup: 2 })).rejects.toMatchObject(refused);
+    await expect(run("member", "operator_reset_capabilities")).rejects.toMatchObject(refused);
+    await expect(run("member", "operator_create_grant", { label: "Pilot", amount_usd: 10 })).rejects.toMatchObject(refused);
+    await expect(run("member", "operator_revoke_all_devices")).rejects.toMatchObject(refused);
+
+    // An owner does all of it.
+    await expect(run("owner", "operator_set_capability", { app: "text-to-video", markup: 2, enabled: true })).resolves.toMatchObject({ markup: 2, enabled: true });
+    await expect(run("owner", "operator_create_grant", { label: "Pilot", amount_usd: 10 })).resolves.toMatchObject({ label: "Pilot" });
+
+    // Someone who isn't an operator is still turned away by the operation, not by a role they don't have.
+    await expect(runOperation(OPERATIONS.find((operation) => operation.name === "operator_create_grant")!, base, { label: "x", amount_usd: 1 }, null)).rejects.toMatchObject({ status: 403, code: undefined });
+  });
+
+  it("runs the team: invite, add, change a role and remove, each written down, and only an owner may", async () => {
+    const sam: Account = { user: { id: "usr_demo_sam", name: "Sam Whitfield", email: "sam@example.test" }, role: "operator", deviceId: null };
+    const priya: Account = { user: { id: "usr_demo_priya", name: "Priya", email: null }, role: "operator", deviceId: null };
+    const run = (role: OperatorRole, account: Account, name: string, input: Record<string, unknown> = {}) => runOperation(OPERATIONS.find((operation) => operation.name === name)!, { ...base, ...seat(role), account }, input, null);
+    // Sam is an owner by a link from setup; nobody else is on the team yet.
+    await operators().add({ userId: "usr_demo_sam", name: "Sam Whitfield", email: "sam@example.test" }, "owner", "usr_demo_sam");
+
+    const invitation = (await run("owner", sam, "operator_create_invitation", { role: "member" })) as { id: string; path: string; role: string };
+    expect(invitation).toMatchObject({ role: "member", invited_by: "Sam Whitfield" });
+    expect(invitation.path).toMatch(/^\/join\/operator\/opi_/);
+    await expect(run("owner", sam, "operator_create_invitation", { role: "admin" })).rejects.toMatchObject({ status: 400 });
+    expect((await audit.list(1))[0]).toMatchObject({ event: "change", user_id: "usr_demo_sam", device_id: null, operation: "operator_create_invitation", target: invitation.id, detail: "member" });
+
+    const added = await run("owner", sam, "operator_add_operator", { user_id: "usr_demo_priya", role: "viewer" });
+    expect(added).toMatchObject({ user_id: "usr_demo_priya", role: "viewer", via: "added", added_by: "Sam Whitfield" });
+    await expect(run("owner", sam, "operator_add_operator", { user_id: "usr_nobody", role: "viewer" })).rejects.toMatchObject({ status: 404 });
+
+    // Everyone sees who is on the team and their own role; only an owner sees the links waiting.
+    expect(await run("owner", sam, "operator_list_team")).toMatchObject({ role: "owner", operators: [{ user_id: "usr_demo_sam" }, { user_id: "usr_demo_priya" }], invitations: [{ id: invitation.id }] });
+    expect(await run("viewer", priya, "operator_list_team")).toMatchObject({ role: "viewer", operators: [{}, {}], invitations: [] });
+
+    // A viewer and a member manage nobody, but anyone may leave.
+    for (const role of ["viewer", "member"] as const) {
+      await expect(run(role, priya, "operator_create_invitation", { role: "viewer" })).rejects.toMatchObject({ status: 403, code: "role" });
+      await expect(run(role, priya, "operator_set_operator_role", { user_id: "usr_demo_priya", role: "owner" })).rejects.toMatchObject({ status: 403, code: "role" });
+      await expect(run(role, priya, "operator_remove_operator", { user_id: "usr_demo_sam" })).rejects.toMatchObject({ status: 403, code: "role" });
+      await expect(run(role, priya, "operator_revoke_invitation", { id: invitation.id })).rejects.toMatchObject({ status: 403, code: "role" });
+    }
+
+    expect(await run("owner", sam, "operator_set_operator_role", { user_id: "usr_demo_priya", role: "member" })).toEqual({ ok: true });
+    expect((await audit.list(1))[0]).toMatchObject({ operation: "operator_set_operator_role", target: "usr_demo_priya", detail: "member" });
+    // The only owner can't step down or leave.
+    await expect(run("owner", sam, "operator_set_operator_role", { user_id: "usr_demo_sam", role: "viewer" })).rejects.toMatchObject({ status: 409, code: "last_owner" });
+    await expect(run("owner", sam, "operator_remove_operator", { user_id: "usr_demo_sam" })).rejects.toMatchObject({ status: 409, code: "last_owner" });
+
+    expect(await run("owner", sam, "operator_revoke_invitation", { id: invitation.id })).toEqual({ deleted: true });
+    await expect(run("owner", sam, "operator_revoke_invitation", { id: invitation.id })).rejects.toMatchObject({ status: 404 });
+
+    expect(await run("member", priya, "operator_remove_operator", { user_id: "usr_demo_priya" })).toEqual({ deleted: true });
+    expect((await audit.list(1))[0]).toMatchObject({ operation: "operator_remove_operator", user_id: "usr_demo_priya", target: "usr_demo_priya", detail: "left" });
+    await expect(run("owner", sam, "operator_remove_operator", { user_id: "usr_demo_priya" })).rejects.toMatchObject({ status: 404 });
   });
 
   it("every operation outside the operator's says what it answers with", async () => {
@@ -112,7 +197,7 @@ describe("public API operations", () => {
   });
 
   it("answers the Status screen in one call, and says what needs the operator", async () => {
-    const run = (name: string, input: Record<string, unknown> = {}) => OPERATIONS.find((operation) => operation.name === name)!.run({ ...base, operator }, input);
+    const run = (name: string, input: Record<string, unknown> = {}) => OPERATIONS.find((operation) => operation.name === name)!.run({ ...base, ...owner }, input);
     const status = (await run("operator_status")) as { attention: Array<{ kind: string; message: string; count: number | null; opens: string }>; today: Record<string, unknown>; service: Record<string, unknown>; checked_at: string };
     expect(status.today).toMatchObject({ active_users: expect.any(Number), jobs: expect.any(Number), failed: expect.any(Number), revenue_usd: expect.any(Number), margin_usd: expect.any(Number) });
     expect(status.service).toMatchObject({ engine_ready: expect.any(Boolean), engine_version: expect.any(String) });
@@ -123,7 +208,7 @@ describe("public API operations", () => {
   });
 
   it("filters and pages the operator's jobs, and searches users, on the server", async () => {
-    const run = (name: string, input: Record<string, unknown> = {}) => OPERATIONS.find((operation) => operation.name === name)!.run({ ...base, operator }, input);
+    const run = (name: string, input: Record<string, unknown> = {}) => OPERATIONS.find((operation) => operation.name === name)!.run({ ...base, ...owner }, input);
     const all = (await run("operator_list_jobs", { limit: 30 })) as Array<{ id: string; state: string; created_at: string }>;
     expect(all.length).toBe(30);
     const failed = (await run("operator_list_jobs", { status: "failed", limit: "10" })) as typeof all;
@@ -287,8 +372,8 @@ describe("public API operations", () => {
 
     const reports = OPERATIONS.find((operation) => operation.name === "operator_list_reports")!;
     await expect(reports.run(base, {})).rejects.toMatchObject({ status: 403 });
-    const [report] = (await reports.run({ ...base, operator }, {})) as Array<{ id: string }>;
-    await OPERATIONS.find((operation) => operation.name === "operator_resolve_report")!.run({ ...base, operator }, { id: report!.id, outcome: "hidden" });
+    const [report] = (await reports.run({ ...base, ...owner }, {})) as Array<{ id: string }>;
+    await OPERATIONS.find((operation) => operation.name === "operator_resolve_report")!.run({ ...base, ...owner }, { id: report!.id, outcome: "hidden" });
     await expect(run("get_character", { slug: "lumen" }, null)).rejects.toMatchObject({ status: 404 });
   });
 

@@ -7,6 +7,7 @@ import { useState } from "react";
 import { dateTime } from "../components/format";
 import { ConsolePage, GapNote, Panel, Status } from "../components/parts";
 import { Table } from "../components/table";
+import { useOperatorCan } from "../shell/role";
 
 export interface ReportsViewProps {
   reports: CharacterReport[];
@@ -26,6 +27,7 @@ const STATE_LABEL: Record<CharacterReport["state"], string> = { open: "open", di
 
 /** Reports of shared characters. The app stores require that each one gets a decision. */
 export function ReportsView({ reports: initial, resolve }: ReportsViewProps) {
+  const can = useOperatorCan();
   const [reports, setReports] = useState(initial);
   const [removing, setRemoving] = useState<CharacterReport | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -67,17 +69,17 @@ export function ReportsView({ reports: initial, resolve }: ReportsViewProps) {
             { key: "reason", header: "Reason", cell: (report) => REASON_LABEL[report.reason] },
             { key: "note", header: "Their words", cell: (report) => report.note ?? <span className="text-subtle-foreground">—</span>, wide: true },
             { key: "created", header: "Reported", cell: (report) => dateTime(report.created_at), mono: true, align: "right", wide: true },
-            {
+            ...(can("resolve_report") ? [{
               key: "act",
               header: "",
-              align: "right",
-              cell: (report) => (
+              align: "right" as const,
+              cell: (report: CharacterReport) => (
                 <span className="flex justify-end gap-1.5">
                   <Button size="sm" variant="ghost" disabled={busy === report.id} onClick={() => decide(report, "dismissed")}>Keep it up</Button>
                   <Button size="sm" variant="destructive" disabled={busy === report.id} onClick={() => setRemoving(report)}>Take it down</Button>
                 </span>
               ),
-            },
+            }] : []),
           ]}
         />
       </Panel>

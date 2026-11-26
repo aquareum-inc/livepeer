@@ -139,6 +139,7 @@ struct ReportDetailView: View {
     let id: String
     @Environment(InstanceStore.self) private var instance
     @Environment(\.palette) private var palette
+    @Environment(\.consoleMayChange) private var mayChange
     @State private var change: ConsoleChange?
     /// The report as it was when the page opened, kept in case the queue no longer lists it.
     @State private var last: CharacterReport?
@@ -171,7 +172,9 @@ struct ReportDetailView: View {
                             FactRow(name: "Reported", value: ConsoleFormat.moment(reported))
                         }
                     }
-                    if report.state == .open {
+                    if report.state == .open, !mayChange {
+                        ViewerLine(what: "decide a report")
+                    } else if report.state == .open {
                         VStack(spacing: 10) {
                             SecondaryButton(label: "Keep it up") { change = keepUp(report) }
                             Button { change = takeDown(report) } label: {

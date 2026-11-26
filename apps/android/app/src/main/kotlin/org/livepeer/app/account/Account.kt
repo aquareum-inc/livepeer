@@ -166,6 +166,7 @@ class Account(
                 instance.refresh()
                 "This service doesn't offer its app on phones right now."
             }
+            callback.getQueryParameter("error") == "closed" -> "This service isn't taking new accounts."
             callback.getQueryParameter("error") != null || callback.getQueryParameter("code") == null -> UNFINISHED
             else -> null
         }

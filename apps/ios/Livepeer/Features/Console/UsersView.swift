@@ -135,6 +135,7 @@ struct UserDetailView: View {
     let id: String
     @Environment(InstanceStore.self) private var instance
     @Environment(\.palette) private var palette
+    @Environment(\.consoleMayChange) private var mayChange
     @State private var change: ConsoleChange?
     /// The user as they were when the page opened, kept in case a new search no longer lists them.
     @State private var last: KnownActor?
@@ -175,7 +176,9 @@ struct UserDetailView: View {
                             if let updated = ConsoleFormat.date(allocation.updatedAt) { RowRule(); FactRow(name: "Changed", value: ConsoleFormat.moment(updated)) }
                         }
                     }
-                    if user.canSuspend {
+                    if !mayChange {
+                        if user.canSuspend || user.canResume { ViewerLine(what: "suspend or resume an account") }
+                    } else if user.canSuspend {
                         Button { change = suspend(user) } label: {
                             Text("Suspend")
                                 .text(.lead, weight: .medium)

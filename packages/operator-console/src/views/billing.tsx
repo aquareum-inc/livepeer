@@ -7,6 +7,7 @@ import { useState } from "react";
 import { dateTime, usd } from "../components/format";
 import { ConsolePage, Panel, Status } from "../components/parts";
 import { Table } from "../components/table";
+import { OwnersOnly, useOperatorCan } from "../shell/role";
 
 export interface BillingViewProps {
   settings: BillingSettings;
@@ -17,6 +18,7 @@ export interface BillingViewProps {
 }
 
 export function BillingView({ settings: initial, payments: initialPayments, update, refund, sources }: BillingViewProps) {
+  const can = useOperatorCan();
   const [settings, setSettings] = useState(initial);
   const [payments, setPayments] = useState(initialPayments);
   const [refunding, setRefunding] = useState<Payment | null>(null);
@@ -35,6 +37,7 @@ export function BillingView({ settings: initial, payments: initialPayments, upda
   return (
     <ConsolePage title="Billing" description="Collecting money from your users: the processor, payments, refunds and tax." sources={sources} note="Billing is simulated. Whether the payment provider or this app collects payment from end users is an open question for the engine's builders, so nothing here moves real money.">
 
+      <OwnersOnly allowed={can("set_pricing")} what="how payment is collected">
       <Panel title="Payment processor">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-hairline bg-card px-4 py-3">
           <div>
@@ -59,6 +62,7 @@ export function BillingView({ settings: initial, payments: initialPayments, upda
           </div>
         </div>
       </Panel>
+      </OwnersOnly>
 
       {failed.length > 0 ? (
         <Panel title="Failed payments" description="These users' plans weren't renewed. Suspend them, or add credit while they sort it out.">
@@ -90,7 +94,7 @@ export function BillingView({ settings: initial, payments: initialPayments, upda
             { key: "invoice", header: "Invoice", cell: (payment) => payment.invoice_id ?? "—", mono: true, wide: true },
             { key: "amount", header: "Amount", cell: (payment) => usd(payment.amount.amount), mono: true, align: "right" },
             { key: "when", header: "Date", cell: (payment) => dateTime(payment.created_at), mono: true, align: "right", wide: true },
-            { key: "act", header: "", align: "right", cell: (payment) => (payment.status === "paid" ? <Button size="sm" variant="ghost" onClick={() => setRefunding(payment)}>Refund</Button> : null) },
+            ...(can("adjust_account") ? [{ key: "act", header: "", align: "right" as const, cell: (payment: Payment) => (payment.status === "paid" ? <Button size="sm" variant="ghost" onClick={() => setRefunding(payment)}>Refund</Button> : null) }] : []),
           ]}
         />
       </Panel>

@@ -41,6 +41,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
@@ -418,4 +419,16 @@ const val FACT_GAP = "\u00A0· "
 @Composable
 fun EmptyLine(message: String, modifier: Modifier = Modifier) {
     BasicText(message, style = TypeSize.Lead.style().copy(color = LocalPalette.current.mutedForeground, textAlign = TextAlign.Center), modifier = modifier.fillMaxWidth().padding(horizontal = 24.dp))
+}
+
+/**
+ * Whether the signed-in operator's role lets them change anything from this phone. A viewer's doesn't. False
+ * until Status has answered, so nothing is offered that the instance would only refuse.
+ */
+val LocalConsoleMayChange = compositionLocalOf { false }
+
+/** Where a change would be, for someone whose role on the team only reads. [what] follows "Viewers can't". */
+@Composable
+fun ViewerLine(what: String) {
+    BasicText("Viewers can't $what. An owner can change your role.", style = TypeSize.Caption.style().copy(color = LocalPalette.current.mutedForeground), modifier = Modifier.fillMaxWidth())
 }

@@ -97,6 +97,14 @@ describe("mock provider", () => {
   });
 });
 
+describe("who the mock provider has seen before", () => {
+  it("knows its users and nobody else", async () => {
+    const { identity } = createMockProvider();
+    expect(await identity.isKnown("usr_demo_adam")).toBe(true);
+    expect(await identity.isKnown("usr_new_ola")).toBe(false);
+  });
+});
+
 describe("workspaces in the mock provider", () => {
   const NORTHLIGHT = "wsp_northlight";
 
@@ -240,6 +248,16 @@ describe("batteries provider", () => {
   it("returns null for an actor without an allocation", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 404 })));
     expect(await provider().budgets.getAllocation("nobody")).toBeNull();
+  });
+
+  it("knows someone by their allocation, since it keeps no users, and asks with the reader token", async () => {
+    const fetchMock = vi.fn(async (url: URL | string, _init?: RequestInit) =>
+      String(url).endsWith("actor_id=actor-1") ? new Response(JSON.stringify({ allocation_id: "alc_1", status: "active", granted: usd("50") }), { status: 200 }) : new Response("{}", { status: 404 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await provider().identity.isKnown("actor-1")).toBe(true);
+    expect(await provider().identity.isKnown("nobody")).toBe(false);
+    expect(fetchMock.mock.calls.map(([, init]) => (init?.headers as Record<string, string>).Authorization)).toEqual(["Bearer reader", "Bearer reader"]);
   });
 
   it("uses the admin token and an operation_ref for writes", async () => {

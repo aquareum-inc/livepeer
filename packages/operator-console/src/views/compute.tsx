@@ -7,6 +7,7 @@ import { useState } from "react";
 import { count, host, label } from "../components/format";
 import { ConsolePage, Panel, Status } from "../components/parts";
 import { Table } from "../components/table";
+import { useOperatorCan } from "../shell/role";
 
 export interface ComputeViewProps {
   operators: ComputeOperator[];
@@ -15,6 +16,7 @@ export interface ComputeViewProps {
 }
 
 export function ComputeView({ operators: initial, setBlocked, sources }: ComputeViewProps) {
+  const can = useOperatorCan();
   const [operators, setOperators] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -42,7 +44,7 @@ export function ComputeView({ operators: initial, setBlocked, sources }: Compute
             { key: "fail", header: "Failed", cell: (operator) => `${operator.jobs ? ((operator.failures / operator.jobs) * 100).toFixed(1) : "0.0"}%`, mono: true, align: "right" },
             { key: "time", header: "Median response", cell: (operator) => (operator.median_response_ms ? `${(operator.median_response_ms / 1000).toFixed(1)} s` : "—"), mono: true, align: "right", wide: true },
             { key: "status", header: "Routing", cell: (operator) => <Status value={operator.status} /> },
-            { key: "act", header: "", align: "right", cell: (operator) => <Button size="sm" variant="ghost" disabled={busy === operator.orchestrator_url} onClick={() => toggle(operator)}>{operator.status === "blocked" ? "Allow" : "Block"}</Button> },
+            ...(can("block_compute") ? [{ key: "act", header: "", align: "right" as const, cell: (operator: ComputeOperator) => <Button size="sm" variant="ghost" disabled={busy === operator.orchestrator_url} onClick={() => toggle(operator)}>{operator.status === "blocked" ? "Allow" : "Block"}</Button> }] : []),
           ]}
         />
       </Panel>

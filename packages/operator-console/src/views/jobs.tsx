@@ -7,6 +7,7 @@ import { Fragment, useState } from "react";
 
 import { dateTime, host, label } from "../components/format";
 import { ConsolePage, Status } from "../components/parts";
+import { useOperatorCan } from "../shell/role";
 
 export interface JobsViewProps {
   jobs: EngineJob[];
@@ -25,6 +26,7 @@ function duration(job: EngineJob): string {
 }
 
 export function JobsView({ jobs: initial, names, retry, sources }: JobsViewProps) {
+  const can = useOperatorCan();
   const [jobs, setJobs] = useState(initial);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [open, setOpen] = useState<string | null>(null);
@@ -103,7 +105,7 @@ export function JobsView({ jobs: initial, names, retry, sources }: JobsViewProps
                               </li>
                             ))}
                           </ol>
-                          {job.state === "failed" || job.state === "uncertain" ? (
+                          {can("retry_job") && (job.state === "failed" || job.state === "uncertain") ? (
                             <Button size="sm" className="mt-3" disabled={retrying === job.id} onClick={() => onRetry(job.id)}>
                               <RotateCw />{retrying === job.id ? "Retrying…" : "Retry"}
                             </Button>

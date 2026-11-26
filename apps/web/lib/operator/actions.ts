@@ -1,14 +1,18 @@
 "use server";
 
-import type { AccessKey, BillingSettings, CharacterReport, CapabilitySetting, CreditPack, EngineJob, Grant, OperatorPhone, Payment, Plan, TopUpRange } from "@livepeer/api-client";
+import { OPERATOR_ROLES } from "@livepeer/api-client";
+import type { NewOperatorInvitation, OperatorRole, OperatorTeam, AccessKey, BillingSettings, CharacterReport, CapabilitySetting, CreditPack, EngineJob, Grant, OperatorPhone, Payment, Plan, TopUpRange } from "@livepeer/api-client";
 import { EngineError } from "@livepeer/api-client";
 import type { CapabilityRow, InstanceSettings } from "@livepeer/operator-console";
 import { revalidatePath } from "next/cache";
 
-import { getSession } from "../auth/session";
+import { clearSession } from "../auth/session";
+import type { Session } from "../auth/types";
+import { instance } from "../instance";
 import { devices } from "../devices";
 import { moderation } from "../moderation";
 import { operatorDevices } from "../operator-devices";
+import { TEAM_REFUSALS, teamManagement } from "../operators/manage";
 import { capabilityRows } from "./capability-rows";
 import { operatorApi, requireOperator } from "./client";
 import { currentSettings, resetSettings, saveSettings } from "./settings";
@@ -24,12 +28,12 @@ function explain(error: unknown): string {
 }
 
 export async function retryJobAction(id: string): Promise<EngineJob | null> {
-  return (await (await operatorApi()).retryJob(id)).data;
+  return (await (await operatorApi("retry_job")).retryJob(id)).data;
 }
 
 export async function setUserStatusAction(applicationId: string, actorId: string, status: "active" | "paused"): Promise<void> {
   try {
-    await (await operatorApi()).setActorStatus(applicationId, actorId, status);
+    await (await operatorApi("suspend_account")).setActorStatus(applicationId, actorId, status);
   } catch (error) {
     throw new Error(explain(error));
   }
@@ -41,21 +45,14 @@ export async function setUserStatusAction(applicationId: string, actorId: string
   revalidatePath("/operator/users", "layout");
 }
 
-export async function setUserRoleAction(userId: string, role: "user" | "operator"): Promise<void> {
-  await (await operatorApi()).provider.identity.setUserRole(userId, role);
-  // The role is read when a phone signs in, so taking it away ends the console sessions it opened.
-  if (role === "user") await operatorDevices().revokeUser(userId, "operator role removed");
-  revalidatePath("/operator/users", "layout");
-}
-
 export async function assignPlanAction(userId: string, planId: string | null): Promise<void> {
-  await (await operatorApi()).provider.plans.assignPlan(userId, planId);
+  await (await operatorApi("adjust_account")).provider.plans.assignPlan(userId, planId);
   revalidatePath("/operator/users", "layout");
 }
 
 export async function topUpUserAction(userId: string, amountUsd: number): Promise<void> {
   try {
-    await (await operatorApi()).provider.budgets.topUpAllocation(userId, usd(amountUsd));
+    await (await operatorApi("adjust_account")).provider.budgets.topUpAllocation(userId, usd(amountUsd));
   } catch (error) {
     throw new Error(explain(error));
   }
@@ -65,7 +62,7 @@ export async function topUpUserAction(userId: string, amountUsd: number): Promis
 /** Suspends or resumes a workspace. Its members stay signed in and keep their own accounts. */
 export async function setWorkspaceStatusAction(workspaceId: string, status: "active" | "paused"): Promise<void> {
   try {
-    await (await operatorApi()).setWorkspaceStatus(workspaceId, status);
+    await (await operatorApi("suspend_account")).setWorkspaceStatus(workspaceId, status);
   } catch (error) {
     throw new Error(explain(error));
   }
@@ -74,13 +71,13 @@ export async function setWorkspaceStatusAction(workspaceId: string, status: "act
 
 /** A workspace is an account like a person's: its plan is assigned the same way. */
 export async function assignWorkspacePlanAction(workspaceId: string, planId: string | null): Promise<void> {
-  await (await operatorApi()).provider.plans.assignPlan(workspaceId, planId);
+  await (await operatorApi("adjust_account")).provider.plans.assignPlan(workspaceId, planId);
   revalidatePath("/operator/workspaces", "layout");
 }
 
 export async function topUpWorkspaceAction(workspaceId: string, amountUsd: number): Promise<void> {
   try {
-    await (await operatorApi()).provider.budgets.topUpAllocation(workspaceId, usd(amountUsd));
+    await (await operatorApi("adjust_account")).provider.budgets.topUpAllocation(workspaceId, usd(amountUsd));
   } catch (error) {
     throw new Error(explain(error));
   }
@@ -88,13 +85,13 @@ export async function topUpWorkspaceAction(workspaceId: string, amountUsd: numbe
 }
 
 export async function savePlanAction(id: string | null, input: Omit<Plan, "id">): Promise<Plan> {
-  const { plans } = (await operatorApi()).provider;
+  const { plans } = (await operatorApi("set_pricing")).provider;
   return id ? plans.updatePlan(id, input) : plans.createPlan(input);
 }
 
 export async function saveCreditPackAction(id: string | null, input: Omit<CreditPack, "id">): Promise<{ ok: true; packs: CreditPack[] } | { ok: false; error: string }> {
   try {
-    const { plans } = (await operatorApi()).provider;
+    const { plans } = (await operatorApi("set_pricing")).provider;
     await (id ? plans.updateCreditPack(id, input) : plans.createCreditPack(input));
     // Highlighting one pack takes the highlight off the others, so the whole list comes back.
     return { ok: true, packs: await plans.listCreditPacks() };
@@ -105,23 +102,23 @@ export async function saveCreditPackAction(id: string | null, input: Omit<Credit
 
 export async function saveTopUpRangeAction(range: TopUpRange): Promise<{ ok: true; range: TopUpRange } | { ok: false; error: string }> {
   try {
-    return { ok: true, range: await (await operatorApi()).provider.plans.updateTopUpRange(range) };
+    return { ok: true, range: await (await operatorApi("set_pricing")).provider.plans.updateTopUpRange(range) };
   } catch (error) {
     return { ok: false, error: explain(error) };
   }
 }
 
 export async function updateBillingAction(patch: Partial<BillingSettings>): Promise<BillingSettings> {
-  return (await (await operatorApi()).updateBillingSettings(patch)).data;
+  return (await (await operatorApi("set_pricing")).updateBillingSettings(patch)).data;
 }
 
 export async function refundPaymentAction(id: string): Promise<Payment | null> {
-  return (await (await operatorApi()).refundPayment(id)).data;
+  return (await (await operatorApi("adjust_account")).refundPayment(id)).data;
 }
 
 export async function createGrantAction(input: { label: string; amountUsd: number }): Promise<Grant> {
   try {
-    return await (await operatorApi()).provider.budgets.createGrant({ label: input.label, amount: usd(input.amountUsd) });
+    return await (await operatorApi("manage_grants")).provider.budgets.createGrant({ label: input.label, amount: usd(input.amountUsd) });
   } catch (error) {
     throw new Error(explain(error));
   }
@@ -129,22 +126,24 @@ export async function createGrantAction(input: { label: string; amountUsd: numbe
 
 export async function fundGrantAction(id: string, amountUsd: number): Promise<Grant> {
   try {
-    return await (await operatorApi()).provider.budgets.fundGrant(id, usd(amountUsd));
+    return await (await operatorApi("manage_grants")).provider.budgets.fundGrant(id, usd(amountUsd));
   } catch (error) {
     throw new Error(explain(error));
   }
 }
 
+/** Switching a capability on or off is a member's to do; its markup and where it appears are pricing, an owner's. */
 export async function updateCapabilityAction(app: string, patch: Partial<Omit<CapabilitySetting, "app">>): Promise<CapabilitySetting> {
-  return (await (await operatorApi()).updateCapabilitySetting(app, patch)).data;
+  const onlySwitches = Object.keys(patch).every((key) => key === "enabled");
+  return (await (await operatorApi(onlySwitches ? "switch_capability" : "set_pricing")).updateCapabilitySetting(app, patch)).data;
 }
 
 export async function setOperatorBlockedAction(orchestratorUrl: string, blocked: boolean): Promise<boolean> {
-  return (await (await operatorApi()).setComputeOperatorBlocked(orchestratorUrl, blocked)).data;
+  return (await (await operatorApi("block_compute")).setComputeOperatorBlocked(orchestratorUrl, blocked)).data;
 }
 
 export async function saveInstanceSettingsAction(settings: InstanceSettings): Promise<{ ok: true } | { ok: false; error: string }> {
-  await operatorApi();
+  await operatorApi("change_settings");
   const result = await saveSettings(settings);
   if (result.ok) revalidatePath("/", "layout");
   return result;
@@ -152,7 +151,7 @@ export async function saveInstanceSettingsAction(settings: InstanceSettings): Pr
 
 /** Forgets what the Settings page saved, and answers with the settings the instance was deployed with. */
 export async function resetInstanceSettingsAction(): Promise<InstanceSettings> {
-  await operatorApi();
+  await operatorApi("change_settings");
   await resetSettings("settings");
   revalidatePath("/", "layout");
   return (await currentSettings()).settings;
@@ -160,48 +159,48 @@ export async function resetInstanceSettingsAction(): Promise<InstanceSettings> {
 
 /** Puts every capability back as the instance was deployed with it, and answers with the page's rows as they then are. */
 export async function resetCapabilitiesAction(): Promise<CapabilityRow[]> {
-  await (await operatorApi()).resetCapabilitySettings();
+  await (await operatorApi("set_pricing")).resetCapabilitySettings();
   revalidatePath("/", "layout");
   // A new client: it reads the config as it is now, where the one that reset still holds what it started with.
-  return (await capabilityRows(await operatorApi())).rows;
+  return (await capabilityRows(await operatorApi("set_pricing"))).rows;
 }
 
 export async function issueKeyAction(input: { actor_id: string; label: string; kind: AccessKey["kind"] }): Promise<{ key: AccessKey; token: string | null } | { error: string }> {
   try {
-    return (await (await operatorApi()).issueAccessKey(input)).data;
+    return (await (await operatorApi("manage_keys")).issueAccessKey(input)).data;
   } catch (error) {
     return { error: explain(error) };
   }
 }
 
 export async function revokeKeyAction(keyId: string): Promise<AccessKey | null> {
-  return (await (await operatorApi()).revokeAccessKey(keyId)).data;
+  return (await (await operatorApi("manage_keys")).revokeAccessKey(keyId)).data;
 }
 
 /** The operator's decision on a report; answers with every report, as the queue shows them. */
 export async function resolveReportAction(id: string, outcome: "dismissed" | "hidden"): Promise<CharacterReport[]> {
-  await requireOperator();
+  await requireOperator("resolve_report");
   await moderation().resolve(id, outcome);
   return moderation().reports();
 }
 
-/** The signed-in operator, as the audit log names whoever revokes a phone. */
-async function revoker() {
-  const session = await getSession();
-  if (session?.role !== "operator") throw new Error("Operator role required");
-  return { userId: session.userId, name: session.name, deviceId: null, deviceName: null };
-}
+/** The signed-in operator, as the audit log names whoever did something from the web console. */
+const actorOf = (session: Session) => ({ userId: session.userId, name: session.name, deviceId: null, deviceName: null });
 
-/** Revokes one operator phone; answers with the phones still enrolled. */
+/** Revokes one operator phone: anyone their own, an owner anyone's. Answers with the phones still enrolled. */
 export async function revokeOperatorPhoneAction(id: string): Promise<OperatorPhone[]> {
-  await operatorDevices().revoke(id, await revoker());
+  const { session } = await requireOperator();
+  const phone = (await operatorDevices().list()).find((entry) => entry.id === id);
+  if (phone && phone.user_id !== session.userId) await requireOperator("manage_team");
+  await operatorDevices().revoke(id, actorOf(session));
   revalidatePath("/operator", "layout");
   return operatorDevices().list();
 }
 
 /** Revokes every operator phone; answers with the phones still enrolled. */
 export async function revokeAllOperatorPhonesAction(): Promise<OperatorPhone[]> {
-  await operatorDevices().revokeAll(await revoker());
+  const { session } = await requireOperator("manage_team");
+  await operatorDevices().revokeAll(actorOf(session));
   revalidatePath("/operator", "layout");
   return operatorDevices().list();
 }
@@ -210,20 +209,65 @@ export async function revokeAllOperatorPhonesAction(): Promise<OperatorPhone[]> 
  * Closes the notice that these phones were added, for the operator who asked and nobody else. The phones stay
  * marked on System until they are two days old.
  */
-/** The operator has System open, where new phones are listed and tagged: its dot has done its job. */
+/** The operator has System open, where new phones are listed and tagged: its dot has done its job. Their own, so any role. */
 export async function seeNewPhonesAction(): Promise<void> {
-  await operatorApi();
-  const session = await getSession();
-  if (!session) throw new Error("Operator role required");
+  const { session } = await requireOperator();
   await operatorDevices().seeNewPhones(session.userId);
   revalidatePath("/operator", "layout");
 }
 
+/** Closes the notice for the operator who asked. Their own, so any role. */
 export async function dismissNewPhonesAction(phoneIds: string[]): Promise<void> {
-  await operatorApi();
-  const session = await getSession();
-  if (!session) throw new Error("Operator role required");
+  const { session } = await requireOperator();
   const ids = Array.isArray(phoneIds) ? phoneIds.filter((id): id is string => typeof id === "string").slice(0, 100) : [];
   await operatorDevices().dismissNewPhones(session.userId, ids);
   revalidatePath("/operator", "layout");
+}
+
+/** What a change to the team answers with: the team as it now is, or why nothing changed. */
+export type TeamResult = { ok: true; team: OperatorTeam } | { ok: false; error: string };
+
+const teamNow = async (role: OperatorRole): Promise<TeamResult> => ({ ok: true, team: await teamManagement().view(role) });
+
+/** Makes an invitation to the team. Its link is in the answer and nowhere else afterwards. */
+export async function inviteOperatorAction(role: OperatorRole): Promise<{ ok: true; invitation: NewOperatorInvitation; team: OperatorTeam } | { ok: false; error: string }> {
+  const standing = await requireOperator("manage_team");
+  if (!OPERATOR_ROLES.includes(role)) return { ok: false, error: "Choose a role for the invitation." };
+  const invitation = await teamManagement().invite(actorOf(standing.session), role);
+  revalidatePath("/operator/team");
+  return { ok: true, invitation, team: await teamManagement().view(standing.role) };
+}
+
+export async function revokeInvitationAction(id: string): Promise<TeamResult> {
+  const standing = await requireOperator("manage_team");
+  await teamManagement().revokeInvitation(actorOf(standing.session), id);
+  revalidatePath("/operator/team");
+  return teamNow(standing.role);
+}
+
+export async function setOperatorRoleAction(userId: string, role: OperatorRole): Promise<TeamResult> {
+  const standing = await requireOperator("manage_team");
+  if (!OPERATOR_ROLES.includes(role)) return { ok: false, error: "Choose a role." };
+  const change = await teamManagement().setRole(actorOf(standing.session), userId, role);
+  if (change !== "done") return { ok: false, error: TEAM_REFUSALS[change] };
+  revalidatePath("/operator", "layout");
+  // Their own role may be the one that changed.
+  return teamNow((await requireOperator()).role);
+}
+
+/**
+ * Takes someone off the team: an owner anyone, and anyone themselves. Whoever leaves has no console to come
+ * back to, so the answer for them is only that it is done.
+ */
+export async function removeOperatorAction(userId: string): Promise<TeamResult | { ok: true; left: true }> {
+  const standing = await requireOperator();
+  const leaving = userId === standing.session.userId;
+  if (!leaving) await requireOperator("manage_team");
+  const change = await teamManagement().remove(actorOf(standing.session), userId);
+  if (change !== "done") return { ok: false, error: TEAM_REFUSALS[change] };
+  revalidatePath("/operator", "layout");
+  if (!leaving) return teamNow(standing.role);
+  // With no user app there is nothing left for them to open, so leaving also signs them out.
+  if (!(await instance()).surfaces.app) await clearSession();
+  return { ok: true, left: true };
 }

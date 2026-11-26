@@ -21,7 +21,7 @@ export interface NativeFlow {
 }
 
 /** Why a native sign-in ended without a session, as the app reads it from its callback. */
-export type NativeFailure = "mobile_off" | "mobile_console_off" | "not_operator" | "not_fresh" | "method" | "expired" | "failed";
+export type NativeFailure = "mobile_off" | "mobile_console_off" | "not_operator" | "not_fresh" | "method" | "expired" | "failed" | "closed";
 
 /** Sends the system auth session back to the app. */
 export function returnToApp(callback: string, values: Record<string, string>): NextResponse {

@@ -982,7 +982,7 @@ failure:
 | 2. The numbers | Revenue, wholesale cost and margin over time; costs by capability; grants and their funding; compute operators; what's offered; system version and checks. All read-only. | None |
 | 3. Being told | Push alerts when the engine stops being ready, failures spike or a report is waiting, with a per-operator choice of which. Needs push credentials and device-token operations. Specified in 18.9; the server half is built, the apps are not. | None |
 | 4. Selected changes | Only after the owner decides each: top up a user (capped), assign a plan, switch a capability off, block a compute operator. | As decided |
-| Stays on the web | API and access keys, pricing and markup, billing, credit packs, creating grants, instance settings, surfaces, appearance, operator phones. | — |
+| Stays on the web | API and access keys, pricing and markup, billing, credit packs, creating grants, instance settings, surfaces, appearance, operator phones, the operator team and its invitations. | — |
 
 ### 18.4 Design direction
 
@@ -1790,6 +1790,19 @@ Apple's production service, and what the hardware key does when a face is added.
   Mac's is attached. It wants one look on a real iPhone.
 
 197 web tests, 84 Android and 65 iOS unit tests pass.
+
+- **Operator roles reach the phones (26 November 2026, `docs/operator-invitations.md` slice 8).**
+  `operator_status` now carries the caller's `role` (`owner`, `member` or `viewer`), and both apps keep it
+  with Status. A viewer's user page and report page show one line where Suspend, Resume, Keep up and Take
+  down would be; owners and members see the buttons as before. The dispatcher checks each operation's
+  `needs` against the role, so a phone whose role changed gets a refusal (code `role`), which the tray
+  shows; the buttons follow when Status next loads. An operator phone whose person is no longer on the
+  team is revoked on its next request and the app signs out of the console. A sign-in refused because the
+  instance is closed returns the reason `closed`. Nothing about the team is managed from a phone: Team and
+  invitations stay on the web (18.3). iOS first, then Android; 70 iOS tests and the Android unit tests
+  pass. Screenshots: `ios-console-{user,report}-viewer-{dark,light}.jpg` and
+  `android-console-user-viewer-{dark,light}.jpg`. Not done: the report page as a viewer was not opened in
+  the Android emulator.
 
 ### 18.9 Stage 3: push alerts (specified and accepted 21 November 2026; server half built)
 
