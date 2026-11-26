@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { isFresh } from "@/lib/auth/fresh";
 import { seal, unseal } from "@/lib/auth/seal";
 import { admitted } from "@/lib/auth/sign-up";
 import { FLOW_COOKIE, SESSION_COOKIE, authProvider, createSession, sessionSecret } from "@/lib/auth/session";
@@ -8,9 +9,6 @@ import { returnToApp, type NativeFailure, type NativeFlow } from "@/lib/devices/
 import { mobileConsoleEnabled, operatorDevices } from "@/lib/operator-devices";
 import { operators } from "@/lib/operators";
 import { publicOrigin } from "@/lib/public-api/instance";
-
-/** How recent the provider's own sign-in must be for it to enrol a phone for the console. */
-const FRESH_SECONDS = 300;
 
 interface Flow {
   state: string;
@@ -74,7 +72,7 @@ export async function GET(request: NextRequest) {
   if (flow.native?.purpose === "operator" && callback) {
     if (!await mobileConsoleEnabled()) return fail("mobile_console_off");
     // A session the provider already had for this browser doesn't enrol a phone: the sign-in must be new.
-    if (authenticatedAt === null || Math.abs(Date.now() / 1000 - authenticatedAt) > FRESH_SECONDS) return fail("not_fresh");
+    if (!isFresh(authenticatedAt)) return fail("not_fresh");
     // Null for anyone the provider doesn't mark as an operator: no code, so no session.
     const handoff = await operatorDevices().issueCode({ identity, challenge: flow.native.challenge, platform: flow.native.platform });
     if (!handoff) return fail("not_operator");

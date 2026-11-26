@@ -8,6 +8,7 @@ import { AppleMark, CoinbaseMark, DiscordMark, GoogleMark, WalletConnectMark } f
 import { signInMethods } from "@/lib/auth/methods";
 import { authProvider, getSession } from "@/lib/auth/session";
 import { brandOf, instance } from "@/lib/instance";
+import { invitationIn } from "@/lib/operators/links";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -27,10 +28,14 @@ const PROVIDERS = [
 
 const safeNext = (value: string | undefined) => (value && value.startsWith("/") && !value.startsWith("//") ? value : "/");
 
-export default async function SignInPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string }> }) {
-  const { next: rawNext, error } = await searchParams;
+export default async function SignInPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string; fresh?: string }> }) {
+  const { next: rawNext, error, fresh } = await searchParams;
   const next = safeNext(rawNext);
-  if (await getSession()) redirect(next);
+  // Someone asked to sign in again (to join the team) is shown the ways to, signed in or not.
+  const again = fresh === "1";
+  if (!again && (await getSession())) redirect(next);
+  // A sign-in that began on an invitation to the team lets a new person in, whatever sign-up is set to.
+  const invited = invitationIn(next) !== null;
 
   const config = await instance();
   const offered: string[] = await signInMethods();
@@ -39,14 +44,14 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   const passkey = offered.includes("passkey");
   const development = (await authProvider()).id === "mock";
   const signUp = config.auth?.signUp ?? "open";
-  const start = (method: string) => `/auth/start?method=${method}&next=${encodeURIComponent(next)}`;
+  const start = (method: string) => `/auth/start?method=${method}&next=${encodeURIComponent(next)}${again ? "&fresh=1" : ""}`;
 
   return (
     <main className="flex min-h-dvh items-center justify-center px-4 py-10">
       <div className="w-full max-w-[420px] overflow-hidden rounded-sheet border border-hairline bg-card">
         <div className="p-8">
           <BrandSymbol brand={brandOf(config)} className="mx-auto h-7 w-auto" />
-          <h1 className="mt-6 text-center text-title font-semibold tracking-[-0.01em]">Sign in to {config.name}</h1>
+          <h1 className="mt-6 text-center text-title font-semibold tracking-[-0.01em]">{again ? `Sign in again to ${config.name}` : `Sign in to ${config.name}`}</h1>
           {error ? (
             <p role="alert" className="mt-3 text-center text-body text-destructive">
               {ERRORS[error] ?? ERRORS.failed}
@@ -83,6 +88,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
             <form action="/auth/start" method="get" className="flex flex-col gap-3">
               <input type="hidden" name="method" value="email" />
               <input type="hidden" name="next" value={next} />
+              {again ? <input type="hidden" name="fresh" value="1" /> : null}
               <label htmlFor="email" className="text-caption font-medium">
                 Email address
               </label>
@@ -102,9 +108,10 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
         </div>
 
         <div className="border-t border-hairline bg-muted px-8 py-5 text-center text-body text-muted-foreground">
-          {signUp === "open" ? <p>New here? Signing in for the first time creates your account.</p> : null}
-          {signUp === "invite" ? <p>This instance is invitation only. Sign in with the address you were invited at.</p> : null}
-          {signUp === "closed" ? <p>This instance isn’t taking new accounts.</p> : null}
+          {invited ? <p>You’re signing in to answer an invitation. A first sign-in makes your account.</p> : null}
+          {!invited && signUp === "open" ? <p>New here? Signing in for the first time creates your account.</p> : null}
+          {!invited && signUp === "invite" ? <p>This instance is invitation only. Open the link you were sent to join.</p> : null}
+          {!invited && signUp === "closed" ? <p>This instance isn’t taking new accounts.</p> : null}
           {config.surfaces.app ? (
             <p className="mt-1">
               Or{" "}

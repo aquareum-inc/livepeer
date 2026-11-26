@@ -21,6 +21,14 @@ describe("surfaces", () => {
     expect(homePath(headless)).toBe("/operator");
   });
 
+  it("opens an invitation to the team wherever there is a console to join, app or no app", () => {
+    expect(surfacePathServed("/join/operator/opi_abc", headless)).toBe(true);
+    expect(surfacePathServed("/join/operator/opi_abc", all)).toBe(true);
+    expect(surfacePathServed("/join/operator/opi_abc", apiOnly)).toBe(false);
+    // A workspace's invitation belongs to the user app.
+    expect(surfacePathServed("/join/wsp_token", headless)).toBe(false);
+  });
+
   it("serves only the API and health check when that's all there is", () => {
     expect(surfacePathServed("/sign-in", apiOnly)).toBe(false);
     expect(surfacePathServed("/operator", apiOnly)).toBe(false);

@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
   const state = randomBytes(16).toString("base64url");
   const codeVerifier = randomBytes(32).toString("base64url");
   const redirectUri = new URL("/auth/callback", origin).toString();
-  const target = await (await authProvider()).authorizationUrl({ redirectUri, state, codeVerifier, method, ...(email ? { email } : {}), ...(forConsole ? { fresh: true } : {}) });
+  const target = await (await authProvider()).authorizationUrl({ redirectUri, state, codeVerifier, method, ...(email ? { email } : {}), ...(forConsole || params.get("fresh") === "1" ? { fresh: true } : {}) });
   const response = NextResponse.redirect(new URL(target, origin));
   const next = safeNext(params.get("next"));
   const invitation = invitationIn(next);

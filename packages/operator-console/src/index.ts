@@ -17,3 +17,4 @@ export { type OperatorPhonesProps } from "./views/operator-phones";
 export { NewPhoneNotice } from "./views/phone-activity";
 export { SystemView, type SystemCheck, type SystemViewProps } from "./views/system";
 export { TeamView, type TeamViewProps } from "./views/team";
+export { JoinTeam, type JoinTeamInvitation, type JoinTeamProps } from "./views/join-team";
