@@ -2,10 +2,10 @@
 
 The open-source video platform you own.
 
-<img alt="The Livepeer app on the web and on iPhone: a prompt box under the heading Direct anything, with shortcuts to make a video, animate an image, understand a video or restyle a live camera." src="docs/readme/app.jpg" width="100%">
-
 Use it as a ready-made video studio, or headless as the video backend for your own app. Livepeer brings the
 product, the API and the console; the Livepeer Network's open market of GPUs brings the compute, paid per job.
+
+<img alt="The Livepeer app on the web and on iPhone: a prompt box under the heading Direct anything, with shortcuts to make a video, animate an image, understand a video or restyle a live camera." src="docs/readme/app.jpg" width="100%">
 
 - **Yours to run:** your name, branding, prices, users and rules, in one config file. MIT-licensed, so no one
   can switch it off for you.
@@ -18,17 +18,28 @@ product, the API and the console; the Livepeer Network's open market of GPUs bri
 
 Run it yourself with one command, or have it hosted.
 
+## A look around
+
+The console, where you run the instance, on the web and on your phone:
+
 <img alt="The operator console on the web and on iPhone: today's users, jobs, revenue, wholesale cost and margin, a 14-day chart, the engine's status and the latest jobs." src="docs/readme/console.jpg" width="100%">
+
+The iOS and Android apps have one side for your users and one for you:
 
 <img alt="The native iOS app has two sides. For your users: the library of made images and videos, and a finished chat with a generated shot. For you: the console's job list, and revenue and margin for today and the last 14 days." src="docs/readme/phones.jpg" width="100%">
 
 ## This repository
 
-The user app, the operator console, the instance API and MCP server, and the bundle that starts them with a
-pinned engine. Each surface can be switched on or off in the instance config, so an instance can run the
-console and API without the app (the `headless` preset), or the API alone. The engine
-([livepeer-builder-core](https://github.com/NE-Build-Track/livepeer-builder-core)) is a separate service
-reached over its REST API.
+It holds everything that makes up an instance:
+
+- The user app, the operator console, and the instance API and MCP server.
+- The bundle that starts them together with a pinned engine.
+
+Each surface can be switched on or off in the instance config. An instance can run the console and API
+without the app (the `headless` preset), or the API alone.
+
+The engine ([livepeer-builder-core](https://github.com/NE-Build-Track/livepeer-builder-core)) is a separate
+service, reached over its REST API.
 
 ## Quick start
 
