@@ -8,6 +8,7 @@ import { useState, type ComponentType, type ReactNode } from "react";
 import { ago, count, dateTime, label, usd } from "../components/format";
 import { ConsolePage, GapNote, Panel, Stat, Status } from "../components/parts";
 import { Table } from "../components/table";
+import { useOperatorCan } from "../shell/role";
 
 type LinkType = ComponentType<{ href: string; className?: string; children: ReactNode }>;
 
@@ -83,6 +84,7 @@ export interface UserDetailProps {
 const TOP_UPS = [10, 25, 50, 100];
 
 export function UserDetailView({ user, plans, plansSupported, usage, keys, workspaces, Link, setStatus, setRole, assignPlan, topUp, sources }: UserDetailProps) {
+  const can = useOperatorCan();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [suspending, setSuspending] = useState(false);
@@ -109,10 +111,12 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
       sources={sources}
       actions={
         <>
-          <Button size="sm" onClick={() => setAdding(true)}>Add credit</Button>
-          <Button size="sm" variant={paused ? "primary" : "outline"} disabled={busy !== null} onClick={() => (paused ? run("status", () => setStatus("active")) : setSuspending(true))}>
-            {paused ? "Resume" : "Suspend"}
-          </Button>
+          {can("adjust_account") ? <Button size="sm" onClick={() => setAdding(true)}>Add credit</Button> : null}
+          {can("suspend_account") ? (
+            <Button size="sm" variant={paused ? "primary" : "outline"} disabled={busy !== null} onClick={() => (paused ? run("status", () => setStatus("active")) : setSuspending(true))}>
+              {paused ? "Resume" : "Suspend"}
+            </Button>
+          ) : null}
         </>
       }
     >
@@ -132,9 +136,9 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
         <Panel title="Plan" description={plansSupported ? "Assigning a plan takes effect on the user's next billing period." : undefined}>
           {plansSupported ? (
             <div className="flex flex-wrap gap-1.5 rounded-card border border-hairline bg-card p-3">
-              <Chip selected={user.plan === null} aria-pressed={user.plan === null} disabled={busy !== null} onClick={() => run("plan", () => assignPlan(null))}>No plan</Chip>
+              <Chip selected={user.plan === null} aria-pressed={user.plan === null} disabled={busy !== null || !can("adjust_account")} onClick={() => run("plan", () => assignPlan(null))}>No plan</Chip>
               {plans.map((plan) => (
-                <Chip key={plan.id} selected={user.plan === plan.name} aria-pressed={user.plan === plan.name} disabled={busy !== null} onClick={() => run("plan", () => assignPlan(plan.id))}>
+                <Chip key={plan.id} selected={user.plan === plan.name} aria-pressed={user.plan === plan.name} disabled={busy !== null || !can("adjust_account")} onClick={() => run("plan", () => assignPlan(plan.id))}>
                   {plan.name}
                 </Chip>
               ))}

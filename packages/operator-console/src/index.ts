@@ -1,4 +1,5 @@
 export { ConsoleShell, type ConsoleLinkProps } from "./shell/console-shell";
+export { OperatorRoleProvider, useOperatorCan, useOperatorRole } from "./shell/role";
 export { OverviewView, type OverviewProps } from "./views/overview";
 export { UserDetailView, UsersView, type UserDetailProps, type UserRow } from "./views/users";
 export { WorkspaceDetailView, WorkspacesView, type WorkspaceDetailProps, type WorkspacesViewProps } from "./views/workspaces";

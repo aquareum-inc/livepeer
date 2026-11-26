@@ -1215,11 +1215,30 @@ data class OperatorStatusService(
 @Serializable
 data class OperatorStatus(
     @SerialName("checked_at") val checkedAt: String,
+    /** What the caller may do in the console, so a client shows only the changes their role allows. */
+    @SerialName("role") val role: OperatorRole,
     /** Empty when everything is running. */
     @SerialName("attention") val attention: List<OperatorAttention>,
     @SerialName("today") val today: OperatorStatusToday,
     @SerialName("service") val service: OperatorStatusService,
 )
+
+/** What an operator may do in the console. Whether the console opens at all is the session's `operator` role. */
+@Serializable(with = OperatorRole.Serializer::class)
+enum class OperatorRole(val value: String) {
+    Owner("owner"),
+    Member("member"),
+    Viewer("viewer"),
+
+    /** A value this build doesn't know, from a newer instance. */
+    Unknown("");
+
+    object Serializer : KSerializer<OperatorRole> {
+        override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("OperatorRole", PrimitiveKind.STRING)
+        override fun deserialize(decoder: Decoder): OperatorRole = decoder.decodeString().let { value -> entries.firstOrNull { it.value == value } ?: Unknown }
+        override fun serialize(encoder: Encoder, value: OperatorRole) = encoder.encodeString(value.value)
+    }
+}
 
 @Serializable(with = OperatorAttentionKind.Serializer::class)
 enum class OperatorAttentionKind(val value: String) {

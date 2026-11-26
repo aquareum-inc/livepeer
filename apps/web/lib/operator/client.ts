@@ -1,10 +1,12 @@
 import "server-only";
 
-import { createBatteriesProvider, createOperatorClient, mockProvider, type OperatorClient, type PaymentProvider } from "@livepeer/api-client";
+import { OperatorRoleRefused, createBatteriesProvider, createOperatorClient, mockProvider, operatorCan, type OperatorAction, type OperatorClient, type OperatorRole, type PaymentProvider } from "@livepeer/api-client";
 
 import { getSession } from "../auth/session";
+import type { Session } from "../auth/types";
 import { env } from "../env";
 import { instance } from "../instance";
+import { operators } from "../operators";
 import { configCapabilityStore } from "./settings";
 
 export async function pricing() {
@@ -24,19 +26,41 @@ export async function paymentProvider(readOnly = false): Promise<PaymentProvider
   return mockProvider();
 }
 
-/**
- * The operator's API client. Refuses anyone who isn't a signed-in operator, so every console
- * read and action is guarded here as well as in the proxy and the layout.
- */
-export async function operatorApi(): Promise<OperatorClient> {
-  await requireOperator();
-  return buildOperatorClient();
+/** Who is asking, and what their place on the team lets them do. */
+export interface OperatorStanding {
+  session: Session;
+  role: OperatorRole;
 }
 
-/** Refuses anyone who isn't a signed-in operator. */
-export async function requireOperator(): Promise<void> {
+/**
+ * What a session may do in the console. The identity provider's operators are owners; everyone else has the
+ * role the team list gives them now, not the one they signed in with.
+ */
+export async function operatorRoleOf(session: Session | null): Promise<OperatorRole | null> {
+  if (session?.role !== "operator") return null;
+  return session.operatorSource === "grant" ? ((await operators().granted(session.userId))?.role ?? null) : "owner";
+}
+
+/**
+ * Refuses anyone who isn't a signed-in operator, and, for a change, anyone whose role doesn't allow it.
+ * Reading needs no action: every operator reads everything.
+ */
+export async function requireOperator(action?: OperatorAction): Promise<OperatorStanding> {
   const session = await getSession();
-  if (session?.role !== "operator") throw new Error("Operator role required");
+  const role = await operatorRoleOf(session);
+  if (!session || !role) throw new Error("Operator role required");
+  if (action && !operatorCan(role, action)) throw new OperatorRoleRefused();
+  return { session, role };
+}
+
+/**
+ * The operator's API client, for a read or for the change named. Every console read and action is guarded
+ * here as well as in the proxy and the layout. A viewer's client holds no admin token, so a change that
+ * slipped past a check would still be refused by the engine.
+ */
+export async function operatorApi(action?: OperatorAction): Promise<OperatorClient> {
+  const { role } = await requireOperator(action);
+  return role === "viewer" ? buildReaderClient() : buildOperatorClient();
 }
 
 /** Builds the operator client. Callers must have checked the operator role first. */

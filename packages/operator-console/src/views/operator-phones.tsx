@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { ago, dateTime, day } from "../components/format";
 import { Panel, Status } from "../components/parts";
 import { Table } from "../components/table";
+import { useOperatorCan } from "../shell/role";
 
 export interface OperatorPhonesProps {
   phones: OperatorPhone[];
@@ -21,6 +22,8 @@ export interface OperatorPhonesProps {
   /** Each answers with the phones still enrolled. */
   revoke: (id: string) => Promise<OperatorPhone[]>;
   revokeAll: () => Promise<OperatorPhone[]>;
+  /** The signed-in operator's id: anyone may revoke their own phone, and an owner anyone's. */
+  me: string;
 }
 
 /** How long ago, which the server and the browser work out a moment apart: the browser's answer stands. */
@@ -49,7 +52,8 @@ function alertsInWords(phone: OperatorPhone): string | null {
 }
 
 /** The phones enrolled for the console. Listing and revoking them is done here on the web, never from a phone. */
-export function OperatorPhonesPanel({ phones: initial, added, unseen, seen, offered, revoke, revokeAll }: OperatorPhonesProps) {
+export function OperatorPhonesPanel({ phones: initial, added, unseen, seen, offered, revoke, revokeAll, me }: OperatorPhonesProps) {
+  const anyones = useOperatorCan()("manage_team");
   // With the list on screen the operator has what System's mark was pointing at, so the mark is taken away.
   // It runs when the page is really open, and again if a notice is closed while it is.
   useEffect(() => {
@@ -76,8 +80,8 @@ export function OperatorPhonesPanel({ phones: initial, added, unseen, seen, offe
   return (
     <Panel
       title={phones.length === 0 ? "Operator phones" : `Operator phones (${phones.length})`}
-      description="Phones that can open this console in the app, behind a face or fingerprint. Revoke one when a phone is lost or an operator leaves; removing their role alone doesn't end a session. A revoked phone is sent no more alerts."
-      actions={phones.length > 1 ? <Button size="sm" variant="ghost" onClick={() => setAsking("all")}>Revoke all</Button> : null}
+      description="Phones that can open this console in the app, behind a face or fingerprint. Revoke one when a phone is lost. Removing someone from the team ends their phones too. A revoked phone is sent no more alerts."
+      actions={phones.length > 1 && anyones ? <Button size="sm" variant="ghost" onClick={() => setAsking("all")}>Revoke all</Button> : null}
     >
       <div id="operator-phones" className="scroll-mt-6">
         {error ? <p role="alert" className="mb-2 text-caption text-destructive">{error}</p> : null}
@@ -109,7 +113,7 @@ export function OperatorPhonesPanel({ phones: initial, added, unseen, seen, offe
             { key: "unlocked", header: "Last unlocked", cell: (phone) => (phone.last_unlocked_at ? <Ago at={phone.last_unlocked_at} /> : "never"), mono: true, wide: true },
             { key: "expires", header: "Signs in again", cell: (phone) => dateTime(phone.expires_at), mono: true, wide: true },
             { key: "alerts", header: "Alerts", cell: (phone) => <Alerts phone={phone} />, wide: true },
-            { key: "act", header: "", align: "right", cell: (phone) => <Button size="sm" variant="ghost" onClick={() => setAsking(phone)}>Revoke</Button> },
+            { key: "act", header: "", align: "right", cell: (phone) => (anyones || phone.user_id === me ? <Button size="sm" variant="ghost" onClick={() => setAsking(phone)}>Revoke</Button> : null) },
           ]}
         />
       </div>

@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 
 import { BrandPreview, ColourInput, MarkRow } from "../components/appearance";
 import { ConsolePage } from "../components/parts";
+import { OwnersOnly, useOperatorCan } from "../shell/role";
 
 /** The editable part of the instance config. Mirrors packages/config's schema. */
 export interface InstanceSettings {
@@ -89,6 +90,7 @@ function Section({ title, description, children }: { title: string; description:
 }
 
 export function SettingsView({ initial, phoneAppsNamed, source, overridden, ignored, save, reset }: SettingsViewProps) {
+  const can = useOperatorCan();
   const [value, setValue] = useState(initial);
   const [state, setState] = useState<{ kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "reset" } | { kind: "error"; message: string }>({ kind: "idle" });
   // Whether there is anything saved here to forget, and whether what was saved is being left out.
@@ -140,6 +142,7 @@ export function SettingsView({ initial, phoneAppsNamed, source, overridden, igno
 
   return (
     <ConsolePage title="Instance settings" description="What this instance is called, who can join, what it serves and what it allows.">
+      <OwnersOnly allowed={can("change_settings")} what="these settings">
       <form onSubmit={submit}>
         {kept.ignored ? (
           <div role="status" className="mb-2 flex max-w-[920px] items-start gap-3 rounded-card border border-hairline bg-card px-4 py-3 text-[13px]">
@@ -225,6 +228,7 @@ export function SettingsView({ initial, phoneAppsNamed, source, overridden, igno
           {kept.saved ? <Button type="button" variant="ghost" className="ml-auto" disabled={state.kind === "saving"} onClick={() => setResetting(true)}>Reset to deployed config</Button> : null}
         </div>
       </form>
+      </OwnersOnly>
 
       <Sheet open={resetting} onOpenChange={setResetting} title="Reset settings to the deployed config?" description="Everything saved on this page is forgotten, and the instance goes back to the config it was deployed with within 10 seconds. That can switch a surface on or off. Capabilities keep their own settings.">
         <div className="flex gap-2">

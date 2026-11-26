@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { label } from "../components/format";
 import { ConsolePage } from "../components/parts";
+import { useOperatorCan } from "../shell/role";
 
 export interface CapabilityRow {
   offering: Offering;
@@ -43,6 +44,9 @@ function wholesale(offering: Offering): string {
 }
 
 export function CapabilitiesView({ rows: initial, defaultMarkup, update, sources, placing, overridden, ignored, reset }: CapabilitiesViewProps) {
+  const can = useOperatorCan();
+  // Offering a capability is a member's to switch; what it costs and where it appears are an owner's.
+  const prices = can("set_pricing");
   const [rows, setRows] = useState(initial);
   const [failed, setFailed] = useState<string | null>(null);
   // Whether there is anything set here to forget, and whether what was set is being left out.
@@ -78,7 +82,7 @@ export function CapabilitiesView({ rows: initial, defaultMarkup, update, sources
   };
 
   return (
-    <ConsolePage title="Capabilities" description="Everything discovery returns from the network. Choose what this instance offers, what it charges and where each one appears." sources={sources} actions={kept.saved ? <Button variant="ghost" onClick={() => setResetting(true)}>Reset to deployed config</Button> : null} note="Discovery is live. What you set here is kept by this instance over the config it was deployed with, and is what users are served and charged from; a change applies everywhere within 10 seconds. Allow and block rules come from the deployed config. Routing preferences need the engine to accept a routing constraint.">
+    <ConsolePage title="Capabilities" description="Everything discovery returns from the network. Choose what this instance offers, what it charges and where each one appears." sources={sources} actions={kept.saved && prices ? <Button variant="ghost" onClick={() => setResetting(true)}>Reset to deployed config</Button> : null} note="Discovery is live. What you set here is kept by this instance over the config it was deployed with, and is what users are served and charged from; a change applies everywhere within 10 seconds. Allow and block rules come from the deployed config. Routing preferences need the engine to accept a routing constraint.">
       {failed ? <p role="alert" className="mb-3 text-[13px] text-destructive">The change to {failed} didn't save.</p> : null}
       {kept.ignored ? (
         <div role="status" className="mb-3 flex items-start gap-3 rounded-card border border-hairline bg-card px-4 py-3 text-[13px]">
@@ -126,6 +130,7 @@ export function CapabilitiesView({ rows: initial, defaultMarkup, update, sources
                               key={surface}
                               type="button"
                               aria-pressed={on}
+                              disabled={!prices}
                               onClick={() => save(offering.app, { surfaces: on ? shown.filter((entry) => entry !== surface) : [...shown, surface] })}
                               className={`h-6 rounded-full px-2 text-[11px] font-medium transition-colors ${on ? "bg-active text-foreground" : "text-subtle-foreground hover:bg-hover hover:text-foreground"}`}
                             >
@@ -145,6 +150,7 @@ export function CapabilitiesView({ rows: initial, defaultMarkup, update, sources
                         aria-label={`Markup for ${offering.app}`}
                         placeholder={defaultMarkup.toFixed(2)}
                         defaultValue={setting.markup ?? ""}
+                        disabled={!prices}
                         onBlur={(event) => {
                           const value = event.target.value ? Math.max(1, Number(event.target.value)) : null;
                           if (value !== setting.markup) void save(offering.app, { markup: value });
@@ -153,7 +159,7 @@ export function CapabilitiesView({ rows: initial, defaultMarkup, update, sources
                       />
                     </td>
                     <td className="pl-3 pr-4 text-right">
-                      <Switch checked={allowed && setting.enabled} disabled={!allowed} onCheckedChange={(enabled) => save(offering.app, { enabled })} aria-label={`Offer ${offering.app}`} />
+                      <Switch checked={allowed && setting.enabled} disabled={!allowed || !can("switch_capability")} onCheckedChange={(enabled) => save(offering.app, { enabled })} aria-label={`Offer ${offering.app}`} />
                     </td>
                   </tr>
                 );

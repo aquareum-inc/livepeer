@@ -1429,6 +1429,8 @@ struct OperatorStatusService: Codable, Sendable, Hashable {
 /// Whether anything is wrong, today's figures and the state of the service, in one answer.
 struct OperatorStatus: Codable, Sendable, Hashable {
     var checkedAt: String
+    /// What the caller may do in the console, so a client shows only the changes their role allows.
+    var role: OperatorRole
     /// Empty when everything is running.
     var attention: [OperatorAttention]
     var today: OperatorStatusToday
@@ -1436,9 +1438,23 @@ struct OperatorStatus: Codable, Sendable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case checkedAt = "checked_at"
+        case role
         case attention
         case today
         case service
+    }
+}
+
+/// What an operator may do in the console. Whether the console opens at all is the session's `operator` role.
+enum OperatorRole: String, Codable, Sendable, Hashable, CaseIterable {
+    case owner = "owner"
+    case member = "member"
+    case viewer = "viewer"
+    /// A value this build doesn't know, from a newer instance.
+    case unknown = "\u{0}unknown"
+
+    init(from decoder: Decoder) throws {
+        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
     }
 }
 

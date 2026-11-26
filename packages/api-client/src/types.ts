@@ -705,6 +705,8 @@ export interface OperatorAttention {
 /** Whether anything is wrong, today's figures and the state of the service, in one answer. */
 export interface OperatorStatus {
   checked_at: string;
+  /** What the caller may do in the console, so a client shows only the changes their role allows. */
+  role: OperatorRole;
   /** Empty when everything is running. */
   attention: OperatorAttention[];
   today: { active_users: number; jobs: number; failed: number; revenue_usd: number; wholesale_usd: number; margin_usd: number; revenue_estimated: boolean };

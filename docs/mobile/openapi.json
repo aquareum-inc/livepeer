@@ -5747,6 +5747,10 @@
           "checked_at": {
             "type": "string"
           },
+          "role": {
+            "$ref": "#/components/schemas/OperatorRole",
+            "description": "What the caller may do in the console, so a client shows only the changes their role allows."
+          },
           "attention": {
             "type": "array",
             "items": {
@@ -5838,12 +5842,22 @@
         },
         "required": [
           "checked_at",
+          "role",
           "attention",
           "today",
           "service"
         ],
         "additionalProperties": false,
         "description": "Whether anything is wrong, today's figures and the state of the service, in one answer."
+      },
+      "OperatorRole": {
+        "type": "string",
+        "enum": [
+          "owner",
+          "member",
+          "viewer"
+        ],
+        "description": "What an operator may do in the console. Whether the console opens at all is the session's `operator` role."
       },
       "OperatorAttention": {
         "type": "object",

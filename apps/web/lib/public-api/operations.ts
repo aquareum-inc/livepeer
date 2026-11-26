@@ -1,4 +1,4 @@
-import type { AccountList, Accounts, AgentModelEntry, ApiClient, CapabilityLabel, Character, Preferences, PrivacyDescription, ReportReason, DeviceSession, GenerationRequest, StudioMedium, DeviceToken, EngineJob, InstanceDescription, OfferedCapability, OperatorAlertKind, OperatorAlerts, OperatorAttention, OperatorClient, OperatorStatus } from "@livepeer/api-client";
+import type { OperatorAction, OperatorRole, AccountList, Accounts, AgentModelEntry, ApiClient, CapabilityLabel, Character, Preferences, PrivacyDescription, ReportReason, DeviceSession, GenerationRequest, StudioMedium, DeviceToken, EngineJob, InstanceDescription, OfferedCapability, OperatorAlertKind, OperatorAlerts, OperatorAttention, OperatorClient, OperatorStatus } from "@livepeer/api-client";
 
 import type { Moderation } from "../moderation/moderation";
 import type { AuditLog } from "../operator-devices/audit";
@@ -50,6 +50,10 @@ export interface Context {
   client: ApiClient;
   /** Present for callers with the operator role. */
   operator: OperatorClient | null;
+  /** What the caller may do in the console: their role on the team. Null with `operator`. */
+  operatorRole: OperatorRole | null;
+  /** Whether the caller's role on the team allows a change. False for anyone who isn't an operator. */
+  can: (action: OperatorAction) => boolean;
   /** Who is signed in. API keys, the operator token and guests have no account. */
   account: Account | null;
   devices: DeviceAccess;
@@ -100,6 +104,12 @@ export interface Operation {
    * until someone decides otherwise.
    */
   mobile?: "read" | "confirm";
+  /**
+   * For an operator operation that changes something: what the caller's role on the team must allow, checked
+   * in `runOperation`. "self" is a change to the caller's own place (their phone, their alerts), which any
+   * role may make. A read leaves it out. A test fails if a change has none.
+   */
+  needs?: OperatorAction | "self";
   /** Answers without a caller, as the instance's default account: what a guest can see on the web. */
   public?: boolean;
   /** Left out of the MCP server: sign-in plumbing for the native apps, which agents have no use for. */
@@ -143,6 +153,9 @@ export class ApiError extends Error {
     this.code = code;
   }
 }
+
+/** A change the caller's role on the team doesn't allow. */
+export const roleRefused = () => new ApiError(403, "Your role on this team doesn't allow that. An owner can do it, or change your role.", "role");
 
 /** The operator device session making the request. These operations mean nothing to any other caller. */
 const operatorPhone = (context: Context): OperatorDeviceRecord => {
@@ -642,7 +655,12 @@ export const OPERATIONS: Operation[] = [
     input: object({}),
     operator: true,
     mobile: "read",
-    run: async (context) => status(operator(context), context.moderation),
+    run: async (context) => {
+      const client = operator(context);
+      // An operator always has a role; this guards a context built without one.
+      if (!context.operatorRole) throw new ApiError(403, "This operation needs the operator role.");
+      return status(client, context.operatorRole, context.moderation);
+    },
   },
   { name: "operator_overview", description: "Operator: active users, jobs today, revenue, wholesale cost and margin.", method: "GET", path: "/operator/overview", output: "OverviewStats", input: object({}), operator: true, mobile: "read", run: async (context) => (await operator(context).getOverview()).data },
   { name: "operator_health", description: "Operator: engine readiness, discovery freshness, cost sync and version.", method: "GET", path: "/operator/health", output: "EngineHealth", input: object({}), operator: true, mobile: "read", run: async (context) => (await operator(context).getEngineHealth()).data },
@@ -669,6 +687,7 @@ export const OPERATIONS: Operation[] = [
     output: "Done",
     input: object({ id: text("Actor id"), status: { enum: ["active", "paused"] }, application_id: { type: "string", default: "default" } }, ["id", "status"]),
     operator: true,
+    needs: "suspend_account",
     mobile: "confirm",
     run: async (context, input) => {
       if (input.status !== "active" && input.status !== "paused") throw new ApiError(400, "status is active or paused.");
@@ -682,8 +701,8 @@ export const OPERATIONS: Operation[] = [
       return { ok };
     },
   },
-  { name: "operator_top_up_user", description: "Operator: add credit to a user's allocation, as a one-off adjustment.", method: "POST", path: "/operator/users/{id}/top-up", input: object({ id: text("User id"), amount_usd: { type: "number", exclusiveMinimum: 0 } }, ["id", "amount_usd"]), operator: true, run: async (context, input) => operator(context).provider.budgets.topUpAllocation(str(input, "id"), { amount: Number(input.amount_usd).toFixed(2), currency: "USD" }) },
-  { name: "operator_assign_plan", description: "Operator: assign a plan to a user, or remove it with a null plan_id.", method: "POST", path: "/operator/users/{id}/plan", input: object({ id: text("User id"), plan_id: { type: ["string", "null"] } }, ["id"]), operator: true, run: async (context, input) => ({ plan: await operator(context).provider.plans.assignPlan(str(input, "id"), typeof input.plan_id === "string" ? input.plan_id : null) }) },
+  { name: "operator_top_up_user", description: "Operator: add credit to a user's allocation, as a one-off adjustment.", method: "POST", path: "/operator/users/{id}/top-up", input: object({ id: text("User id"), amount_usd: { type: "number", exclusiveMinimum: 0 } }, ["id", "amount_usd"]), operator: true, needs: "adjust_account", run: async (context, input) => operator(context).provider.budgets.topUpAllocation(str(input, "id"), { amount: Number(input.amount_usd).toFixed(2), currency: "USD" }) },
+  { name: "operator_assign_plan", description: "Operator: assign a plan to a user, or remove it with a null plan_id.", method: "POST", path: "/operator/users/{id}/plan", input: object({ id: text("User id"), plan_id: { type: ["string", "null"] } }, ["id"]), operator: true, needs: "adjust_account", run: async (context, input) => ({ plan: await operator(context).provider.plans.assignPlan(str(input, "id"), typeof input.plan_id === "string" ? input.plan_id : null) }) },
   {
     name: "operator_list_jobs",
     description: "Operator: recent jobs across all users, newest first, with attempts and failures. Filter by state, and page back with the created_at of the last job seen.",
@@ -714,6 +733,7 @@ export const OPERATIONS: Operation[] = [
     output: "CharacterReport",
     input: object({ id: text("Report id"), outcome: { enum: ["dismissed", "hidden"] } }, ["id", "outcome"]),
     operator: true,
+    needs: "resolve_report",
     mobile: "confirm",
     run: async (context, input) => {
       operator(context);
@@ -722,11 +742,25 @@ export const OPERATIONS: Operation[] = [
     },
   },
   { name: "operator_list_grants", description: "Operator: grants and their funding.", method: "GET", path: "/operator/grants", output: ["Grant"], input: object({}), operator: true, mobile: "read", run: async (context) => operator(context).provider.budgets.listGrants() },
-  { name: "operator_create_grant", description: "Operator: create a grant with initial funding.", method: "POST", path: "/operator/grants", input: object({ label: text("Grant name"), amount_usd: { type: "number", exclusiveMinimum: 0 } }, ["label", "amount_usd"]), operator: true, run: async (context, input) => operator(context).provider.budgets.createGrant({ label: str(input, "label"), amount: { amount: Number(input.amount_usd).toFixed(2), currency: "USD" } }) },
+  { name: "operator_create_grant", description: "Operator: create a grant with initial funding.", method: "POST", path: "/operator/grants", input: object({ label: text("Grant name"), amount_usd: { type: "number", exclusiveMinimum: 0 } }, ["label", "amount_usd"]), operator: true, needs: "manage_grants", run: async (context, input) => operator(context).provider.budgets.createGrant({ label: str(input, "label"), amount: { amount: Number(input.amount_usd).toFixed(2), currency: "USD" } }) },
   { name: "operator_list_plans", description: "Operator: the provider's plans and allowances.", method: "GET", path: "/operator/plans", output: ["Plan"], input: object({}), operator: true, mobile: "read", run: async (context) => operator(context).provider.plans.listPlans() },
   { name: "operator_list_keys", description: "Operator: engine access keys.", method: "GET", path: "/operator/keys", input: object({}), operator: true, run: async (context) => (await operator(context).listAccessKeys()).data },
-  { name: "operator_set_capability", description: "Operator: enable or disable a capability, set its markup or the surfaces it appears in.", method: "PATCH", path: "/operator/capabilities", input: object({ app: text("Capability name"), enabled: { type: "boolean" }, markup: { type: ["number", "null"] }, surfaces: { type: ["array", "null"], items: { type: "string" } } }, ["app"]), operator: true, run: async (context, input) => (await operator(context).updateCapabilitySetting(str(input, "app"), { ...(typeof input.enabled === "boolean" ? { enabled: input.enabled } : {}), ...(input.markup === null || typeof input.markup === "number" ? { markup: input.markup } : {}), ...(input.surfaces === null || Array.isArray(input.surfaces) ? { surfaces: input.surfaces === null ? null : input.surfaces.map(String) } : {}) })).data },
-  { name: "operator_reset_capabilities", description: "Operator: put every capability back as this instance was deployed with it, forgetting what was enabled, disabled, priced or placed since.", method: "DELETE", path: "/operator/capabilities", output: "Deleted", input: object({}), operator: true, run: async (context) => ({ deleted: (await operator(context).resetCapabilitySettings()).data }) },
+  { name: "operator_set_capability", description: "Operator: set a capability's markup or the surfaces it appears in, and whether it is offered. Owners only; a member switches one on or off with operator_set_capability_enabled.", method: "PATCH", path: "/operator/capabilities", input: object({ app: text("Capability name"), enabled: { type: "boolean" }, markup: { type: ["number", "null"] }, surfaces: { type: ["array", "null"], items: { type: "string" } } }, ["app"]), operator: true, needs: "set_pricing", run: async (context, input) => (await operator(context).updateCapabilitySetting(str(input, "app"), { ...(typeof input.enabled === "boolean" ? { enabled: input.enabled } : {}), ...(input.markup === null || typeof input.markup === "number" ? { markup: input.markup } : {}), ...(input.surfaces === null || Array.isArray(input.surfaces) ? { surfaces: input.surfaces === null ? null : input.surfaces.map(String) } : {}) })).data },
+  {
+    name: "operator_set_capability_enabled",
+    description: "Operator: switch a capability on or off for this instance. Its markup and the surfaces it appears in are set with operator_set_capability.",
+    method: "PATCH",
+    path: "/operator/capabilities/enabled",
+    input: object({ app: text("Capability name"), enabled: { type: "boolean" } }, ["app", "enabled"]),
+    operator: true,
+    needs: "switch_capability",
+    run: async (context, input) => {
+      const client = operator(context);
+      if (typeof input.enabled !== "boolean") throw new ApiError(400, "enabled is true or false.");
+      return (await client.updateCapabilitySetting(str(input, "app"), { enabled: input.enabled })).data;
+    },
+  },
+  { name: "operator_reset_capabilities", description: "Operator: put every capability back as this instance was deployed with it, forgetting what was enabled, disabled, priced or placed since.", method: "DELETE", path: "/operator/capabilities", output: "Deleted", input: object({}), operator: true, needs: "set_pricing", run: async (context) => ({ deleted: (await operator(context).resetCapabilitySettings()).data }) },
   { name: "operator_list_compute", description: "Operator: the compute operators that ran this instance's recent jobs, with their runners, failures and median response time.", method: "GET", path: "/operator/compute", output: ["ComputeOperator"], input: object({}), operator: true, mobile: "read", run: async (context) => (await operator(context).listComputeOperators()).data },
   {
     name: "operator_list_capabilities",
@@ -780,6 +814,7 @@ export const OPERATIONS: Operation[] = [
       ["kinds"],
     ),
     operator: true,
+    needs: "self",
     mobile: "confirm",
     run: async (context, input) => {
       const session = operatorPhone(context);
@@ -803,6 +838,7 @@ export const OPERATIONS: Operation[] = [
     output: "Done",
     input: object({}),
     operator: true,
+    needs: "self",
     // It changes nothing, but it isn't a read: a phone's reads are GETs and everything else carries its own proof.
     mobile: "confirm",
     run: async (context) => {
@@ -822,13 +858,17 @@ export const OPERATIONS: Operation[] = [
     output: "Deleted",
     input: object({ id: text("Operator device session id, from operator_list_devices") }, ["id"]),
     operator: true,
+    needs: "self",
     run: async (context, input) => {
       operator(context);
+      // Anyone may revoke their own phone; someone else's is the team's business.
+      const phone = (await context.operatorDevices.list()).find((entry) => entry.id === str(input, "id"));
+      if (phone && phone.user_id !== context.account?.user.id && !context.can("manage_team")) throw roleRefused();
       if (!await context.operatorDevices.revoke(str(input, "id"), revoker(context))) throw new ApiError(404, "Operator phone not found");
       return { deleted: true };
     },
   },
-  { name: "operator_revoke_all_devices", description: "Operator: revoke every operator phone at once. Each operator signs in again on their phone to get the console back.", method: "DELETE", path: "/operator/devices", output: "Deleted", input: object({}), operator: true, run: async (context) => { operator(context); return { deleted: await context.operatorDevices.revokeAll(revoker(context)) > 0 }; } },
+  { name: "operator_revoke_all_devices", description: "Operator: revoke every operator phone at once. Each operator signs in again on their phone to get the console back.", method: "DELETE", path: "/operator/devices", output: "Deleted", input: object({}), operator: true, needs: "manage_team", run: async (context) => { operator(context); return { deleted: await context.operatorDevices.revokeAll(revoker(context)) > 0 }; } },
   { name: "operator_list_audit", description: "Operator: what operators' phones did, were refused and were told, newest first: sign-ins, unlocks, changes, refusals, revocations and each alert sent.", method: "GET", path: "/operator/audit", output: ["OperatorAuditEntry"], input: object({ limit: { type: "number", default: 100 } }), operator: true, run: async (context, input) => { operator(context); return context.audit.list(Math.trunc(Number(input.limit)) || 100); } },
 ];
 
@@ -856,7 +896,7 @@ export const failedInLastHour = (jobs: EngineJob[], now: number): number => jobs
 export const FAILURES_WINDOW = JOBS_WINDOW;
 
 /** What the Status screen shows. What counts as wrong is decided here, so the web and phones agree. */
-async function status(client: OperatorClient, moderation: Moderation, now: number = Date.now()): Promise<OperatorStatus> {
+async function status(client: OperatorClient, role: OperatorRole, moderation: Moderation, now: number = Date.now()): Promise<OperatorStatus> {
   const [health, overview, jobs] = await Promise.all([client.getEngineHealth(), client.getOverview(), client.listJobs(JOBS_WINDOW)]);
   const service = health.data;
   const failedLastHour = failedInLastHour(jobs.data, now);
@@ -873,6 +913,7 @@ async function status(client: OperatorClient, moderation: Moderation, now: numbe
   if (waiting > 0) attention.push({ kind: "reports_waiting", message: ATTENTION.reportsWaiting(waiting), count: waiting, opens: "reports" });
   return {
     checked_at: new Date(now).toISOString(),
+    role,
     attention,
     today: { active_users: overview.data.active_users, jobs: overview.data.jobs_today, failed: overview.data.jobs_failed_today, revenue_usd: overview.data.revenue_usd, wholesale_usd: overview.data.wholesale_usd, margin_usd: overview.data.margin_usd, revenue_estimated: overview.data.revenue_estimated },
     service: { engine_ready: service.ready, discovery_fresh: service.discovery_fresh, discovery_observed_at: service.discovery_observed_at, cost_sync_at: service.cost_sync_at, cost_sync_error: service.cost_sync_error, running_jobs: service.running_jobs, engine_version: service.version },

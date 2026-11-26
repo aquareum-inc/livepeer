@@ -33,6 +33,11 @@ export interface OperatorTeamService {
   signIn(person: Person, claimed: boolean): Promise<Standing>;
   /** The person's place on the team by grant, read fresh. Null for anyone else, a claim included. */
   granted(userId: string): Promise<OperatorRecord | null>;
+  /**
+   * What the person may do in the console, read fresh: their role by grant, or an owner's for someone the
+   * identity provider vouched for at their last sign-in. Null for anyone not on the team.
+   */
+  role(userId: string): Promise<OperatorRole | null>;
   operators(): Promise<TeamOperator[]>;
   invitations(): Promise<OperatorInvitation[]>;
   invite(role: OperatorRole, by: string): Promise<NewOperatorInvitation>;
@@ -97,6 +102,10 @@ export function operatorTeam(store: OperatorTeamStore, secret: string, now: () =
     async granted(userId) {
       const operator = await store.operator(userId);
       return operator?.source === "grant" ? operator : null;
+    },
+
+    async role(userId) {
+      return (await store.operator(userId))?.role ?? null;
     },
 
     async operators() {

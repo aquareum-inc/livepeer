@@ -40,6 +40,7 @@ import type {
   Runner,
 } from "./types";
 
+export * from "./roles";
 export * from "./types";
 export type { OperatorEngine } from "./live";
 

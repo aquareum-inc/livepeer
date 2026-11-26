@@ -2,7 +2,10 @@
 
 import { BrandBadge, BrandWordmark, cn, useTheme, type Brand } from "@livepeer/ui";
 import { Activity, ArrowLeft, Blocks, Building2, Cpu, CreditCard, Flag, Gift, KeyRound, LayoutDashboard, Moon, ReceiptText, ServerCog, Settings2, Sun, Tags, Users, type LucideIcon } from "lucide-react";
+import type { OperatorRole } from "@livepeer/api-client";
 import type { ComponentType, ReactNode } from "react";
+
+import { OperatorRoleProvider } from "./role";
 
 export interface ConsoleLinkProps {
   href: string;
@@ -67,11 +70,13 @@ export interface ConsoleShellProps {
   appAvailable: boolean;
   /** Pages to mark with a dot in the navigation, by href, each with what the dot means. */
   marks?: Readonly<Record<string, string>>;
+  /** What the signed-in operator may do. Every view below hides what their role doesn't allow. */
+  role: OperatorRole;
   children: ReactNode;
 }
 
 /** The console's frame: the same sidebar-and-panel as the user app, tuned denser. */
-export function ConsoleShell({ brand, pathname, Link, appAvailable, marks = {}, children }: ConsoleShellProps) {
+export function ConsoleShell({ brand, pathname, Link, appAvailable, marks = {}, role, children }: ConsoleShellProps) {
   const { resolved, setPreference } = useTheme();
   const items = GROUPS.flatMap((group) => group.items);
   return (
@@ -82,6 +87,8 @@ export function ConsoleShell({ brand, pathname, Link, appAvailable, marks = {}, 
           <BrandWordmark brand={brand} className="h-[12px] w-auto shrink-0" />
           <BrandBadge label="Operator" />
         </Link>
+        {/* Said once, where it is always in view: why some controls aren't there. */}
+        {role === "owner" ? null : <p className="mb-3 px-2 text-[11px] leading-4 text-subtle-foreground">{role === "viewer" ? "You're a viewer here: you can look, not change." : "You're a member here: pricing, keys, settings and the team are an owner's."}</p>}
         {GROUPS.map((group) => (
           <div key={group.label} className="mb-3">
             <p className="px-2 pb-1 text-[11px] font-medium text-subtle-foreground">{group.label}</p>
@@ -133,7 +140,9 @@ export function ConsoleShell({ brand, pathname, Link, appAvailable, marks = {}, 
             );
           })}
         </div>
-        <main className="min-h-0 flex-1 overflow-y-auto bg-panel md:rounded-card md:ring-1 md:ring-hairline">{children}</main>
+        <main className="min-h-0 flex-1 overflow-y-auto bg-panel md:rounded-card md:ring-1 md:ring-hairline">
+          <OperatorRoleProvider role={role}>{children}</OperatorRoleProvider>
+        </main>
       </div>
     </div>
   );

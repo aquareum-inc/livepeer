@@ -9,6 +9,7 @@ import { CreditPacks, type SaveCreditPack } from "../components/credit-packs";
 import { count, usd } from "../components/format";
 import { ConsolePage, GapNote, Panel } from "../components/parts";
 import { Table } from "../components/table";
+import { OwnersOnly, useOperatorCan } from "../shell/role";
 
 export interface PricingViewProps {
   provider: { name: string; features: ProviderFeatures };
@@ -104,6 +105,7 @@ function OtherAmounts({ initial, save }: { initial: TopUpRange; save: PricingVie
 }
 
 export function PricingView({ provider, plans: initial, packs, topUp, markup, savePlan, savePack, saveTopUp, sources, Link }: PricingViewProps) {
+  const can = useOperatorCan();
   const overrides = Object.values(markup.perApp);
   const [plans, setPlans] = useState(initial);
   const [editing, setEditing] = useState<{ id: string | null; value: Omit<Plan, "id"> } | null>(null);
@@ -129,6 +131,7 @@ export function PricingView({ provider, plans: initial, packs, topUp, markup, sa
 
   return (
     <ConsolePage title="Pricing and plans" description="How wholesale network cost becomes what your users pay." sources={sources}>
+      <OwnersOnly allowed={can("set_pricing")} what="pricing">
       <Panel title="Payment provider" description={`Connected: ${provider.name}`}>
         <div className="flex flex-wrap gap-1.5 rounded-card border border-hairline bg-card p-3">
           {FEATURE_LABELS.map(([key, text]) => (
@@ -186,6 +189,7 @@ export function PricingView({ provider, plans: initial, packs, topUp, markup, sa
           <p className="mt-2 text-[12px] text-muted-foreground">{provider.name} doesn't take top-ups of an amount the user chooses.</p>
         )}
       </CreditPacks>
+      </OwnersOnly>
 
       <Sheet open={editing !== null} onOpenChange={(open) => !open && setEditing(null)} title={editing?.id ? "Edit plan" : "New plan"}>
         {editing ? (

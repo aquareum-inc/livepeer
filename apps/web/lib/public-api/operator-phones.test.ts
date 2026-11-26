@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { NextRequest } from "next/server";
 import { sql } from "@livepeer/db";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -17,6 +17,7 @@ import { SESSION_COOKIE } from "../auth/session";
 import { GET as route } from "../../app/api/v1/[...path]/route";
 import { devices } from "../devices";
 import { operatorAudit, operatorDevices } from "../operator-devices";
+import { operators } from "../operators";
 import { confirmMessage, inputHash, unlockMessage } from "../operator-devices/proof";
 import { MAX_FAILED_PROOFS } from "../operator-devices/sessions";
 import { TEST_CHALLENGE, TEST_VERIFIER, testPhone, type TestPhone } from "../operator-devices/testing";
@@ -51,6 +52,8 @@ beforeAll(async () => {
   vi.stubEnv("OPERATOR_API_TOKEN", "");
   configure({ mobile: true, mobileConsole: true });
 });
+// Sam is on the team, as the identity provider's operator: a phone's console works only for someone who is.
+beforeEach(() => operators().signIn(sam, true));
 afterAll(async () => {
   vi.unstubAllEnvs();
   rmSync(dir, { recursive: true, force: true });
@@ -568,6 +571,45 @@ describe("alerts on an operator's phone", () => {
     const answer = await call("get_instance");
     expect(answer.body).toMatchObject({ mobile: { android: { application_id: "org.livepeer.app.dev", firebase: { project_id: "livepeer-test", app_id: "1:1234567890:android:0a1b2c3d4e5f", api_key: "AIzaSyTestTestTestTestTestTestTestTest", sender_id: "1234567890" } } } });
     expect(answer.text).not.toMatch(/service_account|private_key|client_email|APNS|p8/i);
+  });
+});
+
+describe("a phone's role on the team", () => {
+  const ines = { userId: "usr_demo_ines", name: "Ines Okafor", email: "ines@example.test", role: "operator" as const };
+  const suspend = { id: "usr_demo_priya", status: "paused" };
+
+  it("reads as a viewer and changes nothing, changes what a member may, and stops when its person leaves the team", async () => {
+    await operators().add(ines, "viewer", sam.userId);
+    const device = await enrol(ines);
+    await unlock(device);
+
+    // A viewer reads everything, and is told their role so the app can leave the changes out.
+    expect((await call("operator_status", { token: device.token })).body).toMatchObject({ role: "viewer" });
+    expect((await call("operator_list_users", { token: device.token })).status).toBe(200);
+    // A proof doesn't help: the role is asked first, and the refusal is written down.
+    const refused = await call("operator_set_user_status", { token: device.token, input: suspend, proof: await proofFor(device, "operator_set_user_status", suspend) });
+    expect([refused.status, refused.code]).toEqual([403, "role"]);
+    expect(await lastAudit()).toMatchObject({ event: "refused", user_id: "usr_demo_ines", operation: "operator_set_user_status", detail: "role" });
+    // Their own alerts are theirs to read, whatever the role.
+    expect((await call("operator_get_alerts", { token: device.token })).status).toBe(200);
+
+    // Made a member, the same phone can, from its next request.
+    expect(await operators().setRole(ines.userId, "member")).toBe("done");
+    expect((await call("operator_status", { token: device.token })).body).toMatchObject({ role: "member" });
+    const done = await call("operator_set_user_status", { token: device.token, input: suspend, proof: await proofFor(device, "operator_set_user_status", suspend) });
+    expect([done.status, done.body]).toEqual([200, { ok: true }]);
+
+    // Off the team, the phone is signed out and its session is gone.
+    expect(await operators().remove(ines.userId)).toBe("done");
+    expect([(await call("operator_status", { token: device.token })).status, (await call("get_me", { token: device.token })).status]).toEqual([401, 401]);
+    expect((await operatorDevices().list()).some((phone) => phone.user_id === ines.userId)).toBe(false);
+    expect(await lastAudit()).toMatchObject({ event: "revoked", detail: "operator role removed" });
+  });
+
+  it("gives the identity provider's operator an owner's reach", async () => {
+    const device = await enrol();
+    await unlock(device);
+    expect((await call("operator_status", { token: device.token })).body).toMatchObject({ role: "owner" });
   });
 });
 

@@ -55,7 +55,7 @@ export default async function SystemPage() {
       checks={await runDoctor()}
       dataSources={dataSources}
       sources={[{ name: "getEngineHealth", source: healthSource }]}
-      phones={{ phones: await operatorDevices().list(), added: [...recent.announced, ...recent.dismissed].map((phone) => phone.id), unseen: recent.marked.length, seen: seeNewPhonesAction, offered: await mobileConsoleEnabled(), revoke: revokeOperatorPhoneAction, revokeAll: revokeAllOperatorPhonesAction }}
+      phones={{ phones: await operatorDevices().list(), added: [...recent.announced, ...recent.dismissed].map((phone) => phone.id), unseen: recent.marked.length, seen: seeNewPhonesAction, me: session?.userId ?? "", offered: await mobileConsoleEnabled(), revoke: revokeOperatorPhoneAction, revokeAll: revokeAllOperatorPhonesAction }}
       phoneActivity={await operatorAudit().list(200)}
       alerts={await mobileConsoleEnabled() ? await alertConnections() : null}
     />
