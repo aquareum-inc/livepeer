@@ -32,7 +32,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
       workspaces={memberships.map(({ workspace, role }) => ({ id: workspace.id, name: workspace.name, role, status: workspace.status }))}
       Link={ConsoleLink}
       setStatus={setUserStatusAction.bind(null, user.applicationId, id)}
-      team={onTeam?.role ?? null}
+      team={onTeam}
       assignPlan={assignPlanAction.bind(null, id)}
       topUp={topUpUserAction.bind(null, id)}
       sources={[

@@ -1,14 +1,15 @@
 "use client";
 
-import { OPERATOR_ROLE_COPY, type DataSource, type OperatorRole, type Plan, type UsageEntry } from "@livepeer/api-client";
+import { OPERATOR_ROLE_COPY, type DataSource, type Plan, type TeamOperator, type UsageEntry } from "@livepeer/api-client";
 import { Button, Chip, Sheet } from "@livepeer/ui";
 import { ArrowLeft } from "lucide-react";
 import { useState, type ComponentType, type ReactNode } from "react";
 
-import { ago, count, dateTime, label, usd } from "../components/format";
+import { ago, count, dateTime, day, label, usd } from "../components/format";
 import { ConsolePage, GapNote, Panel, Stat, Status } from "../components/parts";
 import { Table } from "../components/table";
 import { useOperatorCan } from "../shell/role";
+import { joined } from "./team";
 
 type LinkType = ComponentType<{ href: string; className?: string; children: ReactNode }>;
 
@@ -76,7 +77,7 @@ export interface UserDetailProps {
   Link: LinkType;
   setStatus: (status: "active" | "paused") => Promise<void>;
   /** The person's role on the team that runs the instance, or null for the many who aren't on it. */
-  team: OperatorRole | null;
+  team: TeamOperator | null;
   assignPlan: (planId: string | null) => Promise<void>;
   topUp: (amountUsd: number) => Promise<void>;
   sources: ReadonlyArray<{ name: string; source: DataSource }>;
@@ -125,13 +126,6 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
         <ArrowLeft className="size-3.5" />Users
       </Link>
       {error ? <p role="alert" className="mb-4 text-[13px] text-destructive">{error}</p> : null}
-      {/* Said only for the few it is true of: most people here are not on the team. */}
-      {team ? (
-        <p className="mb-4 text-[13px] text-muted-foreground">
-          Helps run this instance as {team === "owner" ? "an owner" : `a ${OPERATOR_ROLE_COPY[team].name.toLowerCase()}`}.{" "}
-          <Link href="/operator/team" className="text-foreground underline underline-offset-2">Team</Link>
-        </p>
-      ) : null}
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Budget" value={user.budget === null ? "—" : usd(user.budget)} hint="allocation granted" />
@@ -168,6 +162,21 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
               { key: "status", header: "Status", cell: (workspace) => <Status value={workspace.status} /> },
             ]}
           />
+        </Panel>
+      ) : null}
+
+      {/* A membership like the ones above, and shown only for the few who have it: most people here are not on the team. */}
+      {team ? (
+        <Panel
+          title="Operator team"
+          description="This person helps run the instance."
+          actions={<Link href="/operator/team" className="shrink-0 text-[13px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">{can("manage_team") ? "Manage on Team" : "See the team"}</Link>}
+        >
+          <div className="flex flex-col gap-1 rounded-card border border-hairline bg-card px-4 py-3 text-[13px] sm:flex-row sm:items-baseline sm:gap-4">
+            <p className="w-[88px] shrink-0 font-medium">{OPERATOR_ROLE_COPY[team.role].name}</p>
+            <p className="min-w-0 flex-1 text-muted-foreground">{OPERATOR_ROLE_COPY[team.role].can}</p>
+            <p className="shrink-0 text-[12px] text-muted-foreground sm:text-right">{joined(team)}, {day(team.since)}</p>
+          </div>
         </Panel>
       ) : null}
 

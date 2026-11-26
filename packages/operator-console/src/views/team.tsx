@@ -29,7 +29,7 @@ export interface TeamViewProps {
 const ROLE_OPTIONS = OPERATOR_ROLES.map((role) => ({ value: role, label: OPERATOR_ROLE_COPY[role].name }));
 
 /** How someone came to be on the team, in a few words. */
-function joined(operator: TeamOperator): string {
+export function joined(operator: Pick<TeamOperator, "via" | "added_by">): string {
   if (operator.via === "provider") return "From your identity provider";
   if (operator.via === "setup") return "First owner, from setup";
   const by = operator.added_by ?? "a former owner";
