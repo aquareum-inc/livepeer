@@ -20,7 +20,7 @@ Each has a recommendation; the rest of the plan assumes it.
 | D4 | Removing an operator. | **An owner can remove anyone; anyone can leave; the last owner can't be removed, leave or be demoted.** Removal takes away console access at the next request and keeps the account. |
 | D5 | How long a link lasts. | **72 hours, single use**, revocable from the Team section until it's used. |
 | D6 | **Where the fact "this person is an operator" is kept.** Today it has no working home (section 1). | **In the instance's own database: one row per operator, holding the provider's opaque user id.** A person is an operator if their identity provider's token says so, or they have a row. Being an operator is a fact about the instance, not about billing; Batteries has no users at all; and it fits the rule that the app stores ids and a role and nothing else. If PymtHouse can later hold the role and put it in the sign-in token (Q25), the rows can move there. |
-| D7 | **Operator roles, and where the lines fall.** | **Three fixed roles: Owner, Manager, Viewer** (section 4). Owners decide what the instance is, what it charges and who runs it. Managers handle people and jobs. Viewers read. Several owners are allowed. The table in section 4 is the part to check: each line is a judgment, and moving one is a one-line change before or after the build. |
+| D7 | **Operator roles, and where the lines fall.** | **Three fixed roles: Owner, Member, Viewer** (section 4). Owners decide what the instance is, what it charges and who runs it. Members handle people and jobs. Viewers read. Several owners are allowed. The table in section 4 is the part to check: each line is a judgment, and moving one is a one-line change before or after the build. |
 
 ## 1. What exists today
 
@@ -80,10 +80,11 @@ session and the console phone enrolment:
 
 The session's role stays `user` or `operator`: that decides whether the console opens at all. What an
 operator may do inside it is their **operator role**, held on their row (section 8) and read on every
-request, never from the cookie, so a change takes effect at once. The middle role is called Manager because
-"operator" already means everyone on the team.
+request, never from the cookie, so a change takes effect at once. The middle role is called Member, the usual name for
+the role that does the everyday work and can't change the setup or the team; workspaces use the word the same
+way.
 
-| May… | Owner | Manager | Viewer |
+| May… | Owner | Member | Viewer |
 |------|:-----:|:-------:|:------:|
 | See every console page, including revenue, costs, keys' names and the audit log | yes | yes | yes |
 | Enrol their own phone, choose their own alerts, send themselves a test alert, revoke their own phone | yes | yes | yes |
@@ -99,7 +100,7 @@ request, never from the cookie, so a change takes effect at once. The middle rol
 | Instance settings, surfaces, appearance, sign-up, and resetting them | yes | no | no |
 | Invite, add, change a role, remove; revoke someone else's phone | yes | no | no |
 
-- **In one line: owners decide what the instance is, what it charges and who runs it; managers look after
+- **In one line: owners decide what the instance is, what it charges and who runs it; members look after
   people and jobs; viewers read.**
 - **One function** in the API client's operator side, `operatorCan(role, action)`, with its own tests. The
   server refuses with it and the screens hide controls with it, as `can(role, action)` does for workspaces.
@@ -107,8 +108,8 @@ request, never from the cookie, so a change takes effect at once. The middle rol
   in `operations.ts` that changes something declares the role it needs; a test fails if one doesn't.
 - **A viewer's client can't change anything even if a check is missed:** it is built with
   `buildReaderClient()`, which holds the reader token and no admin token.
-- **`operator_set_capability` is split in two**, since switching a capability off is a manager's emergency
-  lever and its markup is pricing: `operator_set_capability_enabled` (manager) and the existing operation
+- **`operator_set_capability` is split in two**, since switching a capability off is a member's emergency
+  lever and its markup is pricing: `operator_set_capability_enabled` (member) and the existing operation
   for markup and surfaces (owner).
 - **Phones** follow the same roles through the dispatcher: a viewer's phone can't suspend a user or resolve
   a report, with or without Face ID. The apps hide those controls from `operator_status`, which gains the
@@ -128,7 +129,7 @@ request, never from the cookie, so a change takes effect at once. The middle rol
   made; afterwards the row shows only that it exists, because only a hash is stored.
 - **Invite** (owners only) asks for a role, with one line under each saying what it can do, makes a link
   and shows it with "Send this to the person you're inviting. Anyone with it can become a *role* of
-  *Instance* until it's used or expires on *date*." Managers and viewers see the team and no controls.
+  *Instance* until it's used or expires on *date*." Members and viewers see the team and no controls.
 - Inviting, revoking, joining, adding, changing a role and removing are written to the existing audit log as `change`
   entries with the operation's name and the person's id as the target.
 - States: loading, an error state, and the empty state for invitations ("No invitations waiting"). The
@@ -193,7 +194,7 @@ Two new tables in the instance's Postgres (`docs/database.md` §2), one migratio
 
 | Table | Columns | Keys and indexes |
 | --- | --- | --- |
-| `operators` | `user_id`, `role` (`owner`, `manager`, `viewer`), `source` (`grant` or `claim`), `identity_sealed`, `granted_by` null, `invitation_id` null, `created_at` | PK `user_id` |
+| `operators` | `user_id`, `role` (`owner`, `member`, `viewer`), `source` (`grant` or `claim`), `identity_sealed`, `granted_by` null, `invitation_id` null, `created_at` | PK `user_id` |
 | `operator_invitations` | `id`, `role`, `token_hash` null, `invited_by` null, `created_at`, `expires_at`, `revoked_at` null, `accepted_by` null, `accepted_at` null | PK `id`; unique `token_hash`; index `expires_at` |
 
 - No plaintext name or email. `identity_sealed` is the AES-256-GCM snapshot keyed with `SESSION_SECRET`,
@@ -222,7 +223,7 @@ tables) and `docs/ui-actions.md`:
 | `operator_add_operator` | `POST /operator/team` | An existing user's id and a role. Behind **Add to team** on user detail. Owner. |
 | `operator_set_operator_role` | `PATCH /operator/team/{userId}` | Owner. Refused for the last owner and for a `claim` row. |
 | `operator_remove_operator` | `DELETE /operator/team/{userId}` | Ends their console phone sessions. Owner, or anyone for themselves. Refused for the last owner and for a `claim` row. |
-| `operator_set_capability_enabled` | `PATCH /operator/capabilities/enabled` | Manager. Split from `operator_set_capability`, which becomes owner-only (section 4). |
+| `operator_set_capability_enabled` | `PATCH /operator/capabilities/enabled` | Member. Split from `operator_set_capability`, which becomes owner-only (section 4). |
 | `operator_status` (changed) | — | Gains the caller's operator role, for the phones. |
 
 Reading and accepting an invitation are web-only server actions (`getOperatorInvitation`,
