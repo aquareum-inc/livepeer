@@ -6,6 +6,14 @@ export interface Session {
   name: string;
   email: string | null;
   role: Role;
+  /**
+   * On whose word the person is an operator: the identity provider's (`claim`), which holds for as long as
+   * the cookie does, or this instance's own team list (`grant`), which is read again on every request.
+   * Absent for a user.
+   */
+  operatorSource?: "claim" | "grant";
+  /** Unix seconds of the sign-in itself, as the provider reported it. Null when it didn't say. */
+  authenticatedAt?: number | null;
   /** The signed-in user's engine key (lpk_…), sent on their behalf. */
   builderKey: string | null;
   /**

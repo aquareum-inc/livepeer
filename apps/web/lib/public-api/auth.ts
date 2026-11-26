@@ -7,7 +7,7 @@ import type { NextRequest } from "next/server";
 
 import { alerts } from "../alerts";
 import { apiFor, workspaceOf } from "../api";
-import { SESSION_COOKIE, readSessionValue } from "../auth/session";
+import { SESSION_COOKIE, current, readSessionValue } from "../auth/session";
 import { devices, mobileEnabled } from "../devices";
 import { DEVICE_TOKEN_PREFIX } from "../devices/sessions";
 import { env } from "../env";
@@ -82,7 +82,7 @@ export async function authenticate(request: NextRequest): Promise<Caller | null>
     return { via: "api_key", client: await apiFor(null, "offered", key.workspace_id, key.workspace_id !== null), operator: null, account: null, operatorDevice: null };
   }
 
-  const session = readSessionValue(request.cookies.get(SESSION_COOKIE)?.value);
+  const session = await current(readSessionValue(request.cookies.get(SESSION_COOKIE)?.value));
   if (!session) return null;
   const user = { id: session.userId, name: session.name, email: session.email };
   return {

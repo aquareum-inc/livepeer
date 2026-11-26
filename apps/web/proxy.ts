@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { checkAccess } from "@/lib/auth/guard";
-import { SESSION_COOKIE, readSessionValue } from "@/lib/auth/session";
+import { checkAccess, requiredRole } from "@/lib/auth/guard";
+import { SESSION_COOKIE, current, readSessionValue } from "@/lib/auth/session";
 import { developerPathServed } from "@/lib/developers";
 import { instance } from "@/lib/instance";
 import { homePath, surfacePathServed } from "@/lib/surfaces";
@@ -19,7 +19,9 @@ export async function proxy(request: NextRequest) {
   if (!surfacePathServed(pathname, surfaces) || !developerPathServed(pathname, surfaces)) return new NextResponse("Not found", { status: 404 });
   if (isApi) return NextResponse.next();
 
-  const access = checkAccess(pathname, readSessionValue(request.cookies.get(SESSION_COOKIE)?.value));
+  const sealed = readSessionValue(request.cookies.get(SESSION_COOKIE)?.value);
+  // Only the console asks whether a place on the team still stands; every other page takes the cookie's word.
+  const access = checkAccess(pathname, requiredRole(pathname) === "operator" ? await current(sealed) : sealed);
   if (access === "sign-in") {
     const url = new URL("/sign-in", request.url);
     url.searchParams.set("next", pathname + request.nextUrl.search);

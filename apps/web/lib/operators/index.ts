@@ -1,6 +1,6 @@
 import "server-only";
 
-import { sessionSecret } from "../auth/session";
+import { sessionSecret } from "../auth/secret";
 import { storeOver } from "../data/database";
 import { postgresOperatorTeamStore } from "./postgres";
 import { operatorTeam, type OperatorTeamService } from "./team";

@@ -4,6 +4,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 import type { NewOperatorInvitation, OperatorInvitation, OperatorRole, TeamOperator } from "@livepeer/api-client";
 
+import { joinPath } from "./links";
 import type { InvitationRecord, OperatorRecord, OperatorTeamStore, Person, TeamChange } from "./store";
 
 /** How long an invitation can be used for. */
@@ -127,7 +128,7 @@ export function operatorTeam(store: OperatorTeamStore, secret: string, now: () =
       const token = `${INVITATION_PREFIX}${randomBytes(32).toString("base64url")}`;
       const invitation: InvitationRecord = { id: `inv_${randomBytes(9).toString("base64url")}`, role, tokenHash: hmac(token), invitedBy: by, createdAt: iso(now()), expiresAt: now() + INVITATION_HOURS * 3_600_000, revokedAt: null, acceptedBy: null, acceptedAt: null };
       await store.createInvitation(invitation);
-      return { id: invitation.id, role, invited_by: (await names()).get(by) ?? null, created_at: invitation.createdAt, expires_at: iso(invitation.expiresAt), path: `/join/operator/${token}` };
+      return { id: invitation.id, role, invited_by: (await names()).get(by) ?? null, created_at: invitation.createdAt, expires_at: iso(invitation.expiresAt), path: joinPath(token) };
     },
 
     revoke: (id) => store.revokeInvitation(id, iso(now())),

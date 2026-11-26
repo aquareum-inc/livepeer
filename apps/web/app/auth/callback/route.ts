@@ -1,10 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { seal, unseal } from "@/lib/auth/seal";
+import { admitted } from "@/lib/auth/sign-up";
 import { FLOW_COOKIE, SESSION_COOKIE, authProvider, createSession, sessionSecret } from "@/lib/auth/session";
 import { appCallback, devices, mobileEnabled } from "@/lib/devices";
 import { returnToApp, type NativeFailure, type NativeFlow } from "@/lib/devices/flow";
 import { mobileConsoleEnabled, operatorDevices } from "@/lib/operator-devices";
+import { operators } from "@/lib/operators";
 import { publicOrigin } from "@/lib/public-api/instance";
 
 /** How recent the provider's own sign-in must be for it to enrol a phone for the console. */
@@ -14,6 +16,8 @@ interface Flow {
   state: string;
   codeVerifier: string;
   next: string;
+  /** An invitation to the team the sign-in began from, which lets a new person into a closed instance. */
+  invitation?: string;
   native?: NativeFlow;
 }
 
@@ -23,6 +27,9 @@ interface Flow {
  * session (POST /api/v1/auth/device), so no session ever passes through the browser. A sign-in for the
  * console on a phone ends the same way, with a code for an operator device session
  * (POST /api/v1/auth/operator-device), and only for an operator who signed in at the provider just now.
+ *
+ * Whether the person is an operator is decided here, from the provider's word and the instance's own team
+ * list, and an instance that is closed to new accounts turns away anyone it has never seen (`closed`).
  */
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
@@ -37,7 +44,7 @@ export async function GET(request: NextRequest) {
 
   if (flow?.native && !callback) return finish(new NextResponse("This instance no longer has an app for that platform.", { status: 400 }));
   const fail = (reason: Exclude<NativeFailure, "method">) =>
-    finish(flow?.native && callback ? returnToApp(callback, { error: reason, state: flow.native.state }) : NextResponse.redirect(new URL(`/sign-in?error=${reason === "expired" ? "expired" : "failed"}`, origin)));
+    finish(flow?.native && callback ? returnToApp(callback, { error: reason, state: flow.native.state }) : NextResponse.redirect(new URL(`/sign-in?error=${reason === "expired" || reason === "closed" ? reason : "failed"}`, origin)));
 
   if (!code || !flow || flow.state !== params.get("state")) return fail("expired");
   const redirectUri = new URL("/auth/callback", origin).toString();
@@ -48,6 +55,21 @@ export async function GET(request: NextRequest) {
   } catch {
     return fail("failed");
   }
+
+  // Whether they are an operator is the identity provider's word or this instance's own team list.
+  const standing = await operators().signIn(identity, identity.role === "operator");
+  identity = { ...identity, role: standing.role };
+
+  // An instance that isn't taking new accounts makes no session for someone it has never seen.
+  let allowed;
+  try {
+    allowed = await admitted(identity, standing, flow.invitation ?? null);
+  } catch {
+    return fail("failed");
+  }
+  if (!allowed) return fail("closed");
+  // Someone who is no longer an operator keeps no console on a phone either.
+  if (standing.role === "user") await operatorDevices().revokeUser(identity.userId, "operator role removed");
 
   if (flow.native?.purpose === "operator" && callback) {
     if (!await mobileConsoleEnabled()) return fail("mobile_console_off");
@@ -75,7 +97,7 @@ export async function GET(request: NextRequest) {
 
   const destination = identity.role === "operator" || !flow.next.startsWith("/operator") ? flow.next : "/";
   const response = NextResponse.redirect(new URL(destination, origin));
-  response.cookies.set(SESSION_COOKIE, seal(createSession(identity), sessionSecret()), {
+  response.cookies.set(SESSION_COOKIE, seal(createSession(identity, { ...(standing.source ? { operatorSource: standing.source } : {}), authenticatedAt }), sessionSecret()), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

@@ -7,6 +7,7 @@ import { FLOW_COOKIE, authProvider, sessionSecret } from "@/lib/auth/session";
 import type { SignInMethod } from "@/lib/auth/types";
 import { signInMethods } from "@/lib/auth/methods";
 import { nativeStart, type NativeFlow } from "@/lib/devices/flow";
+import { invitationIn } from "@/lib/operators/links";
 import { publicOrigin } from "@/lib/public-api/instance";
 
 function safeNext(value: string | null): string {
@@ -45,10 +46,14 @@ export async function GET(request: NextRequest) {
   const redirectUri = new URL("/auth/callback", origin).toString();
   const target = await (await authProvider()).authorizationUrl({ redirectUri, state, codeVerifier, method, ...(email ? { email } : {}), ...(forConsole ? { fresh: true } : {}) });
   const response = NextResponse.redirect(new URL(target, origin));
-  const flow: { state: string; codeVerifier: string; next: string; native?: NativeFlow } = {
+  const next = safeNext(params.get("next"));
+  const invitation = invitationIn(next);
+  const flow: { state: string; codeVerifier: string; next: string; invitation?: string; native?: NativeFlow } = {
     state,
     codeVerifier,
-    next: safeNext(params.get("next")),
+    next,
+    // A sign-in that began on an invitation's page carries it, so a closed instance lets its person in.
+    ...(invitation ? { invitation } : {}),
     ...(native ? { native: native.flow } : {}),
   };
   response.cookies.set(FLOW_COOKIE, seal(flow, sessionSecret()), { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 600 });
