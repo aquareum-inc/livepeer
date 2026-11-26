@@ -40,6 +40,10 @@ final class StatusModel {
         }
     }
 
+    /// Whether this operator's role lets them change anything from a phone: every role but a viewer's. Not
+    /// until the instance has said which role it is.
+    var mayChange: Bool { status.map { $0.role != .viewer } ?? false }
+
     /// Whether what needs attention includes the service itself, not only work waiting in a queue.
     static func serviceIsDown(_ attention: [OperatorAttention]) -> Bool {
         attention.contains { $0.kind != .reportsWaiting }

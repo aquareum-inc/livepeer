@@ -24,6 +24,9 @@ final class ConsoleSession {
     private(set) var failure: String?
     /// Counts each unlock, so screens read again when the console reopens.
     private(set) var unlocks = 0
+    /// Counts changes the instance refused because this operator's role no longer allows them, so the console
+    /// asks again what their role is.
+    private(set) var roleRefusals = 0
     /// Where a tapped alert points, until the console has gone there.
     private(set) var arrival: AlertPlace?
     /// Counts alerts that arrived while the console was open, so Status reads itself again and no banner is needed.
@@ -263,6 +266,7 @@ final class ConsoleSession {
             case "not_operator": return "This account doesn't run \(instance)."
             case "mobile_console_off": return "\(instance) doesn't offer its console on phones."
             case "method": return "That way of signing in isn't offered here."
+            case "closed": return "\(instance) isn't taking new accounts."
             default: return "Sign-in didn't finish. Try again."
             }
         case let error as APIError: return error.message
@@ -288,6 +292,9 @@ final class ConsoleSession {
         } else if error.code == "proof_required" {
             // The change was refused and the session stands; the caller says so.
             return
+        } else if error.code == "role" {
+            // Their role on the team changed since Status last answered. The caller says so; Status is asked again.
+            roleRefusals += 1
         } else if error.status == 401 || error.code == "mobile_console_off" || error.code == "operator_session" {
             forget()
             if error.code == "mobile_console_off" {

@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { ConsoleLink } from "@/components/console";
-import { addOperatorAction, assignPlanAction, setUserStatusAction, topUpUserAction } from "@/lib/operator/actions";
+import { assignPlanAction, setUserStatusAction, topUpUserAction } from "@/lib/operator/actions";
 import { operatorApi } from "@/lib/operator/client";
 import { operators } from "@/lib/operators";
 import { userRows } from "@/lib/operator/users";
@@ -32,8 +32,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
       workspaces={memberships.map(({ workspace, role }) => ({ id: workspace.id, name: workspace.name, role, status: workspace.status }))}
       Link={ConsoleLink}
       setStatus={setUserStatusAction.bind(null, user.applicationId, id)}
-      team={onTeam ? { role: onTeam.role, fromProvider: onTeam.via === "provider" } : null}
-      addToTeam={addOperatorAction.bind(null, id)}
+      team={onTeam?.role ?? null}
       assignPlan={assignPlanAction.bind(null, id)}
       topUp={topUpUserAction.bind(null, id)}
       sources={[

@@ -191,3 +191,24 @@ struct FilterChip: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
+
+extension EnvironmentValues {
+    /// Whether the signed-in operator's role lets them change anything from this phone. A viewer's doesn't.
+    /// False until Status has answered, so nothing is offered that the instance would only refuse.
+    @Entry var consoleMayChange = false
+}
+
+/// Where a change would be, for someone whose role on the team only reads.
+struct ViewerLine: View {
+    /// What they can't do here, as it follows "Viewers can't": "suspend or resume an account".
+    let what: String
+    @Environment(\.palette) private var palette
+
+    var body: some View {
+        Text("Viewers can't \(what). An owner can change your role.")
+            .text(.caption)
+            .foregroundStyle(palette.mutedForeground)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}

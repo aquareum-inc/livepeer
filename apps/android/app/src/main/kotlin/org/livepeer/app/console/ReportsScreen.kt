@@ -154,7 +154,9 @@ fun ReportDetailScreen(model: ReportsModel, id: String, onBack: () -> Unit) {
             FactRow("Author", report.author, copies = true)
             ConsoleFormat.millis(report.createdAt)?.let { RowRule(); FactRow("Reported", ConsoleFormat.moment(it)) }
         }
-        if (open) {
+        if (open && !LocalConsoleMayChange.current) {
+            ViewerLine("decide a report")
+        } else if (open) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SecondaryButton("Keep it up") {
                     change = ConsoleChange("Keep ${report.characterName} up?", "It stays on $instance for everyone, and this report is closed.", "Keep it up", destructive = false) {

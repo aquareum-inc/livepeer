@@ -50,6 +50,7 @@ import org.livepeer.app.design.style
 import org.livepeer.app.generated.OperatorAttention
 import org.livepeer.app.generated.OperatorAttentionKind
 import org.livepeer.app.generated.OperatorAttentionOpens
+import org.livepeer.app.generated.OperatorRole
 import org.livepeer.app.generated.OperatorStatus
 import org.livepeer.app.generated.OperatorStatusService
 import org.livepeer.app.generated.OperatorStatusToday
@@ -276,6 +277,7 @@ private fun SignOut(signOut: suspend () -> Unit, alertsOn: Boolean) {
 /** Stands in while the first answer is on its way: the same rows, with nothing to read in them. */
 private val PLACEHOLDER = OperatorStatus(
     checkedAt = "",
+    role = OperatorRole.Viewer,
     attention = emptyList(),
     today = OperatorStatusToday(activeUsers = 0.0, jobs = 0.0, failed = 0.0, revenueUsd = 0.0, wholesaleUsd = 0.0, marginUsd = 0.0, revenueEstimated = false),
     service = OperatorStatusService(engineReady = true, discoveryFresh = true, runningJobs = 0.0, engineVersion = "0.0.0"),

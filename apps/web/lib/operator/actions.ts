@@ -16,7 +16,6 @@ import { TEAM_REFUSALS, teamManagement } from "../operators/manage";
 import { capabilityRows } from "./capability-rows";
 import { operatorApi, requireOperator } from "./client";
 import { currentSettings, resetSettings, saveSettings } from "./settings";
-import { userRows } from "./users";
 
 const usd = (amount: number) => ({ amount: amount.toFixed(2), currency: "USD" });
 
@@ -244,18 +243,6 @@ export async function revokeInvitationAction(id: string): Promise<TeamResult> {
   await teamManagement().revokeInvitation(actorOf(standing.session), id);
   revalidatePath("/operator/team");
   return teamNow(standing.role);
-}
-
-/** Puts someone who already has an account on the team. Who they are is read here, not taken from the page. */
-export async function addOperatorAction(userId: string, role: OperatorRole): Promise<{ ok: true } | { ok: false; error: string }> {
-  const standing = await requireOperator("manage_team");
-  if (!OPERATOR_ROLES.includes(role)) return { ok: false, error: "Choose a role." };
-  const { people, unlinked } = await userRows(await operatorApi("manage_team"));
-  const user = [...people, ...unlinked].find((row) => row.id === userId);
-  if (!user) return { ok: false, error: "That person no longer has an account here." };
-  await teamManagement().add(actorOf(standing.session), { userId: user.id, name: user.name, email: user.email }, role);
-  revalidatePath("/operator", "layout");
-  return { ok: true };
 }
 
 export async function setOperatorRoleAction(userId: string, role: OperatorRole): Promise<TeamResult> {

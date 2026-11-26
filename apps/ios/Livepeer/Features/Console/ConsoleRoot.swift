@@ -202,6 +202,11 @@ struct ConsoleTabs: View {
                 }
             }
         }
+        // What the operator's role allows reaches every page from the one answer Status already has.
+        .environment(\.consoleMayChange, models?.status.mayChange ?? false)
+        .onChange(of: session.roleRefusals) {
+            Task { await models?.status.load() }
+        }
         .onAppear {
             guard models == nil else { return }
             let session = session

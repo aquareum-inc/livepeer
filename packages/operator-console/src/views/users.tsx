@@ -1,7 +1,7 @@
 "use client";
 
-import { OPERATOR_ROLES, OPERATOR_ROLE_COPY, type DataSource, type OperatorRole, type Plan, type UsageEntry } from "@livepeer/api-client";
-import { Button, Chip, Segmented, Sheet } from "@livepeer/ui";
+import { OPERATOR_ROLE_COPY, type DataSource, type OperatorRole, type Plan, type UsageEntry } from "@livepeer/api-client";
+import { Button, Chip, Sheet } from "@livepeer/ui";
 import { ArrowLeft } from "lucide-react";
 import { useState, type ComponentType, type ReactNode } from "react";
 
@@ -75,26 +75,22 @@ export interface UserDetailProps {
   workspaces: Array<{ id: string; name: string; role: string; status: string }>;
   Link: LinkType;
   setStatus: (status: "active" | "paused") => Promise<void>;
-  /** The person's place on the team that runs the instance, or null if they aren't on it. */
-  team: { role: OperatorRole; fromProvider: boolean } | null;
-  /** Puts the person on the team with a role. Owners only. */
-  addToTeam: (role: OperatorRole) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** The person's role on the team that runs the instance, or null for the many who aren't on it. */
+  team: OperatorRole | null;
   assignPlan: (planId: string | null) => Promise<void>;
   topUp: (amountUsd: number) => Promise<void>;
   sources: ReadonlyArray<{ name: string; source: DataSource }>;
 }
 
 const TOP_UPS = [10, 25, 50, 100];
-const TEAM_ROLES = OPERATOR_ROLES.map((role) => ({ value: role, label: OPERATOR_ROLE_COPY[role].name }));
 
-export function UserDetailView({ user, plans, plansSupported, usage, keys, workspaces, Link, setStatus, team, addToTeam, assignPlan, topUp, sources }: UserDetailProps) {
+export function UserDetailView({ user, plans, plansSupported, usage, keys, workspaces, Link, setStatus, team, assignPlan, topUp, sources }: UserDetailProps) {
   const can = useOperatorCan();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [suspending, setSuspending] = useState(false);
   const [adding, setAdding] = useState(false);
   const [amount, setAmount] = useState(25);
-  const [teamRole, setTeamRole] = useState<OperatorRole>("member");
   const paused = user.status === "paused";
 
   const run = async (name: string, action: () => Promise<void>) => {
@@ -129,6 +125,13 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
         <ArrowLeft className="size-3.5" />Users
       </Link>
       {error ? <p role="alert" className="mb-4 text-[13px] text-destructive">{error}</p> : null}
+      {/* Said only for the few it is true of: most people here are not on the team. */}
+      {team ? (
+        <p className="mb-4 text-[13px] text-muted-foreground">
+          Helps run this instance as {team === "owner" ? "an owner" : `a ${OPERATOR_ROLE_COPY[team].name.toLowerCase()}`}.{" "}
+          <Link href="/operator/team" className="text-foreground underline underline-offset-2">Team</Link>
+        </p>
+      ) : null}
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Budget" value={user.budget === null ? "—" : usd(user.budget)} hint="allocation granted" />
@@ -137,54 +140,20 @@ export function UserDetailView({ user, plans, plansSupported, usage, keys, works
         <Stat label="Status" value={<Status value={user.status} />} hint={`last seen ${ago(user.lastSeen)}`} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Panel title="Plan" description={plansSupported ? "Assigning a plan takes effect on the user's next billing period." : undefined}>
-          {plansSupported ? (
-            <div className="flex flex-wrap gap-1.5 rounded-card border border-hairline bg-card p-3">
-              <Chip selected={user.plan === null} aria-pressed={user.plan === null} disabled={busy !== null || !can("adjust_account")} onClick={() => run("plan", () => assignPlan(null))}>No plan</Chip>
-              {plans.map((plan) => (
-                <Chip key={plan.id} selected={user.plan === plan.name} aria-pressed={user.plan === plan.name} disabled={busy !== null || !can("adjust_account")} onClick={() => run("plan", () => assignPlan(plan.id))}>
-                  {plan.name}
-                </Chip>
-              ))}
-            </div>
-          ) : (
-            <GapNote>The connected provider doesn't support plans. This user pays for what they use from their allocation.</GapNote>
-          )}
-        </Panel>
-        <Panel title="Team" description="The people on the team run this instance from this console.">
-          <div className="rounded-card border border-hairline bg-card p-3 text-[13px]">
-            {team ? (
-              <p>
-                {user.name} is {team.role === "owner" ? "an owner" : `a ${team.role}`} on the team{team.fromProvider ? ", by your identity provider's word" : ""}.{" "}
-                <Link href="/operator/team" className="text-foreground underline underline-offset-2">See the team</Link>
-              </p>
-            ) : can("manage_team") ? (
-              <div className="flex flex-col gap-3">
-                <div>
-                  <Segmented label="Role on the team" options={TEAM_ROLES} value={teamRole} onValueChange={setTeamRole} />
-                  <p className="mt-2 text-[12px] text-muted-foreground">{OPERATOR_ROLE_COPY[teamRole].can}</p>
-                </div>
-                <Button
-                  size="sm"
-                  className="self-start"
-                  disabled={busy !== null}
-                  onClick={() =>
-                    run("team", async () => {
-                      const result = await addToTeam(teamRole);
-                      if (!result.ok) throw new Error(result.error);
-                    })
-                  }
-                >
-                  {busy === "team" ? "Adding…" : "Add to the team"}
-                </Button>
-              </div>
-            ) : (
-              <p className="text-muted-foreground">Not on the team. An owner can add them.</p>
-            )}
+      <Panel title="Plan" description={plansSupported ? "Assigning a plan takes effect on the user's next billing period." : undefined}>
+        {plansSupported ? (
+          <div className="flex flex-wrap gap-1.5 rounded-card border border-hairline bg-card p-3">
+            <Chip selected={user.plan === null} aria-pressed={user.plan === null} disabled={busy !== null || !can("adjust_account")} onClick={() => run("plan", () => assignPlan(null))}>No plan</Chip>
+            {plans.map((plan) => (
+              <Chip key={plan.id} selected={user.plan === plan.name} aria-pressed={user.plan === plan.name} disabled={busy !== null || !can("adjust_account")} onClick={() => run("plan", () => assignPlan(plan.id))}>
+                {plan.name}
+              </Chip>
+            ))}
           </div>
-        </Panel>
-      </div>
+        ) : (
+          <GapNote>The connected provider doesn't support plans. This user pays for what they use from their allocation.</GapNote>
+        )}
+      </Panel>
 
       {workspaces.length > 0 ? (
         <Panel title="Workspaces" description="Shared accounts this person belongs to. Suspending the person stops them in all of them.">

@@ -457,6 +457,20 @@ struct ConsoleTests {
         status.attention = []
         #expect(ConsoleTabs.waitingReports(status) == 0)
     }
+
+    @Test func aViewerIsOfferedNoChangesAndNobodyIsBeforeTheirRoleIsKnown() async throws {
+        let answer = try fixture("operator_status", as: OperatorStatus.self)
+        #expect(answer.role == .owner)
+        for (role, may) in [(OperatorRole.owner, true), (.member, true), (.viewer, false)] {
+            var status = answer
+            status.role = role
+            let model = StatusModel { status }
+            // Nothing is offered until the instance has said which role this is.
+            #expect(!model.mayChange)
+            await model.load()
+            #expect(model.mayChange == may)
+        }
+    }
 }
 
 /// Answers the console transport's requests in tests, so nothing leaves the machine.

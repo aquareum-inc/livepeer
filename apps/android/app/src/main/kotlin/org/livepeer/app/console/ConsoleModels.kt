@@ -14,6 +14,7 @@ import org.livepeer.app.generated.KnownActor
 import org.livepeer.app.generated.KnownActorAllocationStatus
 import org.livepeer.app.generated.OperatorAttention
 import org.livepeer.app.generated.OperatorAttentionKind
+import org.livepeer.app.generated.OperatorRole
 import org.livepeer.app.generated.OperatorStatus
 
 /**
@@ -63,6 +64,12 @@ data class StatusState(
     val trouble: Trouble? = null,
     val loading: Boolean = false,
 ) {
+    /**
+     * Whether this operator's role lets them change anything from a phone: every role but a viewer's. Not
+     * until the instance has said which role it is.
+     */
+    val mayChange: Boolean get() = status?.let { it.role != OperatorRole.Viewer } ?: false
+
     sealed interface Trouble {
         /** The instance didn't answer at all. */
         data object Unreachable : Trouble
