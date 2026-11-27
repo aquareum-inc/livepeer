@@ -8,6 +8,7 @@ import { getSession } from "./auth/session";
 import { env } from "./env";
 import { instance } from "./instance";
 import { describeApps } from "./models";
+import { uploadLimitBytes } from "./upload-limit";
 
 /**
  * The API client for the signed-in user. Discovery is public, so it is read without a
@@ -41,6 +42,7 @@ export async function apiFor(user: { id: string; name: string } | null, scope: "
   const config = await instance();
   const url = config.engine?.url ?? env("ENGINE_URL");
   const mockOnly = env("MOCK_ONLY");
+  const uploadLimit = uploadLimitBytes();
   return createApiClient({
     ...(url ? { engine: { url } } : {}),
     describeApps: async (apps) => (await describeApps(apps)).data,
@@ -49,6 +51,7 @@ export async function apiFor(user: { id: string; name: string } | null, scope: "
     ...(user ? { user } : {}),
     workspaceId,
     viaApiKey,
+    ...(uploadLimit ? { uploadLimitBytes: uploadLimit } : {}),
     pricing: {
       creditsPerUsd: config.pricing?.creditsPerUsd ?? 100,
       default: config.pricing?.markup?.default ?? 1.3,

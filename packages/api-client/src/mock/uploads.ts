@@ -21,6 +21,20 @@ export const UPLOAD_RULES = {
   video: { types: ["video/mp4", "video/quicktime", "video/webm"], maxBytes: 200 * MEGABYTE, say: "A video can be up to 200 MB. Use an MP4, MOV or WebM." },
 } as const;
 
+type Rules = { types: readonly string[]; maxBytes: number; say: string };
+
+/**
+ * The rules for a kind of file on this host. A host that takes smaller requests than the app allows says so
+ * (`limitBytes`), and the smaller of the two is the rule: the file would be turned away on its way in, with
+ * no reason given, if the ticket promised more.
+ */
+export function uploadRules(kind: UploadRequest["kind"], limitBytes?: number): Rules {
+  const rules = UPLOAD_RULES[kind];
+  if (limitBytes === undefined || limitBytes >= rules.maxBytes) return rules;
+  const megabytes = Math.floor((limitBytes / MEGABYTE) * 10) / 10;
+  return { types: rules.types, maxBytes: limitBytes, say: rules.say.replace(/up to \d+ MB/, `up to ${megabytes} MB here`) };
+}
+
 /** How long a ticket is good for. */
 const TICKET_MS = 15 * 60_000;
 /** How many pictures the mock keeps to show. Older ones stay in the library and fall back to their artwork. */
@@ -47,10 +61,10 @@ function titleFor(name: string, kind: UploadRequest["kind"]): string {
 }
 
 /** Checks a file before it is sent and answers with where to send it. */
-export function requestStoredUpload(request: UploadRequest, owner: Owner | null = null): UploadTicket {
-  const rules = UPLOAD_RULES[request.kind];
+export function requestStoredUpload(request: UploadRequest, owner: Owner | null = null, limitBytes?: number): UploadTicket {
+  const rules = uploadRules(request.kind, limitBytes);
   const type = request.content_type.toLowerCase().split(";")[0]?.trim() ?? "";
-  if (!(rules.types as readonly string[]).includes(type)) throw new UploadRefused("unsupported_type", rules.say);
+  if (!rules.types.includes(type)) throw new UploadRefused("unsupported_type", rules.say);
   if (!Number.isFinite(request.size_bytes) || request.size_bytes <= 0) throw new UploadRefused("empty", "That file is empty.");
   if (request.size_bytes > rules.maxBytes) throw new UploadRefused("too_large", rules.say);
   const now = Date.now();
@@ -64,12 +78,13 @@ export function requestStoredUpload(request: UploadRequest, owner: Owner | null 
  * Takes the file a ticket was given for and adds it to the library. Null when the ticket is unknown, used or
  * out of date. The mock keeps a picture so it can be shown; of a video it records only that it arrived.
  */
-export function receiveStoredUpload(id: string, bytes: Uint8Array): MediaItem | null {
+export function receiveStoredUpload(id: string, bytes: Uint8Array, limitBytes?: number): MediaItem | null {
   const ticket = tickets.get(id);
   if (!ticket || ticket.expiresAt < Date.now()) return null;
   const { request } = ticket;
   if (bytes.byteLength === 0) throw new UploadRefused("empty", "That file is empty.");
-  if (bytes.byteLength > UPLOAD_RULES[request.kind].maxBytes) throw new UploadRefused("too_large", UPLOAD_RULES[request.kind].say);
+  const rules = uploadRules(request.kind, limitBytes);
+  if (bytes.byteLength > rules.maxBytes) throw new UploadRefused("too_large", rules.say);
   tickets.delete(id);
 
   const mediaId = `med_${token()}`;

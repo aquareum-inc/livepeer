@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { createPool, database as queries, schemaStatus, type Database, type Pool, type SchemaStatus } from "@livepeer/db";
 import { openEmbedded, type Embedded } from "@livepeer/db/embedded";
+import { attachDatabasePool } from "@vercel/functions";
 
 import { env } from "../env";
 
@@ -26,6 +27,9 @@ function connection(): { pool: Pool; db: Database } | null {
   if (held.livepeerDatabase?.url !== url) {
     void held.livepeerDatabase?.pool.end();
     const pool = createPool(url);
+    // On Vercel a function is suspended between requests, and a connection left idle then is one the
+    // database goes on holding. This has the host close idle connections first. Anywhere else it does nothing.
+    attachDatabasePool(pool);
     held.livepeerDatabase = { url, pool, db: queries(pool) };
   }
   return held.livepeerDatabase;

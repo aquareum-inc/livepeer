@@ -101,7 +101,7 @@ export * from "./operator";
 export * from "./workspaces";
 export type { CharacterFilter } from "./mock/characters";
 export type { MediaFilter } from "./mock/library";
-export { UPLOAD_RULES, UploadRefused } from "./mock/uploads";
+export { UPLOAD_RULES, UploadRefused, uploadRules } from "./mock/uploads";
 
 /** A result plus where it came from, so dev mode can label each screen live or mocked. */
 export interface Sourced<T> {
@@ -281,6 +281,11 @@ export interface ApiClientOptions {
    * listing and refused when asked for by name. Defaults to everything on the network.
    */
   offers?: (app: string) => boolean;
+  /**
+   * The largest file the host lets through to the instance, in bytes, when that is less than the instance
+   * allows. A larger file is refused when the upload is asked for, with the limit in the answer.
+   */
+  uploadLimitBytes?: number;
 }
 
 /** A capability the instance doesn't offer was asked for by name. */
@@ -598,11 +603,11 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     },
     async requestUpload(request) {
       await latency(60, 140);
-      return mock(requestStoredUpload(request, owner));
+      return mock(requestStoredUpload(request, owner, options.uploadLimitBytes));
     },
     async receiveUpload(id, bytes) {
       await latency(120, 260);
-      return mock(receiveStoredUpload(id, bytes));
+      return mock(receiveStoredUpload(id, bytes, options.uploadLimitBytes));
     },
     async readMediaFile(id) {
       return mock(readStoredMediaFile(id));

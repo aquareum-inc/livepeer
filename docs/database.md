@@ -1,7 +1,8 @@
 # A Postgres database for the instance: plan
 
 Status: **approved on 24 November 2026 with every recommendation in section 0 as written. Slices 1 to 6 are
-built. Slice 7's import was dropped by the project owner on 24 November 2026. Slice 8 is not built.**
+built. Slice 7's import was dropped by the project owner on 24 November 2026. Slice 8 is built except for
+its last step, the real deployment, which waits for the owner's Vercel and Neon accounts.**
 
 - **Slice 7: no import.** Testing found that the Compose bundle could never write the `DATA_DIR` files (see
   "Found while testing the bundle" in section 10), so no bundle has sessions, reports or alerts state to
@@ -585,6 +586,32 @@ no session files to import; the import matters for instances run some other way 
 
 The image also left out the site's own static files (`apps/web/public`), so the default logo was a 404 in
 the bundle. The Dockerfile now copies them.
+
+**Slice 8 as built (27 November 2026), without the real deployment.** Nothing was created in a Vercel or
+Neon account. What is in: `deploy/templates/vercel/` (a README and two config files), `UPLOAD_LIMIT_MB`,
+`attachDatabasePool`, and questions Q26 and Q27 in `docs/engine-requests.md`. Differences from sections 4.3,
+6, 7 and 8:
+
+- `vercel.json` is not committed in `apps/web`. An operator copies one of the template's two files there in
+  their fork: `vercel.json` with the every-minute cron, or `vercel.hobby.json` without it, because Vercel
+  refuses to deploy a Hobby project whose cron runs more than once a day. One committed file would break
+  one plan or the other.
+- The build command is `pnpm -w run db:migrate && pnpm run build`, since Vercel runs it in `apps/web`.
+- The declared body limit (8.1) is an environment variable, `UPLOAD_LIMIT_MB`, not a field of the instance
+  config: it is a fact about the host, like `DATABASE_URL`, and nothing the console should change. It caps
+  pictures and videos alike, and the refusal says "up to 4 MB here". The web composer and both phone apps
+  already show that answer, so none of them changed.
+- No path fixes were needed (section 5). With no config file and no `.env` the app finds nothing above its
+  working directory and runs from `INSTANCE_CONFIG_JSON` or the built-in preset; this was run locally from
+  the built server with a Postgres and no `DATA_DIR`, and is on the template's list to confirm on Vercel.
+- Preview deployments get their own database branch only if the operator turns that on when connecting
+  Neon's Marketplace integration (4.3 assumed it was automatic). The template says so, since a preview
+  build otherwise migrates the production database.
+- Checked on 27 November 2026 against Vercel's documentation: the 4.5 MB body limit stands (a 20 MB limit
+  is in beta on larger Pro functions); functions run 300 seconds by default and up to 800 on Pro.
+
+Still to do, with the owner: create the Vercel project and the Neon database, deploy, and walk through the
+template's "Check on the first deployment" list.
 
 Slices 3, 4 and 6 are independent of each other once 2 is in; 5 is independent of all three.
 

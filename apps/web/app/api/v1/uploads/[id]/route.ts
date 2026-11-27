@@ -1,17 +1,15 @@
-import { UPLOAD_RULES } from "@livepeer/api-client";
+import { uploadRules } from "@livepeer/api-client";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { instance } from "@/lib/instance";
 import { authenticate, type Caller } from "@/lib/public-api/auth";
 import { requestOrigin } from "@/lib/public-api/instance";
 import { ApiError, uploadError } from "@/lib/public-api/operations";
+import { uploadLimitBytes } from "@/lib/upload-limit";
 
 export const dynamic = "force-dynamic";
 
 const error = (status: number, message: string, code?: string) => NextResponse.json({ error: { status, message, ...(code ? { code } : {}) } }, { status });
-
-/** The largest file any ticket allows, so an oversized body is refused before it is read. */
-const LARGEST = Math.max(UPLOAD_RULES.image.maxBytes, UPLOAD_RULES.video.maxBytes);
 
 /**
  * Takes the file a `request_upload` ticket was given for and answers with the library item. The body is
@@ -32,8 +30,10 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
   // A browser sends its session by cookie, so the file must come from this instance's own pages.
   if (caller.via === "browser" && request.headers.get("origin") !== requestOrigin(request)) return error(403, "Send the file from this site.");
 
+  // The largest file any ticket allows here, so an oversized body is refused before it is read.
+  const largest = uploadRules("video", uploadLimitBytes());
   const declared = Number(request.headers.get("content-length") ?? 0);
-  if (declared > LARGEST) return error(413, UPLOAD_RULES.video.say, "too_large");
+  if (declared > largest.maxBytes) return error(413, largest.say, "too_large");
 
   try {
     const bytes = new Uint8Array(await request.arrayBuffer());
