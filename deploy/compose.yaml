@@ -27,7 +27,8 @@ services:
       INSTANCE_CONFIG: /config/instance.config.json
       DATABASE_URL: *database-url
       # Named here because .env carries DATA_DIR empty, which would otherwise replace the image's own value
-      # and leave the app nowhere it is allowed to write.
+      # and leave the app nowhere it is allowed to write. Uploaded files are kept here, in the app-data
+      # volume, unless .env names object storage (S3_BUCKET and the other S3_* values).
       DATA_DIR: /data
     volumes:
       - ${INSTANCE_DIR:-..}/instance.config.json:/config/instance.config.json:ro

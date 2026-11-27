@@ -58,7 +58,7 @@ describe("conversations (mock agent)", () => {
 
   it("starts a shot from an uploaded picture", async () => {
     const storage = memoryStorage();
-    const client = createApiClient({ env: { MOCK_ONLY: "1" }, media: createMediaStore({ records: memoryUploadRecords(), storage }) });
+    const client = createApiClient({ env: { MOCK_ONLY: "1" }, user: { id: "usr_demo_adam", name: "Adam Soffer" }, media: createMediaStore({ records: memoryUploadRecords(), storage }) });
     const ticket = (await client.requestUpload({ kind: "image", name: "tide-pool.jpg", content_type: "image/jpeg", size_bytes: 3 })).data;
     storage.put(ticket.url, new Uint8Array([1, 2, 3]), "image/jpeg");
     const picture = (await client.completeUpload(ticket.id)).data;

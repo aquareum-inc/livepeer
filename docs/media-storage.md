@@ -85,7 +85,7 @@ method and a few minutes.
 | `pnpm dev`, a first look | Embedded Postgres in `DATA_DIR` | Disk, in `DATA_DIR/media` |
 | `pnpm test`, CI | Postgres in memory | Memory driver for the rules; the disk driver on a temporary directory; the S3 driver against signatures worked out by hand, and against a real server when `S3_TEST_ENDPOINT` is set |
 | `MOCK_ONLY=1` | Unchanged by it | Unchanged by it (M9) |
-| Compose bundle | Its own Postgres | Its own storage service (section 9) |
+| Compose bundle | Its own Postgres | Disk, in the `app-data` volume, until its storage service is chosen (section 9); `S3_*` in `.env` to use object storage now |
 | Fly, a VPS | `DATABASE_URL` | `S3_*`, or disk on a volume for one machine |
 | Vercel | `DATABASE_URL` (Neon) | `S3_*` (R2, S3, B2). Required: there is no disk to keep files on. |
 
@@ -174,15 +174,29 @@ which every hosted provider is.
 
 ## 9. The Compose bundle
 
-The brief asked for a MinIO service. **MinIO can no longer be that**: on 27 November 2026 its official
-images do not pull from Docker Hub or Quay, and Homebrew marks the formula deprecated "because it has an
-archived upstream repository". The bundle needs a maintained S3-compatible server with an official image
-instead; because of M1 the choice touches only `deploy/compose.yaml`. See section 12 for what was decided
-and what was run.
+The brief asked for a MinIO service. **MinIO can no longer be that.** On 27 November 2026 its official
+images do not pull from Docker Hub ("repository does not exist") or Quay ("unauthorized"), and Homebrew
+marks the formula deprecated "because it has an archived upstream repository", to be disabled on
+17 February 2027. Builds of it by third parties exist; depending on one means depending on an abandoned
+project and on whoever rebuilds it.
+
+So the bundle needs a different S3-compatible server with an image from its own maintainers. Because of M1
+that choice touches only `deploy/compose.yaml`. The candidates, in the order I would pick them:
+
+1. **Garage** (`dxflrs/garage`): small, built for self-hosting, maintained. It needs a one-shot step to
+   lay out its single node and create the bucket and key, which can be a second service from the same image.
+2. **SeaweedFS** (`chrislusf/seaweedfs`): one command to start with S3 on, but a larger system than one
+   bucket needs.
+3. A third-party build of MinIO, if the project owner prefers to keep MinIO for now.
+
+**This is the project owner's call and has been asked.** Until it is made, the bundle keeps files on the
+`app-data` volume through the disk driver: it works with nothing external, files survive restarts and
+upgrades, and an operator who wants object storage sets the `S3_*` values in `.env`. What the bundle does
+not yet do is exercise the S3 path by itself.
 
 Whatever the server, the shape is the one the database has: the bundle's own service unless `.env` names
-another (`S3_ENDPOINT`), a secret `./livepeer setup` generates, a volume, no public port except the one
-browsers need to send files to, and `S3_PUBLIC_ENDPOINT` set to the address your users reach it at.
+another (`S3_ENDPOINT`), a secret `./livepeer setup` generates, a volume, no published port except the one
+browsers send files to, and `S3_PUBLIC_ENDPOINT` set to the address your users reach it at.
 
 ## 10. Generated media
 
@@ -201,8 +215,49 @@ the instance can now hand the engine a short-lived signed GET address for an inp
 | 2 | `packages/storage`: the interface, the S3, disk and memory drivers, tests. |
 | 3 | The media store, the `media_files` table and migration, the API client functions, the operations, the routes, the web client, health and `doctor`. |
 | 4 | iOS and Android. |
-| 5 | The Compose service, `.env.example`, `deploy/README.md`, the CLI's generated secret. |
+| 5 | `.env.example`, `deploy/README.md`, the Fly template, `doctor`; the Compose service and the CLI's generated secret once the server is chosen (section 9). |
 
 ## 12. Not built, not verified
 
-Filled in as the slices land; the pull request repeats it.
+Built: slices 1 to 4, and of slice 5 the environment variables, `deploy/README.md`, the Fly template and
+`doctor`.
+
+**Not built**
+
+- **The Compose bundle's storage service** (section 9): waiting on which server replaces MinIO. The CLI
+  therefore generates no storage secret yet.
+- **Storing generated media** (section 10): nothing real is generated yet.
+- **Range requests on the disk driver's read route.** A browser seeking in a large video needs them; no
+  screen plays an uploaded video today. Object storage serves ranges itself.
+- **Looking inside a file.** The media type is what the client declared and storage enforced; the bytes are
+  not inspected. A file is only ever served back to its own library, from the storage address, with its
+  declared type.
+- **Uploads with an API key of a personal account.** A file needs a library to go to: a signed-in person's
+  (browser or phone) or a workspace's (its key). User API keys are still mocked and name no person, so such
+  a key is answered 403 `account_required` rather than filling a shared default library. It follows once
+  keys are real.
+- **A size cap for a host with a disk and a body limit** (`UPLOAD_LIMIT_MB`, slice 8 of
+  `docs/database.md`): where it plugs in is in this work's hand-over note.
+
+**Not verified**
+
+- **The S3 driver against a real server.** Its signing is checked against the worked example in AWS's
+  documentation, and the driver against a stand-in for the HTTP answers, but no S3-compatible server was run:
+  MinIO could not be had, and running a substitute was not approved. In particular, that a server refuses a
+  PUT whose length differs from the signed one is true by the algorithm and untested in practice. The test
+  for all of this is written and skipped (`packages/storage/src/s3.test.ts`); it runs when
+  `S3_TEST_ENDPOINT`, `S3_TEST_BUCKET`, `S3_TEST_ACCESS_KEY_ID` and `S3_TEST_SECRET_ACCESS_KEY` are set.
+- **R2, AWS S3 and B2 themselves**, and the CORS rule in `deploy/README.md` against each: no bucket was
+  created in anyone's account.
+- **The phone apps uploading for real.** Both build and their unit tests pass (iOS 70, Android 89), and the
+  address handling is tested. Picking a photo in the simulator and the emulator and watching it arrive was
+  not done.
+- **One stall.** The first read of a 30 MB file through the disk route, piped into another program, stalled
+  once in development and never again in a dozen tries, before and after the read was changed to a
+  file-backed blob. Noted in case it is seen again.
+
+**Verified by running it:** with the disk driver in `pnpm dev` (mock-only): a ticket, a 30 MB upload,
+completion, the same answer on a second completion, the redirect and the bytes read back identical;
+refusals for a wrong length, a wrong type, a changed address, an unsigned read and completion before the
+file arrived; deletion removing the file; an upload from the web composer appearing in the library with its
+picture. The same 30 MB round trip inside the built Docker image, with files landing in `/data/media`.

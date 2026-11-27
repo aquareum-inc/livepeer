@@ -4,7 +4,7 @@ import type { UploadRequest, UploadTicket } from "./types";
 
 /** Why a file was turned away, in words for the person who chose it. */
 export class UploadRefused extends Error {
-  readonly code: "unsupported_type" | "too_large" | "empty" | "not_received" | "uploads_unavailable";
+  readonly code: "unsupported_type" | "too_large" | "empty" | "not_received" | "uploads_unavailable" | "account_required";
 
   constructor(code: UploadRefused["code"], message: string) {
     super(message);

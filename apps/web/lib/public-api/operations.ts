@@ -129,11 +129,11 @@ export interface Operation {
   run: (context: Context, input: Record<string, unknown>) => Promise<unknown>;
 }
 
-const REFUSED: Record<string, number> = { too_large: 413, unsupported_type: 415, not_received: 409, uploads_unavailable: 503 };
+const REFUSED: Record<string, number> = { too_large: 413, unsupported_type: 415, not_received: 409, uploads_unavailable: 503, account_required: 403 };
 
 /**
- * A refused file as the API answers it: too large is 413, the wrong kind 415, not arrived 409, and 503 when
- * the instance has nowhere to keep files. The refusal is told by its name, not its class: this file is also
+ * A refused file as the API answers it: too large is 413, the wrong kind 415, not arrived 409, 403 for a
+ * caller with no library of their own, and 503 when the instance has nowhere to keep files. The refusal is told by its name, not its class: this file is also
  * read by the client generator, which imports only types.
  */
 function uploadError(cause: unknown): unknown {

@@ -12,7 +12,7 @@ import {
 } from "./mock/conversations";
 import { memoryStorage } from "@livepeer/storage/memory";
 
-import { createMediaStore, memoryUploadRecords, type MediaStore, type StoredMedia } from "./media";
+import { UploadRefused, createMediaStore, memoryUploadRecords, type MediaStore, type StoredMedia } from "./media";
 import { addGenerationToLibrary, addMediaToLibrary, deleteStoredMedia, listStoredMedia, matchesMedia, type MediaFilter } from "./mock/library";
 import { shared } from "./mock/shared";
 import {
@@ -366,7 +366,12 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   /** Chats in a workspace are each member's own. */
   const home: ConversationHome | null = workspaceId ? { scope: workspaceId, by: user.name, userId: user.id } : null;
   const media = options.media ?? shared("media.store", () => createMediaStore({ records: memoryUploadRecords(), storage: memoryStorage() }));
-  const mediaAccount = { userId: user.id, workspaceId };
+  /**
+   * Whose library a file goes to: the person's own, or the workspace's. A caller with neither (a guest, or an
+   * API key of a personal account, which no person stands behind yet) has no library of files: it is shown
+   * none and can add none, so nobody's files are ever the default account's.
+   */
+  const mediaAccount = options.user || workspaceId ? { userId: user.id, workspaceId } : null;
   /** A stored file as a library item. `by` is who added it, by name, in a workspace's library. */
   const uploaded = (file: StoredMedia, by: string | null): MediaItem => ({
     id: file.id,
@@ -389,7 +394,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   const memberNames = async (): Promise<Map<string, string>> => (workspaceId ? new Map((await provider.workspaces.listMembers(workspaceId)).map((entry) => [entry.user_id, entry.name])) : new Map());
   /** The account's uploads, newest first, as library items. */
   const uploads = async (): Promise<MediaItem[]> => {
-    const files = await media.list(mediaAccount);
+    const files = mediaAccount ? await media.list(mediaAccount) : [];
     if (files.length === 0) return [];
     const names = await memberNames();
     return files.map((file) => uploaded(file, names.get(file.added_by) ?? null));
@@ -640,15 +645,16 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       return mock([...kept, ...listStoredMedia(filter, workspaceId)].sort((a, b) => b.created_at.localeCompare(a.created_at)));
     },
     async deleteMedia(id) {
-      if (await media.remove(mediaAccount, id)) return mock(true);
+      if (mediaAccount && (await media.remove(mediaAccount, id))) return mock(true);
       await latency(80, 160);
       return mock(deleteStoredMedia(id, workspaceId));
     },
     async requestUpload(request) {
+      if (!mediaAccount) throw new UploadRefused("account_required", "Sign in to add a file. An API key of a personal account can't add one yet.");
       return mock(await media.requestUpload(mediaAccount, request));
     },
     async completeUpload(id) {
-      const file = await media.completeUpload(mediaAccount, id);
+      const file = mediaAccount ? await media.completeUpload(mediaAccount, id) : null;
       return mock(file ? uploaded(file, workspaceId ? user.name : null) : null);
     },
     async getMediaUrl(id) {
@@ -757,7 +763,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       await latency(300, 500);
       await provider.identity.deleteUser(user.id);
       // Their own files go with them. What they added to a workspace is the workspace's.
-      await media.forget(user.id);
+      if (options.user) await media.forget(user.id);
       return mock(true);
     },
     async getPreferences() {

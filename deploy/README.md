@@ -34,7 +34,7 @@ Everything the instance keeps is in the database: users' and operators' phone se
 log, reports, blocks and takedowns of shared characters, what alerts have noticed and said, and what the
 console's Settings and Capabilities pages change. The console never writes `instance.config.json`, which
 stays mounted read-only: what it saves is laid over that file, and "Reset to deployed config" goes back to
-it. The `app-data` volume is no longer written to.
+it. The `app-data` volume holds uploaded files, and only until you set `S3_BUCKET` (see File storage).
 
 Names and emails are never stored in the clear: where one has to be kept it is encrypted with
 `SESSION_SECRET`. Keep that secret with your backups, or a restored database shows people by their ids only

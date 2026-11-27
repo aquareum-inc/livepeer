@@ -161,6 +161,22 @@ describe("uploads: straight to storage, then confirmed", () => {
     expect(storage.keys()).toEqual([`uploads/${ticket.id}`]);
   });
 
+  it("gives a caller with no person and no workspace behind it no files, and takes none from it", async () => {
+    const { media, storage } = setup();
+    const person = clientFor(media);
+    const ticket = (await person.requestUpload(picture)).data;
+    storage.put(ticket.url, bytes, "image/jpeg");
+    const item = (await person.completeUpload(ticket.id)).data;
+
+    // A guest, or an API key of a personal account: the instance's default account.
+    const nobody = createApiClient({ env: { MOCK_ONLY: "1" }, media, provider });
+    expect((await nobody.listMedia({ source: "upload" })).data).toEqual([]);
+    await expect(nobody.requestUpload(picture)).rejects.toMatchObject({ code: "account_required" });
+    expect((await nobody.completeUpload(ticket.id)).data).toBeNull();
+    expect((await nobody.deleteMedia(item?.id ?? "")).data).toBe(false);
+    expect(storage.keys()).toHaveLength(1);
+  });
+
   it("says so when the instance has nowhere to keep files", async () => {
     const storage = memoryStorage();
     const failing = { ...storage, signPut: async () => { throw Object.assign(new Error("no disk"), { name: "StorageUnavailable" }); } };
