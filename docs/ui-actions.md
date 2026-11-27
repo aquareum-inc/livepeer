@@ -13,7 +13,7 @@ in `apps/web/lib/public-api/operations.ts`.
 | Home | Load starting points | `listPromptStarters` | Built (iOS sample) |
 | (none yet) | Load example gallery: off Home on every client (decision 105), kept for a planned discovery view | `listShowcase` | Not on mobile (decisions 102 and 104) |
 | Home | Send a request | `createConversation` | Built (iOS sample) |
-| Home, Chat | Upload a photo or video from the device and attach it (the plus button; the file goes to the library first) | `requestUpload`, then `receiveUpload` through the file route | Built on iOS and Android (decision 106): the system photo picker |
+| Home, Chat | Upload a photo or video from the device and attach it (the plus button; the file goes to the library first) | `requestUpload`, the file straight to the signed address it answers with, then `completeUpload` | Built on iOS and Android (decision 106): the system photo picker |
 | Home | Attach or cast as a guest (the buttons are shown; using one asks to sign in) | none until signed in | Built on iOS and Android |
 | Home | Start from a starting point (its name is sent and the agent asks for the rest) | `createConversation` | Built on iOS and Android (decisions 103 and 104) |
 | Shell | List recent conversations (open sidebar) | `listConversations` | Built (slice 2): History, from Home, with search by title |

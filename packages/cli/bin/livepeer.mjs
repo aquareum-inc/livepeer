@@ -399,6 +399,11 @@ async function doctor(options) {
     if (database === "ok" || database === "behind") {
       add("database schema", database === "ok", database === "ok" ? "has every migration this release expects" : "behind this release's migrations", "Run: livepeer upgrade (it applies the pending migrations before the app starts)");
     }
+    // Files people upload: object storage through the S3 API, or the app's own disk when none is set.
+    const storage = app.body.storage;
+    if (storage) {
+      add("file storage", storage.status === "ok", storage.status !== "ok" ? (storage.kind === "s3" ? "object storage can't be used: the bucket is missing, unreachable, or the key was refused" : "the app has no disk it can write files to") : storage.kind === "s3" ? "object storage, reachable" : "the app's own disk, in DATA_DIR (set S3_BUCKET to use object storage)", storage.kind === "s3" ? "Check S3_BUCKET, S3_ENDPOINT, S3_REGION and the access key in .env. The System page in the console says which it is" : "Set S3_BUCKET and the other S3_* values in .env, or give the app a writable DATA_DIR");
+    }
     // Operators' alerts are sent by a round of checks each minute. With nothing running it, they are told nothing.
     if (app.body.alerts === "overdue") {
       add("alert checks", false, "nothing has run them in the last five minutes", env.CRON_SECRET ? "CRON_SECRET is set, so a scheduler has to call /api/cron/alerts every minute with it as a bearer token. Unset it on a host whose server stays running, and the server runs them itself" : "Check the app container's logs: its own timer should run them each minute");

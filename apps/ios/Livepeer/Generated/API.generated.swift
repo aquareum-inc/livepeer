@@ -162,9 +162,14 @@ struct API: Sendable {
         try await transport.send("DELETE", "/library/\(APITransport.escape(id))", query: [:], body: nil)
     }
 
-    /// Ask to add a photo or video from the device to the library. Answers with where to send the file: PUT its bytes to `path` on this instance with the same sign-in, and the library item comes back.
+    /// Ask to add a photo or video from the device to the library. Answers with where to send the file: send its bytes to `url` with `method` and exactly the `headers` given, and no sign-in, since the address is its own permission and may be on another host. An address starting with `/` is on this instance. Then call complete_upload.
     func requestUpload(kind: String, name: String, contentType: String, sizeBytes: Double, aspect: String? = nil) async throws -> UploadTicket {
         try await transport.send("POST", "/uploads", query: [:], body: ["kind": .string(kind), "name": .string(name), "content_type": .string(contentType), "size_bytes": .number(sizeBytes), "aspect": aspect.map { .string($0) }])
+    }
+
+    /// Say that the file a request_upload ticket was given for has been sent. The instance checks it arrived as declared and answers with the library item. Safe to repeat.
+    func completeUpload(id: String) async throws -> MediaItem {
+        try await transport.send("POST", "/uploads/\(APITransport.escape(id))/complete", query: [:], body: nil)
     }
 
     /// Ask about a video: summarise it, find moments, answer a question.

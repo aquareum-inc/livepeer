@@ -7,6 +7,11 @@
 # DATABASE_URL is the Postgres the instance keeps its state in: a machine's own disk doesn't outlive it. If it
 # is a pooled address, also set DATABASE_URL_UNPOOLED to the direct one, which migrations need.
 #
+# Uploaded files need object storage too, for the same reason: set S3_BUCKET, S3_ACCESS_KEY_ID,
+# S3_SECRET_ACCESS_KEY, S3_REGION and S3_ENDPOINT as secrets (Cloudflare R2, AWS S3, Backblaze B2 or any
+# S3-compatible service; deploy/README.md has the bucket's CORS rule). Without them files are kept on the
+# machine's disk, which is only right for a single machine with a volume mounted at /data.
+#
 # Alerts to operators' phones are sent by a check the server runs each minute. With machines allowed to stop
 # when idle, as below, nothing runs it while they are stopped: set min_machines_running = 1 if you offer the
 # console on phones.

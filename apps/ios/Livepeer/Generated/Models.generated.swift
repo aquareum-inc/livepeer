@@ -1852,17 +1852,23 @@ struct StudioMode: Codable, Sendable, Hashable {
     }
 }
 
-/// Leave to send one file: where to PUT its bytes, and until when.
+/// Leave to send one file: where to send its bytes, how, and until when.
 struct UploadTicket: Codable, Sendable, Hashable {
     var id: String
-    /// Where to PUT the file, on this instance, with the same sign-in. The library item comes back.
-    var path: String
+    /// Where to send the file. The address is its own permission: send no sign-in with it. It is on the instance's storage service, or starts with "/" when the instance itself takes the file.
+    var url: String
+    var method: String
+    /// Headers to send with the file, exactly as given.
+    var headers: [String: String]
     var maxBytes: Double
+    /// Until when the address is good. Ask again after that.
     var expiresAt: String
 
     enum CodingKeys: String, CodingKey {
         case id
-        case path
+        case url
+        case method
+        case headers
         case maxBytes = "max_bytes"
         case expiresAt = "expires_at"
     }

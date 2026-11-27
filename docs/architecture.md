@@ -295,8 +295,8 @@ change that breaks one needs a reason written down.
 `instance.config.json` and starts the bundle; it is idempotent. `livepeer doctor` checks engine, provider,
 config and keys, with exit codes. `livepeer upgrade` moves app and engine pins together. Because the engine
 and Batteries publish no images today (engine request R6), the bundle builds them from pinned Git contexts
-until they do, and mock-only mode needs neither. The app keeps its own state (device sessions) in the
-`app-data` volume at `/data`.
+until they do, and mock-only mode needs neither. The app keeps its own state in the bundle's Postgres and
+files in object storage (`docs/database.md`, `docs/media-storage.md`).
 
 ## Live versus mocked (summary; full table in `docs/data-sources.md`)
 

@@ -93,25 +93,25 @@ struct APITransport: Sendable {
         return try JSONDecoder().decode(Output.self, from: data)
     }
 
-    /// Sends a file to where an upload ticket said to, with the same sign-in, and reads what comes back.
-    /// `path` is the ticket's own, on this instance.
-    func put<Output: Decodable>(file: URL, contentType: String, to path: String) async throws -> Output {
-        guard path.hasPrefix("/api/v1/"), let url = URL(string: path, relativeTo: baseURL) else { throw APIError(status: 0, message: "The request failed.", code: nil) }
+    /// Where an upload ticket's address leads: the address itself, or on this instance when it starts with
+    /// "/". Nil for anything that isn't http or https.
+    static func uploadURL(_ address: String, instance: URL) -> URL? {
+        let url = address.hasPrefix("/") ? URL(string: address, relativeTo: instance)?.absoluteURL : URL(string: address)
+        guard let url, let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https", url.host != nil else { return nil }
+        return url
+    }
+
+    /// Sends a file to where an upload ticket said to, with the headers it gave. The address is its own
+    /// permission and may be on another host, so nothing of the session goes with it: no token, no cookies.
+    func upload(file: URL, to address: String, method: String, headers: [String: String]) async throws {
+        guard let url = Self.uploadURL(address, instance: baseURL) else { throw APIError(status: 0, message: "The request failed.", code: nil) }
         var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
-        let sent = token()
-        if let sent { request.setValue("Bearer \(sent)", forHTTPHeaderField: "Authorization") }
-        let (data, response) = try await session.upload(for: request, fromFile: file)
+        request.httpMethod = method
+        request.httpShouldHandleCookies = false
+        for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
+        let (_, response) = try await session.upload(for: request, fromFile: file)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else {
-            let envelope = (try? JSONDecoder().decode(Envelope.self, from: data))?.error
-            let error = APIError(status: status, message: envelope?.message ?? "The request failed.", code: envelope?.code)
-            if let sent, error.isSignedOut || error.isMobileOff { refused(Refusal(error: error, token: sent)) }
-            throw error
-        }
-        return try JSONDecoder().decode(Output.self, from: data)
+        guard (200..<300).contains(status) else { throw APIError(status: 0, message: "The file didn't upload.", code: nil) }
     }
 
     /// A value as one path segment.

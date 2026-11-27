@@ -58,6 +58,41 @@ services:
     depends_on: !reset []
 ```
 
+## File storage
+
+Files people upload (pictures up to 20 MB, videos up to 200 MB) go straight from the browser or phone to
+object storage with a short-lived signed address, and are read back the same way. The app's server never
+receives them, and the storage key never leaves it. `docs/media-storage.md` has the design.
+
+Storage is anything that speaks the S3 API. Set these in `.env`:
+
+| Variable | Cloudflare R2 | AWS S3 | Backblaze B2 |
+|----------|---------------|--------|--------------|
+| `S3_BUCKET` | your bucket | your bucket | your bucket |
+| `S3_ENDPOINT` | `https://<account id>.r2.cloudflarestorage.com` | leave empty | `https://s3.<region>.backblazeb2.com` |
+| `S3_REGION` | `auto` | the bucket's region | the bucket's region |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | an API token for that bucket: object read and write | an IAM user allowed `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` on the bucket's objects and `s3:ListBucket` on the bucket | an application key for that bucket |
+
+Keep the bucket private: the app signs every address it hands out. Browsers send files from your site's
+address, so the bucket has to allow it (phones don't need this). The rule, as each provider's CORS setting
+takes it:
+
+```json
+[{ "AllowedOrigins": ["https://your-instance.example"], "AllowedMethods": ["PUT", "GET"], "AllowedHeaders": ["content-type"], "MaxAgeSeconds": 3600 }]
+```
+
+If the app's server reaches storage at a different address than your users do (a storage server on a private
+network, published under a media domain), put the users' address in `S3_PUBLIC_ENDPOINT`. A proxy in front
+of storage must pass the `Host` header through unchanged, since the signature covers it.
+
+With no `S3_BUCKET`, files are kept on the app's own disk in `DATA_DIR` (the `app-data` volume here). That
+is right for development and for one machine with a volume, and can't work on a host with no disk.
+`./livepeer doctor` and `/api/health` say which is in use and whether it can be reached. Uploads that were
+started and never finished are removed within the hour by the same round of checks that sends alerts.
+
+Back up the bucket with your provider's own tools, alongside the database: the database holds the record of
+each file, the bucket the file.
+
 ## Running the network profile
 
 The network services pay for compute on Arbitrum One, so they need keys this repository cannot generate:
