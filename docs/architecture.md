@@ -290,7 +290,8 @@ change that breaks one needs a reason written down.
 ## Self-hosting
 
 `deploy/compose.yaml` references published images by `${REGISTRY}/${ORG}/...` tags read from
-`release.config.json`: app, engine (pinned ref), Clearinghouse Batteries, node remote signer, discovery.
+`release.config.json`: app, engine (pinned ref), Clearinghouse Batteries, node remote signer, discovery. It
+also runs the instance's own Postgres and object storage (Garage), each prepared by a one-shot service.
 `livepeer setup --preset full|headless [--config file] [--json]` writes `.env` (generated secrets),
 `instance.config.json` and starts the bundle; it is idempotent. `livepeer doctor` checks engine, provider,
 config and keys, with exit codes. `livepeer upgrade` moves app and engine pins together. Because the engine

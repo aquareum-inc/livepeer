@@ -128,8 +128,8 @@ keeps it in `.data/`, so there is nothing to install.
 
 Files people upload go straight from the browser or phone to object storage and never through the app's
 server. Storage is anything that speaks the S3 API (Cloudflare R2, AWS S3, Backblaze B2, a server you run),
-set with the `S3_*` variables in `.env.example`; with none set, as in `pnpm dev`, the app keeps files in
-`.data/media` behind the same interface. `docs/media-storage.md` has the design.
+set with the `S3_*` variables in `.env.example`. The Compose bundle runs its own (Garage); with none set,
+as in `pnpm dev`, the app keeps files in `.data/media` behind the same interface. `docs/media-storage.md` has the design.
 
 The operator console on phones is a second switch (`surfaces.mobileConsole`, also off in both presets). The
 server side is built: an operator's phone gets its own short-lived session, bound to a key in the phone's

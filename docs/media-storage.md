@@ -26,6 +26,7 @@ lost on restart, a second server could not see it, and a host that refuses large
 | M9 | **`MOCK_ONLY=1` does not change where files are kept.** It still forces every engine and provider function to its mock. | Storage is infrastructure, like the database. A mock-only instance on the Compose bundle or on Vercel must take a large upload and find it on the next server, or the demo lies about the product. |
 | M10 | **The uploaded part of the library is now real.** `listMedia` reads uploads from the media store and merges them with the mocked library. | Otherwise a file would outlive its only record at the first restart. The rest of the library stays mocked until generations are live (`docs/database.md` D8). |
 | M11 | **Abandoned uploads are removed by the round that already runs every minute** (the server's timer, or `/api/cron/alerts` on a host with none), and a few at a time whenever a new upload is asked for. | No new moving part, and it works on a host with no scheduler at all. |
+| M12 | **The Compose bundle runs Garage, with no published port, and clients reach it through the app** (section 9). | MinIO, which the brief named, is discontinued upstream. Through the app means one address, no CORS and nothing new in the VPS template; on one machine nothing is lost by it. |
 
 ## 3. The interface
 
@@ -66,7 +67,7 @@ each driver is tested against one contract.
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | A key that can read, write and delete objects in that bucket and nothing else. Server-side only. |
 | `S3_REGION` | `auto` on R2, the region on AWS and B2. Defaults to `us-east-1`, which S3-compatible servers accept. |
 | `S3_ENDPOINT` | The service's address. Empty means AWS. |
-| `S3_PUBLIC_ENDPOINT` | Only when browsers and phones reach storage at a different address than the app's server does (the Compose bundle: the app uses the service's name on the Docker network, a browser uses the published port or your media domain). Signed addresses are made for this one. |
+| `S3_PUBLIC_ENDPOINT` | Only when browsers and phones reach storage at a different address than the app's server does: signed addresses are made for this one. Or `app` when they cannot reach it at all, as in the Compose bundle: signed addresses then lead to the instance, which passes each request on (section 9). |
 | `S3_FORCE_PATH_STYLE` | `true` or `false`, to override the default above. |
 
 A signature covers the host name, so a proxy in front of storage must pass the `Host` header through
@@ -85,7 +86,7 @@ method and a few minutes.
 | `pnpm dev`, a first look | Embedded Postgres in `DATA_DIR` | Disk, in `DATA_DIR/media` |
 | `pnpm test`, CI | Postgres in memory | Memory driver for the rules; the disk driver on a temporary directory; the S3 driver against signatures worked out by hand, and against a real server when `S3_TEST_ENDPOINT` is set |
 | `MOCK_ONLY=1` | Unchanged by it | Unchanged by it (M9) |
-| Compose bundle | Its own Postgres | Disk, in the `app-data` volume, until its storage service is chosen (section 9); `S3_*` in `.env` to use object storage now |
+| Compose bundle | Its own Postgres | Its own storage service, Garage, reached through the app (section 9) |
 | Fly, a VPS | `DATABASE_URL` | `S3_*`, or disk on a volume for one machine |
 | Vercel | `DATABASE_URL` (Neon) | `S3_*` (R2, S3, B2). Required: there is no disk to keep files on. |
 
@@ -172,31 +173,59 @@ Development builds reach storage at the instance's own address (the disk driver)
 exceptions both apps already have for a local instance cover it. A release build needs storage on https,
 which every hosted provider is.
 
-## 9. The Compose bundle
+## 9. The Compose bundle: Garage, reached through the app
 
-The brief asked for a MinIO service. **MinIO can no longer be that.** On 27 November 2026 its official
-images do not pull from Docker Hub ("repository does not exist") or Quay ("unauthorized"), and Homebrew
-marks the formula deprecated "because it has an archived upstream repository", to be disabled on
-17 February 2027. Builds of it by third parties exist; depending on one means depending on an abandoned
-project and on whoever rebuilds it.
+The requirement is an S3-compatible server in the bundle, so self-hosting needs nothing external. The brief
+named MinIO; the bundle runs **Garage** instead.
 
-So the bundle needs a different S3-compatible server with an image from its own maintainers. Because of M1
-that choice touches only `deploy/compose.yaml`. The candidates, in the order I would pick them:
+**Why not MinIO.** On 27 November 2026 MinIO's official images do not pull from Docker Hub ("repository
+does not exist") or Quay ("unauthorized"), and Homebrew marks the formula deprecated "because it has an
+archived upstream repository", to be disabled on 17 February 2027. Builds of it by third parties exist;
+using one would mean depending on an abandoned project and on whoever rebuilds it. Garage is maintained,
+built for self-hosting on one small machine, and its maintainers publish its image.
 
-1. **Garage** (`dxflrs/garage`): small, built for self-hosting, maintained. It needs a one-shot step to
-   lay out its single node and create the bucket and key, which can be a second service from the same image.
-2. **SeaweedFS** (`chrislusf/seaweedfs`): one command to start with S3 on, but a larger system than one
-   bucket needs.
-3. A third-party build of MinIO, if the project owner prefers to keep MinIO for now.
+**Licence.** Garage is AGPL-3.0. The bundle runs it as its maintainers publish it, unmodified, as a
+separate service the app talks to over the network. None of its code is in this repository and none may be
+copied in. Because of M1, swapping it for another S3-compatible server touches only `deploy/`.
 
-**This is the project owner's call and has been asked.** Until it is made, the bundle keeps files on the
-`app-data` volume through the disk driver: it works with nothing external, files survive restarts and
-upgrades, and an operator who wants object storage sets the `S3_*` values in `.env`. What the bundle does
-not yet do is exercise the S3 path by itself.
+**The services** (`deploy/compose.yaml`):
 
-Whatever the server, the shape is the one the database has: the bundle's own service unless `.env` names
-another (`S3_ENDPOINT`), a secret `./livepeer setup` generates, a volume, no published port except the one
-browsers send files to, and `S3_PUBLIC_ENDPOINT` set to the address your users reach it at.
+- `storage`: `dxflrs/garage`, pinned to a version, one node keeping one copy of each file, its data in the
+  `storage-data` volume. Its settings are `deploy/config/garage.toml`, which holds no secret.
+- `storage-init`: runs once on every `up`, in the style of `migrate`, and the app waits for it. It gives
+  the node its layout, creates the bucket, adds the app's key and allows it to read and write that bucket,
+  each only if not already done, through Garage's admin API. It is the app image running one mounted script
+  (`deploy/config/storage-init.mjs`), because Garage's image has no shell to run several steps with.
+- `./livepeer setup` generates the four secrets (`STORAGE_RPC_SECRET`, `STORAGE_ADMIN_TOKEN`,
+  `STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_KEY`); `upgrade` adds them to an instance set up before this.
+  Setup stays one command, and running it again changes nothing.
+
+**No published port, so how does a file get there?** `storage` is on the Docker network only, like `db`.
+A browser or phone cannot reach it, so in the bundle the signed address leads to the app
+(`S3_PUBLIC_ENDPOINT=app`): `/api/storage/<bucket>/<key>?<signature>` on the instance's own address. The
+app passes the request on to Garage exactly as it came, and Garage checks the signature, the length and the
+type as if the client had called it. The app adds no permission of its own, holds nothing in memory (the
+body is piped through as it arrives, and this route is kept out of the proxy that would otherwise buffer
+it), and reads no session.
+
+This is the one place a file passes through the app's server, and it is deliberate. On a single machine the
+app and storage share the box, so nothing is saved by going round the app, and going through it means:
+
+- one address and one TLS certificate, so **the VPS template needs nothing new**: Caddy already forwards
+  the instance's domain to the app, and has no limit on a request's size;
+- no CORS rule, since the file goes to the page's own origin;
+- phones work unchanged, including an emulator, because the address is the instance's.
+
+It does not apply to hosts that refuse large request bodies: those never run the bundle's storage. They use
+a hosted S3 service, and files go there directly (M3).
+
+To send files straight to the bundle's Garage instead, publish it under an address of your own (a media
+domain in Caddy forwarding to port 3900, with the `Host` header passed through) and set
+`S3_PUBLIC_ENDPOINT` to that address and a CORS rule on the bucket. That is not set up or tested here.
+
+To use a storage service of your own with the bundle, set `S3_ENDPOINT` and the other `S3_*` values in
+`.env`: the app uses it, and clients are sent to it directly. The bundled `storage` still starts and sits
+idle, like `db` does when `DATABASE_URL` is set.
 
 ## 10. Generated media
 
@@ -215,49 +244,59 @@ the instance can now hand the engine a short-lived signed GET address for an inp
 | 2 | `packages/storage`: the interface, the S3, disk and memory drivers, tests. |
 | 3 | The media store, the `media_files` table and migration, the API client functions, the operations, the routes, the web client, health and `doctor`. |
 | 4 | iOS and Android. |
-| 5 | `.env.example`, `deploy/README.md`, the Fly template, `doctor`; the Compose service and the CLI's generated secret once the server is chosen (section 9). |
+| 5 | The Compose services, the CLI's generated secrets, `.env.example`, `deploy/README.md`, the Fly template, `doctor`. |
 
 ## 12. Not built, not verified
 
-Built: slices 1 to 4, and of slice 5 the environment variables, `deploy/README.md`, the Fly template and
-`doctor`.
+All five slices are built.
 
 **Not built**
 
-- **The Compose bundle's storage service** (section 9): waiting on which server replaces MinIO. The CLI
-  therefore generates no storage secret yet.
 - **Storing generated media** (section 10): nothing real is generated yet.
 - **Range requests on the disk driver's read route.** A browser seeking in a large video needs them; no
-  screen plays an uploaded video today. Object storage serves ranges itself.
+  screen plays an uploaded video today. Object storage serves ranges itself, including through the app in
+  the bundle.
 - **Looking inside a file.** The media type is what the client declared and storage enforced; the bytes are
-  not inspected. A file is only ever served back to its own library, from the storage address, with its
-  declared type.
+  not inspected. A file is only ever served back to its own library, with its declared type.
 - **Uploads with an API key of a personal account.** A file needs a library to go to: a signed-in person's
   (browser or phone) or a workspace's (its key). User API keys are still mocked and name no person, so such
   a key is answered 403 `account_required` rather than filling a shared default library. It follows once
   keys are real.
 - **A size cap for a host with a disk and a body limit** (`UPLOAD_LIMIT_MB`, slice 8 of
   `docs/database.md`): where it plugs in is in this work's hand-over note.
+- **Sending files straight to the bundle's Garage** under a media domain (section 9): described, not set up.
+- **A backup recipe for the bundle's storage volume.** `deploy/README.md` says what to back up; a tested
+  command, as the database has, is not written.
 
 **Not verified**
 
-- **The S3 driver against a real server.** Its signing is checked against the worked example in AWS's
-  documentation, and the driver against a stand-in for the HTTP answers, but no S3-compatible server was run:
-  MinIO could not be had, and running a substitute was not approved. In particular, that a server refuses a
-  PUT whose length differs from the signed one is true by the algorithm and untested in practice. The test
-  for all of this is written and skipped (`packages/storage/src/s3.test.ts`); it runs when
-  `S3_TEST_ENDPOINT`, `S3_TEST_BUCKET`, `S3_TEST_ACCESS_KEY_ID` and `S3_TEST_SECRET_ACCESS_KEY` are set.
-- **R2, AWS S3 and B2 themselves**, and the CORS rule in `deploy/README.md` against each: no bucket was
-  created in anyone's account.
+- **Cloudflare R2, AWS S3 and Backblaze B2 themselves**, and the CORS rule in `deploy/README.md` against
+  each: no bucket was created in anyone's account. The S3 driver is verified against Garage, a real
+  S3-compatible server, which is evidence for the others and not proof.
 - **The phone apps uploading for real.** Both build and their unit tests pass (iOS 70, Android 89), and the
   address handling is tested. Picking a photo in the simulator and the emulator and watching it arrive was
   not done.
+- **The VPS template end to end** (Caddy in front of the bundle on a real domain). Nothing in it changed and
+  the reasoning is in section 9; it was not run.
 - **One stall.** The first read of a 30 MB file through the disk route, piped into another program, stalled
   once in development and never again in a dozen tries, before and after the read was changed to a
   file-backed blob. Noted in case it is seen again.
 
-**Verified by running it:** with the disk driver in `pnpm dev` (mock-only): a ticket, a 30 MB upload,
-completion, the same answer on a second completion, the redirect and the bytes read back identical;
-refusals for a wrong length, a wrong type, a changed address, an unsigned read and completion before the
-file arrived; deletion removing the file; an upload from the web composer appearing in the library with its
-picture. The same 30 MB round trip inside the built Docker image, with files landing in `/data/media`.
+**Verified by running it**
+
+- **The S3 driver against Garage v2.1.0** (`packages/storage/src/s3.test.ts`, run with `S3_TEST_*` set; it
+  is skipped in `pnpm test`, which needs nothing running): the bucket is reached; a PUT of a different length
+  or type than was signed is refused; the right file is taken; it is served only at a signed address; it is
+  removed.
+- **The disk driver, in `pnpm dev` and in the built Docker image:** a ticket, a 30 MB upload, completion,
+  the same answer on a second completion, the redirect and the bytes read back identical; refusals for a
+  wrong length, a wrong type, a changed address, an unsigned read and completion before the file arrived;
+  deletion removing the file; an upload from the web composer appearing in the library with its picture.
+- **The app in front of Garage** (`S3_PUBLIC_ENDPOINT=app`), in `pnpm dev`: the same round trip with a 30 MB
+  file, Garage itself refusing a wrong length and a wrong type, a range request answered with part of the
+  file, an unsigned address refused, and nothing written to the app's disk.
+- **The Compose bundle**, built and started from a `.env` written by `./livepeer setup --no-start` (under
+  a test project name, so the CLI's own `up` was not the command run): `storage-init` laid out the node,
+  created the bucket and key and exited 0; only the app has a published port; a 30 MB upload went through
+  the app into Garage and read back identical, with a wrong length refused; nothing was written to the app's
+  disk; after `down` and `up` the init did nothing and the file was still there.
