@@ -7,11 +7,15 @@
     ".": "./src/index.ts",
     "./types": "./src/types.ts",
     "./provider": "./src/provider/types.ts",
-    "./workspaces": "./src/workspaces.ts"
+    "./workspaces": "./src/workspaces.ts",
+    "./media": "./src/media.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@livepeer/storage": "workspace:*"
   },
   "devDependencies": {
     "typescript": "catalog:",

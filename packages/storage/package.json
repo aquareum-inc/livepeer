@@ -5,7 +5,9 @@
   "type": "module",
   "description": "Object storage behind one interface: any S3-compatible service, the instance's own disk for development, memory for tests.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./memory": "./src/memory.ts",
+    "./types": "./src/types.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -22,9 +22,11 @@ export const DATA_SOURCES = {
   runCapability: "mock",
   listMedia: "mock",
   deleteMedia: "mock",
+  // Mock because the library they add to is: the files and their records are kept for real on every host,
+  // in object storage and the instance's database (docs/media-storage.md).
   requestUpload: "mock",
-  receiveUpload: "mock",
-  readMediaFile: "mock",
+  completeUpload: "mock",
+  getMediaUrl: "mock",
   listCharacters: "mock",
   getCharacter: "mock",
   createCharacter: "mock",

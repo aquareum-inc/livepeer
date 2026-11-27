@@ -7,6 +7,7 @@ import { isCapabilityEnabled } from "@livepeer/config";
 import { getSession } from "./auth/session";
 import { env } from "./env";
 import { instance } from "./instance";
+import { instanceMedia } from "./media";
 import { describeApps } from "./models";
 
 /**
@@ -49,6 +50,8 @@ export async function apiFor(user: { id: string; name: string } | null, scope: "
     ...(user ? { user } : {}),
     workspaceId,
     viaApiKey,
+    // Files are kept for real whatever else is mocked: in object storage, or on this instance's disk.
+    media: instanceMedia,
     pricing: {
       creditsPerUsd: config.pricing?.creditsPerUsd ?? 100,
       default: config.pricing?.markup?.default ?? 1.3,

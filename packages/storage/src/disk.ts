@@ -1,5 +1,5 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import { createReadStream, createWriteStream } from "node:fs";
+import { createWriteStream, openAsBlob } from "node:fs";
 import { access, constants, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -138,7 +138,9 @@ export function diskStorage(config: DiskConfig): DiskStorage {
       if (!signed("GET", key, query)) return null;
       const held = await this.head(key);
       if (!held) return null;
-      return { body: Readable.toWeb(createReadStream(fileOf(key))) as unknown as ReadableStream<Uint8Array>, size: held.size, contentType: held.contentType };
+      // A blob over the file: read from disk as the response is, a piece at a time.
+      const blob = await openAsBlob(fileOf(key));
+      return { body: blob.stream() as ReadableStream<Uint8Array>, size: blob.size, contentType: held.contentType };
     },
   };
 }

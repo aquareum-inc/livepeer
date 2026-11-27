@@ -14,6 +14,7 @@
     "@livepeer/config": "workspace:*",
     "@livepeer/db": "workspace:*",
     "@livepeer/operator-console": "workspace:*",
+    "@livepeer/storage": "workspace:*",
     "@livepeer/ui": "workspace:*",
     "@livepeer/user-app": "workspace:*",
     "@fontsource-variable/inter": "^5.2.5",

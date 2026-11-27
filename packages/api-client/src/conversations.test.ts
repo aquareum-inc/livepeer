@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createApiClient } from "./index";
+import { memoryStorage } from "@livepeer/storage/memory";
+
+import { createApiClient, createMediaStore, memoryUploadRecords } from "./index";
 
 const input = (text: string) => ({ text, app: null, aspect: "16:9" as const, duration_seconds: 5 });
 
@@ -55,9 +57,11 @@ describe("conversations (mock agent)", () => {
   });
 
   it("starts a shot from an uploaded picture", async () => {
-    const client = createApiClient({ env: { MOCK_ONLY: "1" } });
+    const storage = memoryStorage();
+    const client = createApiClient({ env: { MOCK_ONLY: "1" }, media: createMediaStore({ records: memoryUploadRecords(), storage }) });
     const ticket = (await client.requestUpload({ kind: "image", name: "tide-pool.jpg", content_type: "image/jpeg", size_bytes: 3 })).data;
-    const picture = (await client.receiveUpload(ticket.id, new Uint8Array([1, 2, 3]))).data;
+    storage.put(ticket.url, new Uint8Array([1, 2, 3]), "image/jpeg");
+    const picture = (await client.completeUpload(ticket.id)).data;
     if (!picture) throw new Error("expected the upload to land");
     const created = (await client.createConversation({ ...input("Bring this picture to life."), attachment_ids: [picture.id] })).data;
     vi.advanceTimersByTime(60_000);

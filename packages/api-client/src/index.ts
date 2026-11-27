@@ -10,8 +10,11 @@ import {
   readStoredConversation,
   sendStoredMessage,
 } from "./mock/conversations";
-import { addGenerationToLibrary, addMediaToLibrary, deleteStoredMedia, listStoredMedia, type MediaFilter } from "./mock/library";
-import { readStoredMediaFile, receiveStoredUpload, requestStoredUpload } from "./mock/uploads";
+import { memoryStorage } from "@livepeer/storage/memory";
+
+import { createMediaStore, memoryUploadRecords, type MediaStore, type StoredMedia } from "./media";
+import { addGenerationToLibrary, addMediaToLibrary, deleteStoredMedia, listStoredMedia, matchesMedia, type MediaFilter } from "./mock/library";
+import { shared } from "./mock/shared";
 import {
   EXAMPLE_APPS,
   addStoredDestination,
@@ -75,7 +78,6 @@ import type {
   LiveLook,
   LiveSession,
   LiveSessionInput,
-  MediaFile,
   MediaItem,
   Offering,
   Preferences,
@@ -101,7 +103,7 @@ export * from "./operator";
 export * from "./workspaces";
 export type { CharacterFilter } from "./mock/characters";
 export type { MediaFilter } from "./mock/library";
-export { UPLOAD_RULES, UploadRefused } from "./mock/uploads";
+export { READ_SECONDS, UPLOAD_RULES, UploadRefused, createMediaStore, memoryUploadRecords, type MediaAccount, type MediaStore, type StoredMedia, type UploadRecord, type UploadRecords } from "./media";
 
 /** A result plus where it came from, so dev mode can label each screen live or mocked. */
 export interface Sourced<T> {
@@ -205,12 +207,12 @@ export interface ApiClient {
 
   listMedia(filter?: MediaFilter): Promise<Sourced<MediaItem[]>>;
   deleteMedia(id: string): Promise<Sourced<boolean>>;
-  /** Checks a file from the device before it is sent, and answers with where to send it. */
+  /** Checks a file from the device before it is sent, and answers with where to send it: an address on storage, not on the app. */
   requestUpload(request: UploadRequest): Promise<Sourced<UploadTicket>>;
-  /** Takes the file a ticket was given for and adds it to the library. Null when the ticket isn't good. */
-  receiveUpload(id: string, bytes: Uint8Array): Promise<Sourced<MediaItem | null>>;
-  /** The file behind a library item's still. */
-  readMediaFile(id: string): Promise<Sourced<MediaFile | null>>;
+  /** Confirms the file a ticket was given for arrived, and adds it to the library. Null when the ticket isn't good. Safe to repeat. */
+  completeUpload(id: string): Promise<Sourced<MediaItem | null>>;
+  /** A short-lived address an uploaded file can be read from. Null when there is no such file. */
+  getMediaUrl(id: string): Promise<Sourced<string | null>>;
 
   listCharacters(filter?: CharacterFilter): Promise<Sourced<Character[]>>;
   getCharacter(slug: string): Promise<Sourced<Character | null>>;
@@ -281,6 +283,18 @@ export interface ApiClientOptions {
    * listing and refused when asked for by name. Defaults to everything on the network.
    */
   offers?: (app: string) => boolean;
+  /**
+   * Where files people send are kept. The instance gives its own, over object storage and its database,
+   * whether or not the rest is mocked. Without one, a store in memory is used: enough for a test.
+   */
+  media?: MediaStore;
+}
+
+/** A steady colour wash for a tile with no still, from the file's title. */
+function artworkFor(name: string): MediaItem["artwork"] {
+  let seed = 0;
+  for (const letter of name) seed = (seed * 31 + letter.charCodeAt(0)) % 9973;
+  return { hues: [seed % 360, (seed * 7) % 360, (seed * 13) % 360], seed: (seed % 40) + 1 };
 }
 
 /** A capability the instance doesn't offer was asked for by name. */
@@ -351,6 +365,37 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   const owner: Owner | null = workspaceId ? { scope: workspaceId, by: user.name } : null;
   /** Chats in a workspace are each member's own. */
   const home: ConversationHome | null = workspaceId ? { scope: workspaceId, by: user.name, userId: user.id } : null;
+  const media = options.media ?? shared("media.store", () => createMediaStore({ records: memoryUploadRecords(), storage: memoryStorage() }));
+  const mediaAccount = { userId: user.id, workspaceId };
+  /** A stored file as a library item. `by` is who added it, by name, in a workspace's library. */
+  const uploaded = (file: StoredMedia, by: string | null): MediaItem => ({
+    id: file.id,
+    kind: file.kind,
+    source: "upload",
+    title: file.title,
+    description: file.kind === "image" ? "A picture you uploaded." : "A video you uploaded.",
+    tags: [],
+    app: null,
+    prompt: null,
+    aspect: file.aspect,
+    duration_seconds: null,
+    created_at: file.created_at,
+    // The instance's own address for the file, which answers with a short-lived one on storage.
+    image: file.kind === "image" ? `/api/media/${file.id}` : null,
+    artwork: artworkFor(file.title),
+    made_by: by,
+  });
+  /** The names behind a workspace's member ids, for "added by". Nobody is named in a personal library. */
+  const memberNames = async (): Promise<Map<string, string>> => (workspaceId ? new Map((await provider.workspaces.listMembers(workspaceId)).map((entry) => [entry.user_id, entry.name])) : new Map());
+  /** The account's uploads, newest first, as library items. */
+  const uploads = async (): Promise<MediaItem[]> => {
+    const files = await media.list(mediaAccount);
+    if (files.length === 0) return [];
+    const names = await memberNames();
+    return files.map((file) => uploaded(file, names.get(file.added_by) ?? null));
+  };
+  /** The uploads a message attaches, which the mock agent can't look up for itself. */
+  const attachedUploads = async (input: SendMessageInput): Promise<MediaItem[]> => (input.attachment_ids?.length ? (await uploads()).filter((item) => input.attachment_ids?.includes(item.id)) : []);
   const creditsOf = async (id: string): Promise<number> => {
     const allocation = await provider.budgets.getAllocation(id);
     return allocation ? balanceInCredits(allocation, pricing) : 0;
@@ -574,14 +619,14 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       mustOffer(input.agent_model);
       await mustSpend();
       await latency(200, 380);
-      return mock(createStoredConversation(input, home));
+      return mock(createStoredConversation(input, home, await attachedUploads(input)));
     },
     async sendMessage(conversationId, input) {
       mustOffer(input.app);
       mustOffer(input.agent_model);
       await mustSpend();
       await latency(200, 380);
-      return mock(sendStoredMessage(conversationId, input, home));
+      return mock(sendStoredMessage(conversationId, input, home, await attachedUploads(input)));
     },
     async deleteConversation(id) {
       await latency(80, 160);
@@ -590,22 +635,24 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
     async listMedia(filter) {
       await latency(120, 260);
-      return mock(listStoredMedia(filter, workspaceId));
+      // Uploads are the instance's own and kept for real; the rest of the library is still the mock's.
+      const kept = (await uploads()).filter((item) => matchesMedia(item, filter));
+      return mock([...kept, ...listStoredMedia(filter, workspaceId)].sort((a, b) => b.created_at.localeCompare(a.created_at)));
     },
     async deleteMedia(id) {
+      if (await media.remove(mediaAccount, id)) return mock(true);
       await latency(80, 160);
       return mock(deleteStoredMedia(id, workspaceId));
     },
     async requestUpload(request) {
-      await latency(60, 140);
-      return mock(requestStoredUpload(request, owner));
+      return mock(await media.requestUpload(mediaAccount, request));
     },
-    async receiveUpload(id, bytes) {
-      await latency(120, 260);
-      return mock(receiveStoredUpload(id, bytes));
+    async completeUpload(id) {
+      const file = await media.completeUpload(mediaAccount, id);
+      return mock(file ? uploaded(file, workspaceId ? user.name : null) : null);
     },
-    async readMediaFile(id) {
-      return mock(readStoredMediaFile(id));
+    async getMediaUrl(id) {
+      return mock(await media.urlFor(id));
     },
 
     async listCharacters(filter) {
@@ -709,6 +756,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     async deleteAccount() {
       await latency(300, 500);
       await provider.identity.deleteUser(user.id);
+      // Their own files go with them. What they added to a workspace is the workspace's.
+      await media.forget(user.id);
       return mock(true);
     },
     async getPreferences() {

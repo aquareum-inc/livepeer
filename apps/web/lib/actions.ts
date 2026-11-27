@@ -70,6 +70,19 @@ export async function requestUploadAction(request: UploadRequest): Promise<{ tic
   }
 }
 
+/** Confirms a file the browser sent to storage has arrived, and answers with its library item. */
+export async function completeUploadAction(id: string): Promise<{ item: MediaItem } | { refused: string }> {
+  try {
+    const item = (await (await client()).completeUpload(id)).data;
+    if (!item) return { refused: "That upload took too long. Choose the file again." };
+    revalidatePath("/library");
+    return { item };
+  } catch (cause) {
+    if (cause instanceof UploadRefused) return { refused: cause.message };
+    throw cause;
+  }
+}
+
 export async function createConversationAction(input: SendMessageInput): Promise<Conversation> {
   const { data } = await (await client()).createConversation(input);
   revalidatePath("/", "layout");

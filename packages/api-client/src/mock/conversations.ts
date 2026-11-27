@@ -4,6 +4,7 @@ import type {
   CharacterCast,
   Conversation,
   ConversationSummary,
+  MediaItem,
   Message,
   SendMessageInput,
   VideoAnalysis,
@@ -95,10 +96,10 @@ function castFor(input: SendMessageInput, scope: string | null): CharacterCast |
 }
 
 /** What the agent does for a request, as a timed script. The shape is what the real agent will report. */
-function plan(input: SendMessageInput, cast: CharacterCast | null, scope: string | null): { script: ScriptedStep[]; reply: string; generate: number; analysis?: VideoAnalysis; asks?: string } {
+function plan(input: SendMessageInput, cast: CharacterCast | null, scope: string | null, uploads: MediaItem[]): { script: ScriptedStep[]; reply: string; generate: number; analysis?: VideoAnalysis; asks?: string } {
   const subject = input.text.length > 80 ? `${input.text.slice(0, 77)}…` : input.text;
   const spec = `${input.duration_seconds}s, ${input.aspect}`;
-  const attached = listStoredMedia({}, scope).find((item) => input.attachment_ids?.includes(item.id));
+  const attached = [...uploads, ...listStoredMedia({}, scope)].find((item) => input.attachment_ids?.includes(item.id));
   const link = /https?:\/\/\S+/.exec(input.text)?.[0];
 
   // A picture is something to start a shot from, not something to watch.
@@ -245,13 +246,13 @@ function snapshot(stored: StoredConversation): Conversation {
   };
 }
 
-function append(stored: StoredConversation, sent: SendMessageInput): void {
+function append(stored: StoredConversation, sent: SendMessageInput, uploads: MediaItem[]): void {
   const now = new Date().toISOString();
   // An answer to "what should it show?" is the rest of the request the agent asked about.
   const input = sent.app === null && stored.asked ? { ...sent, app: stored.asked } : sent;
   const cast = castFor(input, stored.home?.scope ?? null);
   stored.messages.push({ id: id("msg"), role: "user", text: input.text, cast, agent_model: input.agent_model ?? null, created_at: now });
-  const planned = plan(input, cast, stored.home?.scope ?? null);
+  const planned = plan(input, cast, stored.home?.scope ?? null, uploads);
   // Only a request to make something waits for its answer; a video to watch arrives as an attachment.
   stored.asked = planned.asks && /^(text|image)-to-video$/.test(planned.asks) ? planned.asks : null;
   const { reply, generate, analysis = null } = planned;
@@ -259,7 +260,7 @@ function append(stored: StoredConversation, sent: SendMessageInput): void {
   const script = input.agent_model ? planned.script.map((entry) => (entry.kind === "plan" ? { ...entry, app: input.agent_model ?? null } : entry)) : planned.script;
   const generateIndex = script.findIndex((entry) => entry.kind === "tool" && /-to-video$/.test(entry.app ?? ""));
   const generateAt = script.slice(0, Math.max(0, generateIndex)).reduce((total, entry) => total + entry.ms, 0);
-  const picture = listStoredMedia({}, stored.home?.scope ?? null).find((item) => item.kind === "image" && input.attachment_ids?.includes(item.id));
+  const picture = [...uploads, ...listStoredMedia({}, stored.home?.scope ?? null)].find((item) => item.kind === "image" && input.attachment_ids?.includes(item.id));
   const firstFrame = cast?.image ?? picture?.image ?? null;
   const generationIds = Array.from({ length: generate }, (_, index) =>
     createStoredGeneration({
@@ -288,7 +289,8 @@ function append(stored: StoredConversation, sent: SendMessageInput): void {
   stored.updatedAt = Date.now();
 }
 
-export function createStoredConversation(input: SendMessageInput, home: ConversationHome | null = null): Conversation {
+/** `uploads` are the files the person attached from their own library, which the instance keeps, not this mock. */
+export function createStoredConversation(input: SendMessageInput, home: ConversationHome | null = null, uploads: MediaItem[] = []): Conversation {
   const stored: StoredConversation = {
     id: id("cnv"),
     title: titleFor(input.text),
@@ -299,7 +301,7 @@ export function createStoredConversation(input: SendMessageInput, home: Conversa
     home,
   };
   conversations.set(stored.id, stored);
-  append(stored, input);
+  append(stored, input, uploads);
   return snapshot(stored);
 }
 
@@ -309,10 +311,10 @@ function owned(conversationId: string, home: ConversationHome | null): StoredCon
   return stored && sameHome(stored.home, home) ? stored : undefined;
 }
 
-export function sendStoredMessage(conversationId: string, input: SendMessageInput, home: ConversationHome | null = null): Conversation | null {
+export function sendStoredMessage(conversationId: string, input: SendMessageInput, home: ConversationHome | null = null, uploads: MediaItem[] = []): Conversation | null {
   const stored = owned(conversationId, home);
   if (!stored) return null;
-  append(stored, input);
+  append(stored, input, uploads);
   return snapshot(stored);
 }
 
