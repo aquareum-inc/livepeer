@@ -102,6 +102,9 @@ The engine version is pinned per release in `release.config.json`, so the app an
   admin key. Issue an admin key on the engine.
 - **`engine … not ready`**: the engine isn't reachable at `ENGINE_URL` from where the app runs. Inside the
   bundle the engine is `http://engine:8080`; from the host it is `http://127.0.0.1:8090`.
+- **Visitors see "This instance has only its test sign-in"**: the instance is published but still uses the
+  presets' test sign-in, which answers only from the server and private networks. Connect an identity
+  provider (`deploy/README.md`, "Sign-in on a public address").
 - **Health is 500 right after changing config**: the config is invalid. Run `./livepeer doctor`.
 
 ## Working on the code
