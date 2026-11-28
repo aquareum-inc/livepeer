@@ -50,7 +50,10 @@ export async function GET(request: NextRequest) {
   let authenticatedAt;
   try {
     ({ identity, authenticatedAt } = await (await authProvider()).exchange({ code, redirectUri, codeVerifier: flow.codeVerifier }));
-  } catch {
+  } catch (error) {
+    // Said in the server's log, where the operator can find out why nobody can sign in: which step the
+    // provider refused, and its error code. Neither the code nor any token is in it.
+    console.error(`[auth] sign-in failed: ${error instanceof Error ? error.message : "unknown error"}`);
     return fail("failed");
   }
 
