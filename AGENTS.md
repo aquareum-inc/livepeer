@@ -2,6 +2,10 @@
 
 How to install, configure and verify an instance unattended. Every command is non-interactive.
 
+Walking a person through putting their own instance online, from a bare server or on Vercel? Follow
+[docs/agent-runbook.md](docs/agent-runbook.md): the steps in order, which are yours and which are theirs, and
+the check after each. This file is the reference for the commands it uses.
+
 ## Requirements
 
 - Docker with the Compose plugin (`docker compose version` exits 0)
@@ -72,6 +76,10 @@ another owner link later:
 ./livepeer invite-operator --json     # {"ok":true,"url":"…","expires_at":"…"}; add --url <public address> if the config has no domain
 ```
 
+On an instance with real sign-in and no `ENGINE_ADMIN_TOKEN` yet, no link is needed: the first person to
+sign in and open `/operator` is offered "Become the owner", once. `/api/health` reports `owner` as `none`
+until someone is.
+
 A link works once. Owners invite everyone else from Team in the console, with a role (owner, member,
 viewer). See `docs/operator-invitations.md`.
 
@@ -102,6 +110,9 @@ The engine version is pinned per release in `release.config.json`, so the app an
   admin key. Issue an admin key on the engine.
 - **`engine … not ready`**: the engine isn't reachable at `ENGINE_URL` from where the app runs. Inside the
   bundle the engine is `http://engine:8080`; from the host it is `http://127.0.0.1:8090`.
+- **Sign-in ends on "Sign-in didn't complete"**: the app's log has a line starting `[auth] sign-in failed:`
+  with the step and the identity provider's error code (`docker logs livepeer-app-1 2>&1 | grep '\[auth\]'`).
+  `invalid_client` is a wrong `OIDC_CLIENT_SECRET`.
 - **Health is 500 right after changing config**: the config is invalid. Run `./livepeer doctor`.
 
 ## Working on the code
