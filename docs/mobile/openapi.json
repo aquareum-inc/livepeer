@@ -1684,7 +1684,7 @@
     "/uploads": {
       "post": {
         "operationId": "request_upload",
-        "summary": "Ask to add a photo or video from the device to the library. Answers with where to send the file: PUT its bytes to `path` on this instance with the same sign-in, and the library item comes back.",
+        "summary": "Ask to add a photo or video from the device to the library. Answers with where to send the file: send its bytes to `url` with `method` and exactly the `headers` given, and no sign-in, since the address is its own permission and may be on another host. An address starting with `/` is on this instance. Then call complete_upload.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1736,6 +1736,55 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UploadTicket"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request was refused or failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/uploads/{id}/complete": {
+      "post": {
+        "operationId": "complete_upload",
+        "summary": "Say that the file a request_upload ticket was given for has been sent. The instance checks it arrived as declared and answers with the library item. Safe to repeat.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The ticket's id, from request_upload"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaItem"
                 }
               }
             }
@@ -6577,25 +6626,39 @@
           "id": {
             "type": "string"
           },
-          "path": {
+          "url": {
             "type": "string",
-            "description": "Where to PUT the file, on this instance, with the same sign-in. The library item comes back."
+            "description": "Where to send the file. The address is its own permission: send no sign-in with it. It is on the instance's storage service, or starts with \"/\" when the instance itself takes the file."
+          },
+          "method": {
+            "type": "string",
+            "const": "PUT"
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Headers to send with the file, exactly as given."
           },
           "max_bytes": {
             "type": "number"
           },
           "expires_at": {
-            "type": "string"
+            "type": "string",
+            "description": "Until when the address is good. Ask again after that."
           }
         },
         "required": [
           "id",
-          "path",
+          "url",
+          "method",
+          "headers",
           "max_bytes",
           "expires_at"
         ],
         "additionalProperties": false,
-        "description": "Leave to send one file: where to PUT its bytes, and until when."
+        "description": "Leave to send one file: where to send its bytes, how, and until when."
       },
       "Usage": {
         "type": "object",

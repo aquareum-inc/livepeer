@@ -1584,13 +1584,17 @@ data class StudioMode(
     @SerialName("needs_input") val needsInput: Boolean,
 )
 
-/** Leave to send one file: where to PUT its bytes, and until when. */
+/** Leave to send one file: where to send its bytes, how, and until when. */
 @Serializable
 data class UploadTicket(
     @SerialName("id") val id: String,
-    /** Where to PUT the file, on this instance, with the same sign-in. The library item comes back. */
-    @SerialName("path") val path: String,
+    /** Where to send the file. The address is its own permission: send no sign-in with it. It is on the instance's storage service, or starts with "/" when the instance itself takes the file. */
+    @SerialName("url") val url: String,
+    @SerialName("method") val method: String,
+    /** Headers to send with the file, exactly as given. */
+    @SerialName("headers") val headers: Map<String, String>,
     @SerialName("max_bytes") val maxBytes: Double,
+    /** Until when the address is good. Ask again after that. */
     @SerialName("expires_at") val expiresAt: String,
 )
 

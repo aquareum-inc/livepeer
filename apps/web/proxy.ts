@@ -37,5 +37,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Static files in public/ (images, video, fonts) are served to everyone, signed in or not.
-  matcher: ["/((?!_next/|favicon.ico|.*\\.(?:svg|png|jpe?g|gif|ico|webp|avif|mp4|webm|mov|woff2?)$).*)"],
+  // Nor does a file on its way to or from the instance's own disk pass through here: its address is its
+  // permission, and this would hold a copy of the body in memory.
+  matcher: ["/((?!_next/|api/storage/|favicon.ico|.*\\.(?:svg|png|jpe?g|gif|ico|webp|avif|mp4|webm|mov|woff2?)$).*)"],
 };

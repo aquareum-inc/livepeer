@@ -90,14 +90,16 @@ export interface MediaFilter {
 
 /** The library of one account: a workspace's (`scope`), or the personal one. */
 export function listStoredMedia(filter: MediaFilter = {}, scope: string | null = null): MediaItem[] {
+  return [...added.filter((item) => (homes.get(item.id) ?? null) === scope), ...seeded(scope)].filter((item) => !removed.has(item.id) && matchesMedia(item, filter));
+}
+
+/** Whether an item is what a filter asks for. */
+export function matchesMedia(item: MediaItem, filter: MediaFilter = {}): boolean {
   const query = filter.query?.trim().toLowerCase();
-  return [...added.filter((item) => (homes.get(item.id) ?? null) === scope), ...seeded(scope)].filter((item) => {
-    if (removed.has(item.id)) return false;
-    if (filter.kind && item.kind !== filter.kind) return false;
-    if (filter.source && item.source !== filter.source) return false;
-    if (!query) return true;
-    return [item.title, item.description, ...item.tags].some((text) => text.toLowerCase().includes(query));
-  });
+  if (filter.kind && item.kind !== filter.kind) return false;
+  if (filter.source && item.source !== filter.source) return false;
+  if (!query) return true;
+  return [item.title, item.description, ...item.tags].some((text) => text.toLowerCase().includes(query));
 }
 
 export function deleteStoredMedia(id: string, scope: string | null = null): boolean {

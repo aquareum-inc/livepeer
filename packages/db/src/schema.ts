@@ -301,3 +301,31 @@ export const pushOutbox = pgTable("push_outbox", {
   /** The payload as it would have been handed over, less the push token. */
   payload: jsonb("payload").notNull(),
 });
+
+/**
+ * A file someone sent from a device: a ticket to send it while `pending`, an item in a library once `stored`.
+ * The file itself is in object storage under `object_key`; nothing of it is here. A row that stays pending
+ * past `expires_at` was abandoned, and the sweep removes it and whatever arrived for it.
+ */
+export const mediaFiles = pgTable(
+  "media_files",
+  {
+    /** The ticket's id. */
+    id: text("id").primaryKey(),
+    /** The library item's id, and the address the file is read at. */
+    mediaId: text("media_id").notNull(),
+    userId: text("user_id").notNull(),
+    /** The workspace whose library it is in. Null: the person's own. */
+    workspaceId: text("workspace_id"),
+    kind: text("kind", { enum: ["image", "video"] }).notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
+    title: text("title").notNull(),
+    aspect: text("aspect", { enum: ["16:9", "9:16", "1:1"] }).notNull(),
+    objectKey: text("object_key").notNull(),
+    state: text("state", { enum: ["pending", "stored"] }).notNull(),
+    createdAt: time("created_at").notNull(),
+    expiresAt: time("expires_at").notNull(),
+  },
+  (table) => [uniqueIndex("media_files_media_id").on(table.mediaId), index("media_files_user_id").on(table.userId), index("media_files_workspace_id").on(table.workspaceId), index("media_files_state_expires_at").on(table.state, table.expiresAt)],
+);

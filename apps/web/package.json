@@ -15,6 +15,7 @@
     "@livepeer/config": "workspace:*",
     "@livepeer/db": "workspace:*",
     "@livepeer/operator-console": "workspace:*",
+    "@livepeer/storage": "workspace:*",
     "@livepeer/ui": "workspace:*",
     "@livepeer/user-app": "workspace:*",
     "@vercel/functions": "^3.11.4",

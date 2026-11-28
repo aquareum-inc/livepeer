@@ -1,0 +1,21 @@
+{
+  "name": "@livepeer/storage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Object storage behind one interface: any S3-compatible service, the instance's own disk for development, memory for tests.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./memory": "./src/memory.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -3,9 +3,9 @@
 The instance's web app (user app, operator console, API and MCP) as a Vercel project, with its own state in a
 managed Postgres such as Neon. Nothing is written to disk.
 
-**Status: not yet deployed to a real Vercel project.** The build command, the migrations and a server with
-only a Postgres and no disk were run locally against Postgres 17; the list under "Check on the first
-deployment" is what only Vercel itself can show.
+**Status: deployed once, on 27 November 2026,** to a Vercel Pro project with Neon, in mock-only mode. The
+build migrated the database and the app started with nothing on disk. "Check on the first deployment" says
+what that run confirmed and what it didn't reach.
 
 ## What this gives you, and what it doesn't
 
@@ -26,9 +26,11 @@ What does not, until the functions behind it go live (`docs/data-sources.md` say
   will often seem to work, because warm instances are reused. This is not fixed by the database and is not
   meant to be: that data belongs to the engine and the payment provider. For a hosted demo that behaves, use
   one long-running machine (`../fly/`, or the Compose bundle).
-- **Uploads are capped at 4 MB.** Vercel refuses a request over 4.5 MB before the app sees it. Set
-  `UPLOAD_LIMIT_MB=4` and the app refuses a larger file itself, saying what the limit is. Elsewhere the limits
-  are 20 MB for a picture and 200 MB for a video. Sending files straight to object storage is a separate plan.
+- **Uploads need a storage service of yours.** There is no disk to keep files on, so set the `S3_*` values
+  to an S3-compatible bucket (Cloudflare R2, AWS S3, Backblaze B2; `deploy/README.md` lists them, with the
+  bucket's CORS rule). Files go straight from the browser or phone to the bucket, so Vercel's 4.5 MB limit on
+  a request doesn't apply to them. Without a bucket, uploads are refused with a reason and `/api/health`
+  reports `"storage":"unavailable"`.
 - **Alerts to operators' phones need something to call the instance every minute.** See "Alerts" below.
 - **Live sessions and long jobs** are mocked today and will not pass through a Vercel function when they go
   live: a function can't hold a connection open, and is cut off at 300 seconds by default
@@ -49,7 +51,9 @@ What does not, until the functions behind it go live (`docs/data-sources.md` say
    `DATABASE_URL` (pooled, which requests use) and `DATABASE_URL_UNPOOLED` (direct, which migrations use)
    without your copying anything. **Turn on a database branch for Preview deployments** when you connect the
    database, or keep the two variables to the Production environment only. Otherwise every preview build
-   migrates your production database. Any other Postgres works: set the two variables yourself, and leave
+   migrates your production database. Leave Neon's own "Auth" off: users are the identity provider's, and
+   this database keeps no user records. The integration adds a dozen other variables (`POSTGRES_URL`,
+   `PG*`); the app reads none of them. Any other Postgres works: set the two variables yourself, and leave
    the second empty if the address isn't pooled.
 4. **Set the environment variables** below.
 5. **Deploy.** The build runs `pnpm -w run db:migrate && pnpm run build`: it brings the database to this
@@ -67,7 +71,7 @@ Each is described in `.env.example`.
 | `SESSION_SECRET` | Required. `openssl rand -base64 32`. The same value in every environment that shares a database. |
 | `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | Required. Set by the Neon integration. Without `DATABASE_URL` the build fails, and the app has no disk to keep a database of its own on. |
 | `CRON_SECRET` | Set it on every plan: `openssl rand -hex 32`. Vercel Cron sends it to `/api/cron/alerts`, and it tells the app not to start its own timer, which a function can't keep running. Vercel reads it when it builds, so redeploy after changing it. |
-| `UPLOAD_LIMIT_MB` | `4`. |
+| `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION`, `S3_ENDPOINT` | Your bucket, for uploads. `.env.example` says what each holds. |
 | `INSTANCE_CONFIG_JSON` | Your instance config as JSON on one line. There is no file to mount, so `INSTANCE_CONFIG` and `instance.config.json` are not read here. Empty: the built-in `full` preset. |
 | `ENGINE_URL`, `ENGINE_READER_TOKEN`, `ENGINE_ADMIN_TOKEN` | The engine you run elsewhere. Or `MOCK_ONLY=1` and none of the three. |
 | `OIDC_CLIENT_SECRET`, `OPERATOR_API_TOKEN`, `APNS_*`, `FCM_SERVICE_ACCOUNT` | As anywhere else, if you use them. |
@@ -99,12 +103,14 @@ removing something waits for the release after the code stopped using it.
 
 ## Check on the first deployment
 
-These could not be tried without a Vercel project:
+Confirmed on the first deployment:
 
 - The build finishes with `output: "standalone"` in `apps/web/next.config.ts`, which the Docker image needs.
-  Vercel is expected to ignore it.
-- Functions start with no `DATA_DIR`, no config file and no `.env` on disk. The app looks for those two
-  directories above its working directory and carries on when it finds nothing, wherever that is.
+- Functions start with no `DATA_DIR`, no config file and no `.env` on disk, and `/api/health` answers
+  `"database":"ok"`.
+
+Still to watch:
+
 - Idle database connections are closed before a function is suspended (`attachDatabasePool`): watch the
   database's connection count after a burst of requests.
 - The cron's calls appear in the project's logs each minute and "Alert checks" on the System page reads

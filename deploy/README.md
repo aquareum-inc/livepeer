@@ -14,12 +14,14 @@ INSTANCE_DIR=$PWD docker compose -f deploy/compose.yaml --env-file .env up -d
 | `app` | always | This repository: user app, operator console, API, MCP |
 | `db` | always | Postgres 17, the instance's own database. No published port |
 | `migrate` | always | The app image, run once on every `up`: applies pending migrations, then exits |
+| `storage` | always | Garage, an S3-compatible object store, for uploaded files. No published port |
+| `storage-init` | always | The app image, run once on every `up`: prepares the storage's bucket and key, then exits |
 | `engine` | `network` | The pinned livepeer-builder engine (`lpb serve`) |
 | `discovery` | `network` | The engine's discovery reader (`lpb discovery`) |
 | `clearinghouse` | `network` | Clearinghouse Batteries, the payment provider |
 | `signer` | `network` | The livepeer/node remote signer |
 
-Without the `network` profile only the app and its database start, in mock-only mode or pointed at an engine
+Without the `network` profile only the app, its database and its storage start, in mock-only mode or pointed at an engine
 you already run (`ENGINE_URL`).
 
 ## Database
@@ -34,7 +36,7 @@ Everything the instance keeps is in the database: users' and operators' phone se
 log, reports, blocks and takedowns of shared characters, what alerts have noticed and said, and what the
 console's Settings and Capabilities pages change. The console never writes `instance.config.json`, which
 stays mounted read-only: what it saves is laid over that file, and "Reset to deployed config" goes back to
-it. The `app-data` volume is no longer written to.
+it. Uploaded files are in the bundle's storage (see File storage). The `app-data` volume is no longer written to.
 
 Names and emails are never stored in the clear: where one has to be kept it is encrypted with
 `SESSION_SECRET`. Keep that secret with your backups, or a restored database shows people by their ids only
@@ -57,6 +59,52 @@ services:
   migrate:
     depends_on: !reset []
 ```
+
+## File storage
+
+Files people upload (pictures up to 20 MB, videos up to 200 MB) go straight from the browser or phone to
+object storage with a short-lived signed address, and are read back the same way. The app's server never
+receives them, and the storage key never leaves it. `docs/media-storage.md` has the design.
+
+**This bundle runs its own storage**, so there is nothing to set up: [Garage](https://garagehq.deuxfleurs.fr),
+an S3-compatible server, as one node with its files in the `storage-data` volume. `./livepeer setup`
+generates its secrets (the `STORAGE_*` values in `.env`), and the `storage-init` service prepares its bucket
+and key before the app starts, on `setup`, `upgrade` and a plain `docker compose up`. It has no published
+port. Browsers and phones send a file to the instance's own address and the app passes it on to storage
+without holding it, so a reverse proxy in front of the app (the VPS template's Caddy) needs no change, and
+no CORS rule is needed. Garage is AGPL-3.0 software, run here as its maintainers publish it.
+
+Back up the `storage-data` volume with the database: the database holds the record of each file, the volume
+the file.
+
+**To use a storage service of your own instead**, anything that speaks the S3 API, set these in `.env`.
+Files then go straight from the browser or phone to that service, and the bundled `storage` sits idle:
+
+| Variable | Cloudflare R2 | AWS S3 | Backblaze B2 |
+|----------|---------------|--------|--------------|
+| `S3_BUCKET` | your bucket | your bucket | your bucket |
+| `S3_ENDPOINT` | `https://<account id>.r2.cloudflarestorage.com` | `https://s3.<region>.amazonaws.com`, with `S3_FORCE_PATH_STYLE=false` (outside this bundle it can be left empty) | `https://s3.<region>.backblazeb2.com` |
+| `S3_REGION` | `auto` | the bucket's region | the bucket's region |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | an API token for that bucket: object read and write | an IAM user allowed `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` on the bucket's objects and `s3:ListBucket` on the bucket | an application key for that bucket |
+
+Keep the bucket private: the app signs every address it hands out. Browsers send files from your site's
+address, so the bucket has to allow it (phones don't need this). The rule, as each provider's CORS setting
+takes it:
+
+```json
+[{ "AllowedOrigins": ["https://your-instance.example"], "AllowedMethods": ["PUT", "GET"], "AllowedHeaders": ["content-type"], "MaxAgeSeconds": 3600 }]
+```
+
+If the app's server reaches storage at a different address than your users do (a storage server on a private
+network, published under a media domain), put the users' address in `S3_PUBLIC_ENDPOINT`. A proxy in front
+of storage must pass the `Host` header through unchanged, since the signature covers it.
+
+Outside this bundle, with no `S3_BUCKET`, files are kept on the app's own disk in `DATA_DIR`. That is
+right for development, and can't work on a host with no disk.
+`./livepeer doctor` and `/api/health` say which is in use and whether it can be reached. Uploads that were
+started and never finished are removed within the hour by the same round of checks that sends alerts.
+
+Back up a bucket of your own with your provider's tools, alongside the database.
 
 ## Running the network profile
 
@@ -120,12 +168,12 @@ remote signer are long-running services with their own state and keys: they run 
 profile or on machines of your own, never on a serverless host. An app deployed apart from them reaches the
 engine through `ENGINE_URL`.
 
-A serverless host (Vercel) keeps no server between requests and no disk, and that costs three things today:
+A serverless host (Vercel) keeps no server between requests and no disk, and that costs these things today:
 
 | | Compose, a VPS, Fly | Vercel |
 |---|---|---|
 | The instance's own state (sessions, team, reports, settings, alerts state) | In Postgres | In Postgres, the same |
 | Features still on mock data (generations, library, conversations, characters, API keys, plans, credit, workspaces: `docs/data-sources.md`) | Work, and are lost on restart | Unreliable: the data is in one process's memory and requests land on several. Not fixed until each goes live |
-| Uploads | 20 MB pictures, 200 MB videos | 4 MB (`UPLOAD_LIMIT_MB=4`); Vercel refuses a request over 4.5 MB |
+| Uploaded files | The bundle's own storage, a service of yours (`S3_*`), or the disk | A storage service of yours (`S3_*`): there is no disk. Without it, uploads are refused and say why |
 | Alerts to operators' phones | The server's own timer | A scheduler calling `/api/cron/alerts` each minute: Vercel Cron on the Pro plan, or one of your own on Hobby |
 | Engine, payment provider, signer | The `network` profile | Elsewhere, always |

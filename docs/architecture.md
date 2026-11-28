@@ -7,6 +7,7 @@ apps/web                    Next.js host: routes, session, role guard, /api/v1, 
 packages/api-client         Types, one function per operation (live + mock), data-source map, provider interface
 packages/config             Instance config: JSON Schema, generated types, presets, loader, surface mapping
 packages/db                 The instance's Postgres: Drizzle schema, connection pool, SQL migrations, migration runner
+packages/storage            Object storage behind one interface: S3 API, disk (development), memory (tests)
 packages/ui                 Tokens, primitives, motion
 packages/user-app           User-app screens (chat, studio, characters, library, models, developers, settings)
 packages/operator-console   Operator screens
@@ -261,16 +262,42 @@ Postgres in memory (`lib/data/testing.ts`). A person's name and email are one se
 took down. Every character read (`list_characters`, `get_character`, the web's pages and Home's cast) filters
 through `moderation().visible(userId)`; the console's Reports page decides reports.
 
+## Runs anywhere
+
+The app is meant to be hosted wherever its operator likes: the Compose bundle on any server, a container host
+such as Fly, or a serverless host such as Vercel with a managed Postgres. These rules keep that true, and a
+change that breaks one needs a reason written down.
+
+- **The web app keeps no state of its own.** State lives in Postgres (`docs/database.md`), in object storage
+  (`docs/media-storage.md`), or with the engine and the payment provider. Any request can land on any server,
+  and a server can be thrown away at any moment. What is still held in memory is mock data waiting to go live,
+  and is listed as such (`docs/database.md` D8).
+- **Standard interfaces only.** A database is a `DATABASE_URL` to Postgres. Files are reached through the S3
+  API. Nothing is built on a feature only one host has (a host's own blob store, key-value store or queue).
+- **Background work is an HTTP endpoint anything can call.** A round of checks is `GET /api/cron/alerts` with
+  a bearer secret; a server that stays up calls the same code from a timer. Nothing needs a worker process.
+- **Migrations are a separate step.** They run before the app starts (the bundle's `migrate` service, a
+  release command elsewhere), never as a side effect of serving a request.
+- **Configuration is environment variables and the instance config.** Secrets and addresses are environment
+  variables; everything else is `instance.config.json` (or `INSTANCE_CONFIG_JSON`) with the console's changes
+  laid over it in the database. The app never guesses which host it is on.
+- **The Compose bundle is the reference stack.** It runs every piece (app, Postgres, object storage) with
+  nothing external. Other hosts are thin templates in `deploy/templates/` that point the same image or build
+  at services the host provides.
+- **Development needs nothing installed.** With no `DATABASE_URL` and no `S3_BUCKET`, the app runs a Postgres
+  inside itself and keeps files on disk, both in `DATA_DIR`, behind the same interfaces.
+
 ## Self-hosting
 
 `deploy/compose.yaml` references published images by `${REGISTRY}/${ORG}/...` tags read from
-`release.config.json`: app, engine (pinned ref), Clearinghouse Batteries, node remote signer, discovery.
+`release.config.json`: app, engine (pinned ref), Clearinghouse Batteries, node remote signer, discovery. It
+also runs the instance's own Postgres and object storage (Garage), each prepared by a one-shot service.
 `livepeer setup --preset full|headless [--config file] [--json]` writes `.env` (generated secrets),
 `instance.config.json` and starts the bundle; it is idempotent. `livepeer doctor` checks engine, provider,
 config and keys, with exit codes. `livepeer upgrade` moves app and engine pins together. Because the engine
 and Batteries publish no images today (engine request R6), the bundle builds them from pinned Git contexts
-until they do, and mock-only mode needs neither. The app keeps its own state (device sessions) in the
-`app-data` volume at `/data`.
+until they do, and mock-only mode needs neither. The app keeps its own state in the bundle's Postgres and
+files in object storage (`docs/database.md`, `docs/media-storage.md`).
 
 ## Live versus mocked (summary; full table in `docs/data-sources.md`)
 
