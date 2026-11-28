@@ -73,7 +73,8 @@ the first person to sign in and open `/operator` sets the instance up and become
 holds no engine admin token yet ([deploy/README.md](deploy/README.md), "Your first operator"). The plan and its decisions are in
 [docs/operator-invitations.md](docs/operator-invitations.md).
 
-Agents: see [AGENTS.md](AGENTS.md) for exact commands, expected output and failure fixes.
+Agents: see [AGENTS.md](AGENTS.md) for exact commands, expected output and failure fixes, and
+[docs/agent-runbook.md](docs/agent-runbook.md) to walk someone through hosting their own instance.
 
 ## Development
 
