@@ -161,6 +161,25 @@ credentials the console on phones works as before and says alerts aren't set up.
 - `templates/fly/` — Fly.io, app only, pointed at an engine you run elsewhere.
 - `templates/vercel/` — Vercel, app only, with a managed Postgres such as Neon. Read its README first.
 
+## Your first operator
+
+An instance starts with nobody running it. How its first owner gets in depends on how it was deployed:
+
+- **This bundle.** `./livepeer setup` prints a link. Open it, sign in, and the console is yours. It works
+  once, for 72 hours; `./livepeer invite-operator` prints another.
+- **Any other host, before the engine's admin token is set.** Sign in and open `/operator`. The instance
+  says nobody runs it yet and offers to make you its owner. It offers this once, and only while
+  `ENGINE_ADMIN_TOKEN` is empty and sign-in is a real identity provider, so being first gains a stranger
+  nothing they could spend. Set the instance up, then add the engine's tokens.
+- **Any host, with the admin token already set.** From a checkout, with the instance's `SESSION_SECRET` in
+  the environment: `./livepeer invite-operator --url https://your-instance.example`.
+- **An identity provider that marks operators.** Someone whose sign-in carries `operator` in its `roles`
+  or `groups` is an owner with no other step.
+
+`./livepeer doctor` and `/api/health` say whether the console has an owner. If someone else set up a
+keyless instance before you, the offer is gone: use `invite-operator` to get in, and remove them on Team.
+Everyone after the first owner joins by an invitation from Team.
+
 ## Where each part can run
 
 The app can go wherever a Next.js server or the Docker image runs. The engine, the payment provider and the

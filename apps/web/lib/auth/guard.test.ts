@@ -19,6 +19,9 @@ describe("role guard", () => {
     expect(checkAccess("/join/operator/opi_abc", user)).toBe("allow");
     // A workspace's invitation still asks for a sign-in, and a deeper path is no invitation.
     expect(checkAccess("/join/abc", null)).toBe("sign-in");
+    // Claiming an instance nobody runs yet asks for a sign-in, and nothing more.
+    expect(checkAccess("/setup", null)).toBe("sign-in");
+    expect(checkAccess("/setup", user)).toBe("allow");
     expect(checkAccess("/join/operator/opi_abc/more", null)).toBe("sign-in");
   });
 

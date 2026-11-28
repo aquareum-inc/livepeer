@@ -68,7 +68,9 @@ To connect a real engine, set `ENGINE_URL`, `ENGINE_READER_TOKEN` and `ENGINE_AD
 The first time `./livepeer setup` runs it prints a link. Whoever opens it and signs in becomes the first
 owner of the operator console. Owners invite everyone else from **Team** in the console: pick a role (owner,
 member or viewer), copy the link and send it. A link works once and lasts 72 hours. If nobody can reach the
-console, `./livepeer invite-operator` prints a new owner link. The plan and its decisions are in
+console, `./livepeer invite-operator` prints a new owner link. On a host without the bundle (Vercel, Fly),
+the first person to sign in and open `/operator` sets the instance up and becomes its owner, as long as it
+holds no engine admin token yet ([deploy/README.md](deploy/README.md), "Your first operator"). The plan and its decisions are in
 [docs/operator-invitations.md](docs/operator-invitations.md).
 
 Agents: see [AGENTS.md](AGENTS.md) for exact commands, expected output and failure fixes.

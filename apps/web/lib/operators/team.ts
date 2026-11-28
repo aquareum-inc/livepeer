@@ -49,6 +49,10 @@ export interface OperatorTeamService {
   add(person: Person, role: OperatorRole, by: string): Promise<OperatorRecord>;
   setRole(userId: string, role: OperatorRole): Promise<TeamChange>;
   remove(userId: string): Promise<TeamChange>;
+  /** Whether the team has an owner. An instance without one is run by nobody. */
+  hasOwner(): Promise<boolean>;
+  /** Makes the person the owner of a team that has none. Null when it has one, so it works once. */
+  claim(person: Person): Promise<OperatorRecord | null>;
   sweep(): Promise<void>;
 }
 
@@ -165,6 +169,8 @@ export function operatorTeam(store: OperatorTeamStore, secret: string, now: () =
     add: (person, role, by) => store.grant(person, { role, grantedBy: by, invitationId: null, at: iso(now()) }),
     setRole: (userId, role) => store.setRole(userId, role),
     remove: (userId) => store.remove(userId),
+    hasOwner: () => store.hasOwner(),
+    claim: (person) => store.grantFirstOwner(person, iso(now())),
     sweep: () => store.sweep(iso(now() - KEEP_DAYS * 86_400_000)),
   };
 }

@@ -149,6 +149,7 @@ in `apps/web/lib/public-api/operations.ts`.
 | Operator · Team | Change someone's role | `operator_set_operator_role` (`teamManagement().setRole`; `setOperatorRoleAction`); owners only, never the last owner or someone the identity provider made an operator | Not on mobile |
 | Operator · Team | Remove someone, or leave | `operator_remove_operator` (`teamManagement().remove`; `removeOperatorAction`); owners remove others, anyone removes themselves, never the last owner. Their console sessions and phones end at once | Not on mobile |
 | Operator · Team (API only) | Put someone who already has an account on the team | `operator_add_operator` (`teamManagement().add`); owners only. No screen offers it: the console invites by link | Not on mobile |
+| Set up this instance (`/setup`) | Become the owner of an instance nobody runs yet | `claimInstanceAction` (`operators().claim`), offered while `firstOwnerOpen` | Not on mobile |
 | Join the team (`/join/operator/<token>`) | Read an invitation, signed in or not | `operators().read` (`apps/web/lib/operators/team.ts`) | Not on mobile |
 | Join the team | Join, after a sign-in from the last five minutes | `acceptOperatorInvitationAction` (`operators().accept`) | Not on mobile |
 | Operator · User | See the person's operator role, if they are on the team | `operators().operators()` | Not on mobile |

@@ -8,6 +8,9 @@ import type { InvitationRecord, OperatorRecord, OperatorTeamStore, Person, TeamC
 
 const { operators, operatorInvitations: invitations } = schema;
 
+/** What stands where an invitation's id would, for the owner who claimed an instance nobody ran yet. */
+export const FIRST_SIGN_IN = "first-sign-in";
+
 const RANK: Record<OperatorRole, number> = { viewer: 0, member: 1, owner: 2 };
 
 /**
@@ -89,6 +92,18 @@ export function postgresOperatorTeamStore(db: Database, secret: string): Operato
       await db.update(operators).set({ identitySealed: identity.seal(person) }).where(eq(operators.userId, person.userId));
     },
     grant: (person, given) => db.transaction((tx) => grant(tx, person, given)),
+    async hasOwner() {
+      return (await db.select({ userId: operators.userId }).from(operators).where(eq(operators.role, "owner")).limit(1)).length > 0;
+    },
+    grantFirstOwner(person, at) {
+      return db.transaction(async (tx) => {
+        // Nobody else may join the team until this is decided: a second asker waits here, then finds an owner.
+        await tx.execute(sql`lock table ${operators} in share row exclusive mode`);
+        const [owner] = await tx.select({ userId: operators.userId }).from(operators).where(eq(operators.role, "owner")).limit(1);
+        if (owner) return null;
+        return grant(tx, person, { role: "owner", grantedBy: null, invitationId: FIRST_SIGN_IN, at });
+      });
+    },
     setRole: (userId, role) => change(userId, (tx) => tx.update(operators).set({ role }).where(eq(operators.userId, userId)), (current) => current !== "owner" || role === "owner"),
     remove: (userId) => change(userId, (tx) => tx.delete(operators).where(eq(operators.userId, userId)), (current) => current !== "owner"),
 

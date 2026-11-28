@@ -94,6 +94,42 @@ describe("the operator team", () => {
     });
   });
 
+  describe("an instance nobody runs yet", () => {
+    it("is claimed by one person, who becomes its owner, and never again", async () => {
+      expect(await team().hasOwner()).toBe(false);
+      expect(await team().claim(sam)).toMatchObject({ userId: "usr_sam", role: "owner", source: "grant" });
+      expect(await team().hasOwner()).toBe(true);
+      expect(await team().claim(adam)).toBeNull();
+      expect(await team().operators()).toEqual([{ user_id: "usr_sam", name: "Sam Whitfield", email: "sam@example.test", role: "owner", via: "setup", added_by: null, since: new Date(T0).toISOString() }]);
+      // Their place is by grant, so it stands at their next sign-in without the provider's word.
+      expect(await team().signIn(sam, false)).toEqual({ role: "operator", source: "grant" });
+    });
+
+    it("is claimed by one of two people who ask at the same moment", async () => {
+      const results = await Promise.all([team().claim(sam), team().claim(adam), team().claim(ines)]);
+      expect(results.filter(Boolean)).toHaveLength(1);
+      expect(await team().operators()).toHaveLength(1);
+    });
+
+    it("can't be claimed once it has an owner, whether by a link, or on the identity provider's word", async () => {
+      await withOwner();
+      expect(await team().claim(adam)).toBeNull();
+      await db.delete(schema.operators);
+      await db.delete(schema.operatorInvitations);
+      await team().signIn(ines, true);
+      expect(await team().hasOwner()).toBe(true);
+      expect(await team().claim(adam)).toBeNull();
+    });
+
+    it("can be claimed while its only operators are not owners, and leaves them as they were", async () => {
+      // Not a state the console allows, but one a database restored by hand could be in.
+      await store.grant(adam, { role: "viewer", grantedBy: null, invitationId: null, at: new Date(T0).toISOString() });
+      expect(await team().hasOwner()).toBe(false);
+      expect(await team().claim(sam)).toMatchObject({ role: "owner" });
+      expect(await team().role("usr_adam")).toBe("viewer");
+    });
+  });
+
   describe("an invitation", () => {
     beforeEach(withOwner);
 
