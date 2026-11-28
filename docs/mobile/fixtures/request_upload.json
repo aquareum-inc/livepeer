@@ -1,6 +1,10 @@
 {
-  "id": "upl_3fe6ffeb7918476d9aa3d799c95ae3f9",
-  "path": "/api/v1/uploads/upl_3fe6ffeb7918476d9aa3d799c95ae3f9",
+  "id": "upl_4eac517cde11411695d97c4b85ef80f5",
+  "url": "/api/storage/uploads/upl_4eac517cde11411695d97c4b85ef80f5?expires=1795786095&length=111494&type=image%2Fpng&signature=Qm9ndXMtc2lnbmF0dXJlLWZvci1hLWZpeHR1cmUtb25seQ",
+  "method": "PUT",
+  "headers": {
+    "Content-Type": "image/png"
+  },
   "max_bytes": 20971520,
-  "expires_at": "2026-11-23T16:22:15.875Z"
+  "expires_at": "2026-11-27T13:28:15.723Z"
 }

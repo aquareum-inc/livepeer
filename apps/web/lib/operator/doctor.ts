@@ -5,6 +5,7 @@ import type { SystemCheck } from "@livepeer/operator-console";
 import { roundStatus } from "../alerts/round";
 import { env } from "../env";
 import { instance } from "../instance";
+import { storageStatus } from "../media/storage";
 import { pushSetup } from "../push";
 
 /** "just now", "40 seconds ago", "2 minutes ago". */
@@ -44,6 +45,14 @@ export async function runDoctor(): Promise<SystemCheck[]> {
 
   const secret = env("SESSION_SECRET") ?? "";
   add("SESSION_SECRET", secret.length >= 32 || mockOnly, secret.length >= 32 ? "set" : mockOnly ? "development default (mock-only)" : "missing", "Set a 32+ character SESSION_SECRET in .env");
+
+  const files = await storageStatus();
+  add(
+    "File storage",
+    files.status === "ok",
+    files.status !== "ok" ? files.detail : files.kind === "s3" ? "object storage, reachable" : "this server's own disk, in DATA_DIR (set S3_BUCKET to use object storage)",
+    files.kind === "s3" ? "Check S3_BUCKET, S3_ENDPOINT, S3_REGION and the access key in .env, and that the key may read, write and delete in that bucket" : "Set S3_BUCKET and the other S3_* values in .env to keep files in object storage, or make DATA_DIR writable",
+  );
 
   // Alerts to operators' phones are optional: no credentials is fine, half-set or unreadable ones are not.
   if ((await instance()).surfaces.mobileConsole === true) {

@@ -99,6 +99,7 @@ apps/android              Native Android app (Kotlin, Compose): a client of an i
 packages/api-client       Types and one function per operation (live + mock), data-source map
 packages/config           Instance config schema, generated types, presets, capability and surface rules
 packages/db               The instance's Postgres: schema, connection, migrations and the migration runner
+packages/storage          Object storage behind one interface: the S3 API, or the app's own disk in development
 packages/ui               Theme tokens, primitives, motion
 packages/user-app         User-app screens
 packages/operator-console Operator console screens
@@ -124,6 +125,11 @@ those. The apps sign in in the system's own browser session and get a revocable 
 the instance keeps sessions, and reports and blocks of shared characters, in its Postgres database. The
 Compose bundle runs one; with no `DATABASE_URL`, as in `pnpm dev`, the app runs a Postgres inside itself and
 keeps it in `.data/`, so there is nothing to install.
+
+Files people upload go straight from the browser or phone to object storage and never through the app's
+server. Storage is anything that speaks the S3 API (Cloudflare R2, AWS S3, Backblaze B2, a server you run),
+set with the `S3_*` variables in `.env.example`. The Compose bundle runs its own (Garage); with none set,
+as in `pnpm dev`, the app keeps files in `.data/media` behind the same interface. `docs/media-storage.md` has the design.
 
 The operator console on phones is a second switch (`surfaces.mobileConsole`, also off in both presets). The
 server side is built: an operator's phone gets its own short-lived session, bound to a key in the phone's

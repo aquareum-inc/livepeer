@@ -131,9 +131,13 @@ class Api(private val transport: ApiTransport) {
     suspend fun deleteMedia(id: String): Deleted =
         transport.send(Deleted.serializer(), "DELETE", "/library/${ApiTransport.escape(id)}", query = emptyMap(), body = null)
 
-    /** Ask to add a photo or video from the device to the library. Answers with where to send the file: PUT its bytes to `path` on this instance with the same sign-in, and the library item comes back. */
+    /** Ask to add a photo or video from the device to the library. Answers with where to send the file: send its bytes to `url` with `method` and exactly the `headers` given, and no sign-in, since the address is its own permission and may be on another host. An address starting with `/` is on this instance. Then call complete_upload. */
     suspend fun requestUpload(kind: String, name: String, contentType: String, sizeBytes: Double, aspect: String? = null): UploadTicket =
         transport.send(UploadTicket.serializer(), "POST", "/uploads", query = emptyMap(), body = mapOf("kind" to JsonPrimitive(kind), "name" to JsonPrimitive(name), "content_type" to JsonPrimitive(contentType), "size_bytes" to JsonPrimitive(sizeBytes), "aspect" to aspect?.let { JsonPrimitive(it) }))
+
+    /** Say that the file a request_upload ticket was given for has been sent. The instance checks it arrived as declared and answers with the library item. Safe to repeat. */
+    suspend fun completeUpload(id: String): MediaItem =
+        transport.send(MediaItem.serializer(), "POST", "/uploads/${ApiTransport.escape(id)}/complete", query = emptyMap(), body = null)
 
     /** Ask about a video: summarise it, find moments, answer a question. */
     suspend fun understandVideo(source: String, question: String): VideoAnalysis =

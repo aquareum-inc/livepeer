@@ -48,10 +48,12 @@ final class ComposerSupport {
             }
             defer { try? FileManager.default.removeItem(at: file.url) }
             let ticket = try await api.requestUpload(kind: file.kind, name: file.name, contentType: file.contentType, sizeBytes: Double(file.size), aspect: file.aspect)
-            let item: MediaItem = try await api.transport.put(file: file.url, contentType: file.contentType, to: ticket.path)
+            // Straight to storage, then the instance is told it is there.
+            try await api.transport.upload(file: file.url, to: ticket.url, method: ticket.method, headers: ticket.headers)
+            let item = try await api.completeUpload(id: ticket.id)
             if case .loaded(let items) = library { library = .loaded([item] + items) }
             return item
-        } catch let error as APIError where error.status == 413 || error.status == 415 {
+        } catch let error as APIError where [409, 413, 415, 503].contains(error.status) {
             uploadError = error.message
         } catch {
             uploadError = "That didn't upload. Check your connection and try again."

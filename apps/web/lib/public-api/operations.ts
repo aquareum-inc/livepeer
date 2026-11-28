@@ -129,14 +129,18 @@ export interface Operation {
   run: (context: Context, input: Record<string, unknown>) => Promise<unknown>;
 }
 
+const REFUSED: Record<string, number> = { too_large: 413, unsupported_type: 415, not_received: 409, uploads_unavailable: 503, account_required: 403 };
+
 /**
- * A refused file as the API answers it: too large is 413, the wrong kind 415. The refusal is told by its
- * name, not its class: this file is also read by the client generator, which imports only types.
+ * A refused file as the API answers it: too large is 413, the wrong kind 415, not arrived 409, 403 for a
+ * caller with no library of their own, and 503 when the instance has nowhere to keep files. The refusal is told by its name, not its class: this file is also
+ * read by the client generator, which imports only types.
  */
-export function uploadError(cause: unknown): unknown {
+function uploadError(cause: unknown): unknown {
+  if (cause instanceof Error && cause.name === "StorageUnavailable") return new ApiError(503, "Storage isn't answering. Try again in a moment.", "uploads_unavailable");
   if (!(cause instanceof Error) || cause.name !== "UploadRefused") return cause;
   const code = (cause as Error & { code?: string }).code;
-  return new ApiError(code === "too_large" ? 413 : code === "unsupported_type" ? 415 : 400, cause.message, code);
+  return new ApiError(REFUSED[code ?? ""] ?? 400, cause.message, code);
 }
 
 const object = (properties: Schema, required: string[] = []): Schema => ({ type: "object", properties, required, additionalProperties: false });
@@ -516,7 +520,7 @@ export const OPERATIONS: Operation[] = [
   { name: "delete_media", description: "Delete an item from the library. This can't be undone.", method: "DELETE", path: "/library/{id}", output: "Deleted", input: object({ id: text("Library item id") }, ["id"]), run: async ({ client }, input) => ({ deleted: (await client.deleteMedia(str(input, "id"))).data }) },
   {
     name: "request_upload",
-    description: "Ask to add a photo or video from the device to the library. Answers with where to send the file: PUT its bytes to `path` on this instance with the same sign-in, and the library item comes back.",
+    description: "Ask to add a photo or video from the device to the library. Answers with where to send the file: send its bytes to `url` with `method` and exactly the `headers` given, and no sign-in, since the address is its own permission and may be on another host. An address starting with `/` is on this instance. Then call complete_upload.",
     method: "POST",
     path: "/uploads",
     output: "UploadTicket",
@@ -537,6 +541,24 @@ export const OPERATIONS: Operation[] = [
       const aspect = input.aspect === "16:9" || input.aspect === "9:16" || input.aspect === "1:1" ? input.aspect : undefined;
       try {
         return (await client.requestUpload({ kind: input.kind, name: str(input, "name"), content_type: str(input, "content_type"), size_bytes: Number(input.size_bytes), ...(aspect ? { aspect } : {}) })).data;
+      } catch (cause) {
+        throw uploadError(cause);
+      }
+    },
+  },
+  {
+    name: "complete_upload",
+    description: "Say that the file a request_upload ticket was given for has been sent. The instance checks it arrived as declared and answers with the library item. Safe to repeat.",
+    method: "POST",
+    path: "/uploads/{id}/complete",
+    output: "MediaItem",
+    mcp: false,
+    input: object({ id: text("The ticket's id, from request_upload") }, ["id"]),
+    run: async ({ client }, input) => {
+      try {
+        const item = (await client.completeUpload(str(input, "id"))).data;
+        if (!item) throw new ApiError(404, "That upload wasn't asked for, or it took too long. Choose the file again.", "upload_expired");
+        return item;
       } catch (cause) {
         throw uploadError(cause);
       }

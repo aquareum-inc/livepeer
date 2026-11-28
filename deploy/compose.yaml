@@ -20,10 +20,23 @@ x-app: &app
 
 x-database-url: &database-url ${DATABASE_URL:-postgres://livepeer:${POSTGRES_PASSWORD:-}@db:5432/livepeer}
 
+# Where uploaded files go: the bundle's own object storage unless .env names another S3-compatible service
+# (S3_ENDPOINT with its bucket, region and key). The bundle's storage has no address outside this network, so
+# S3_PUBLIC_ENDPOINT is "app": browsers and phones send a file to the app's own address, which passes it on
+# without holding it. Storage named in .env is assumed to be reachable by them directly.
+x-storage: &storage
+  S3_BUCKET: ${S3_BUCKET:-livepeer-media}
+  S3_ENDPOINT: ${S3_ENDPOINT:-http://storage:3900}
+  S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-${S3_ENDPOINT:-app}}
+  S3_REGION: ${S3_REGION:-garage}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-${STORAGE_ACCESS_KEY_ID:-}}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-${STORAGE_SECRET_KEY:-}}
+
 services:
   app:
     <<: *app
     environment:
+      <<: *storage
       INSTANCE_CONFIG: /config/instance.config.json
       DATABASE_URL: *database-url
       # Named here because .env carries DATA_DIR empty, which would otherwise replace the image's own value
@@ -33,8 +46,10 @@ services:
       - ${INSTANCE_DIR:-..}/instance.config.json:/config/instance.config.json:ro
       - app-data:/data
     ports: ["127.0.0.1:${APP_PORT:-3000}:3000"]
-    # The app starts only on a migrated database: a failed migration stops it here.
-    depends_on: { migrate: { condition: service_completed_successfully } }
+    # The app starts only on a migrated database and prepared storage: a failure in either stops it here.
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      storage-init: { condition: service_completed_successfully }
     restart: unless-stopped
 
   # The instance's own state. No published port: only the app and the migration reach it.
@@ -56,6 +71,35 @@ services:
     environment:
       DATABASE_URL: *database-url
     depends_on: { db: { condition: service_healthy } }
+    restart: "no"
+
+  # The instance's own object storage: Garage, an S3-compatible server, as one node keeping one copy of each
+  # file. No published port: the app reaches it, and passes clients' files to and from it. It is run as its
+  # maintainers publish it, unmodified, as a separate service (it is AGPL; nothing of it is in this repository).
+  storage:
+    image: dxflrs/garage:v2.1.0
+    environment:
+      GARAGE_RPC_SECRET: ${STORAGE_RPC_SECRET:?STORAGE_RPC_SECRET is not set. Run ./livepeer setup, which generates it}
+      GARAGE_ADMIN_TOKEN: ${STORAGE_ADMIN_TOKEN:?STORAGE_ADMIN_TOKEN is not set. Run ./livepeer setup, which generates it}
+    volumes:
+      - ./config/garage.toml:/etc/garage.toml:ro
+      - storage-data:/var/lib/garage
+    restart: unless-stopped
+
+  # Prepares that storage, then exits: the node's layout, the bucket, and the app's key with leave to use it.
+  # Like migrate it runs on every `up` and does only what is not yet done. It is the app image because that
+  # has Node; the script is the one file mounted here.
+  storage-init:
+    <<: *app
+    command: [node, /storage-init.mjs]
+    environment:
+      GARAGE_ADMIN_URL: http://storage:3903
+      GARAGE_ADMIN_TOKEN: ${STORAGE_ADMIN_TOKEN:-}
+      STORAGE_BUCKET: livepeer-media
+      STORAGE_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY_ID:-}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-}
+    volumes: [./config/storage-init.mjs:/storage-init.mjs:ro]
+    depends_on: { storage: { condition: service_started } }
     restart: "no"
 
   engine:
@@ -133,5 +177,6 @@ services:
 volumes:
   app-data:
   db-data:
+  storage-data:
   engine-data:
   paid-state:

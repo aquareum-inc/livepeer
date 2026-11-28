@@ -50,7 +50,15 @@ class ComposerTest {
         assertNull(PickedFile.shape(0, 10))
         assertEquals("Photo, 23 Nov", PickedFile.name("image", LocalDate.of(2026, 11, 23), Locale.UK))
         assertEquals("Video, 23 Nov", PickedFile.name("video", LocalDate.of(2026, 11, 23), Locale.UK))
-        assertTrue(fixture("request_upload", UploadTicket.serializer()).path.startsWith("/api/v1/uploads/"))
+        val ticket = fixture("request_upload", UploadTicket.serializer())
+        assertEquals("PUT", ticket.method)
+        assertEquals("image/png", ticket.headers["Content-Type"])
+        // An address on the instance is resolved against it; one on a storage service is used as it is.
+        val instance = "http://10.0.2.2:3100/api/v1"
+        assertTrue(ApiTransport.uploadUrl(ticket.url, instance).toString().startsWith("http://10.0.2.2:3100/api/storage/uploads/upl_"))
+        assertEquals("media.example.com", ApiTransport.uploadUrl("https://media.example.com/bucket/uploads/upl_1?X-Amz-Signature=abc", instance)?.host)
+        assertNull(ApiTransport.uploadUrl("file:///etc/hosts", instance))
+        assertNull(ApiTransport.uploadUrl("javascript:alert(1)", instance))
     }
 
     @Test

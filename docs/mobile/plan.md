@@ -108,9 +108,10 @@ Swift and Kotlin: `list_capability_labels` returns the result, and slice 2 adds 
 model menu.
 
 Attaching from Photos was added later (decision 106 in `docs/design-proposals.md`): `request_upload`, then
-the file itself to the address it answers with. Still not added, and why: `getMediaUrl` doesn't exist in
-the API client yet, so saving a result to Photos is planned for when the media
-store and real outputs exist. Until then mobile attaches from the library, as the web does.
+the file itself to the address it answers with, then `complete_upload` (`docs/media-storage.md`, section 8:
+the address is on the instance's storage, not under `/api/v1`, and is sent no session token). Still not
+added, and why: saving a result to Photos is planned for when real outputs exist; the media store and
+`getMediaUrl` now do. Until then mobile attaches from the library, as the web does.
 
 ### 4.2 Response schemas and the OpenAPI document
 

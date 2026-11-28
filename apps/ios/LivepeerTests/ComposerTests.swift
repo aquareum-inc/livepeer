@@ -32,7 +32,14 @@ struct ComposerTests {
         #expect(PickedFile.shape(width: 0, height: 10) == nil)
         #expect(PickedFile.name(for: "image").hasPrefix("Photo, "))
         #expect(PickedFile.name(for: "video").hasPrefix("Video, "))
-        #expect(try fixture("request_upload", as: UploadTicket.self).path.hasPrefix("/api/v1/uploads/"))
+        let ticket = try fixture("request_upload", as: UploadTicket.self)
+        #expect(ticket.method == "PUT" && ticket.headers["Content-Type"] == "image/png")
+        // An address on the instance is resolved against it; one on a storage service is used as it is.
+        let instance = URL(string: "http://localhost:3100/api/v1")!
+        #expect(APITransport.uploadURL(ticket.url, instance: instance)?.absoluteString.hasPrefix("http://localhost:3100/api/storage/uploads/upl_") == true)
+        #expect(APITransport.uploadURL("https://media.example.com/bucket/uploads/upl_1?X-Amz-Signature=abc", instance: instance)?.host == "media.example.com")
+        #expect(APITransport.uploadURL("file:///etc/hosts", instance: instance) == nil)
+        #expect(APITransport.uploadURL("javascript:alert(1)", instance: instance) == nil)
     }
 
     @Test func theModelAndTheCastCarryOn() {

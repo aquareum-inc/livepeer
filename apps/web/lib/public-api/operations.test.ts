@@ -235,16 +235,24 @@ describe("public API operations", () => {
   });
 
   it("keeps the apps' sign-in plumbing, account switching and uploads from a device away from agents", async () => {
-    expect(OPERATIONS.filter((operation) => operation.mcp === false).map((operation) => operation.name).sort()).toEqual(["create_device_session", "create_operator_challenge", "create_operator_device_session", "delete_account", "delete_operator_device_session", "end_device_session", "request_upload", "switch_account", "unlock_operator_device_session"]);
+    expect(OPERATIONS.filter((operation) => operation.mcp === false).map((operation) => operation.name).sort()).toEqual(["complete_upload", "create_device_session", "create_operator_challenge", "create_operator_device_session", "delete_account", "delete_operator_device_session", "end_device_session", "request_upload", "switch_account", "unlock_operator_device_session"]);
   });
 
   it("says where to send a file, and refuses one it can't take with a reason a client can act on", async () => {
     const ask = OPERATIONS.find((operation) => operation.name === "request_upload")!;
-    const ticket = (await ask.run(base, { kind: "image", name: "tide.png", content_type: "image/png", size_bytes: 2048, aspect: "1:1" })) as { id: string; path: string };
-    expect(ticket.path).toBe(`/api/v1/uploads/${ticket.id}`);
-    await expect(ask.run(base, { kind: "image", name: "tide.heic", content_type: "image/heic", size_bytes: 2048 })).rejects.toMatchObject({ status: 415, code: "unsupported_type" });
-    await expect(ask.run(base, { kind: "video", name: "long.mp4", content_type: "video/mp4", size_bytes: 300 * 1024 * 1024 })).rejects.toMatchObject({ status: 413, code: "too_large" });
-    await expect(ask.run(base, { kind: "audio", name: "a.mp3", content_type: "audio/mpeg", size_bytes: 10 })).rejects.toMatchObject({ status: 400 });
+    const done = OPERATIONS.find((operation) => operation.name === "complete_upload")!;
+    // A person's phone: the file goes to their library. An API key of a personal account has none to go to.
+    const phone: Context = { ...base, via: "device", account: adam, client: createApiClient({ env: { MOCK_ONLY: "1" }, provider, user: adam.user }) };
+    await expect(ask.run(base, { kind: "image", name: "tide.png", content_type: "image/png", size_bytes: 2048 })).rejects.toMatchObject({ status: 403, code: "account_required" });
+    const ticket = (await ask.run(phone, { kind: "image", name: "tide.png", content_type: "image/png", size_bytes: 2048, aspect: "1:1" })) as { id: string; url: string; method: string; headers: Record<string, string> };
+    expect(ticket).toMatchObject({ method: "PUT", headers: { "Content-Type": "image/png" } });
+    expect(ticket.url).toContain(ticket.id);
+    // Nothing was sent yet, and a ticket nobody was given is not a ticket.
+    await expect(done.run(phone, { id: ticket.id })).rejects.toMatchObject({ status: 409, code: "not_received" });
+    await expect(done.run(phone, { id: "upl_unknown" })).rejects.toMatchObject({ status: 404, code: "upload_expired" });
+    await expect(ask.run(phone, { kind: "image", name: "tide.heic", content_type: "image/heic", size_bytes: 2048 })).rejects.toMatchObject({ status: 415, code: "unsupported_type" });
+    await expect(ask.run(phone, { kind: "video", name: "long.mp4", content_type: "video/mp4", size_bytes: 300 * 1024 * 1024 })).rejects.toMatchObject({ status: 413, code: "too_large" });
+    await expect(ask.run(phone, { kind: "audio", name: "a.mp3", content_type: "audio/mpeg", size_bytes: 10 })).rejects.toMatchObject({ status: 400 });
   });
 
   it("collects a sign-in once, with a reason a client can act on when it can't", async () => {

@@ -11,8 +11,11 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -112,23 +115,18 @@ class ApiTransport(
     }
 
     /**
-     * Sends a file to where an upload ticket said to, with the same sign-in, and reads what comes back.
-     * [path] is the ticket's own, on this instance.
+     * Sends a file to where an upload ticket said to, with the headers it gave. The address is its own
+     * permission and may be on another host, so nothing of the session goes with it: no token.
      */
-    suspend fun <T> put(output: DeserializationStrategy<T>, file: File, contentType: String, path: String): T {
-        if (!path.startsWith("/api/v1/")) throw ApiError(0, "The request failed.", null)
-        val sent = token()
-        val request = Request.Builder().url(root.removeSuffix("/api/v1") + path).header("Accept", "application/json").put(file.asRequestBody(contentType.toMediaType())).apply {
-            sent?.let { header("Authorization", "Bearer $it") }
+    suspend fun upload(file: File, address: String, method: String, headers: Map<String, String>) {
+        val url = uploadUrl(address, root) ?: throw ApiError(0, "The request failed.", null)
+        // The body carries the media type, so it is sent exactly as the ticket gave it.
+        val type = headers.entries.firstOrNull { it.key.equals("Content-Type", ignoreCase = true) }?.value?.toMediaTypeOrNull()
+        val request = Request.Builder().url(url).method(method, file.asRequestBody(type)).apply {
+            headers.filterKeys { !it.equals("Content-Type", ignoreCase = true) }.forEach { (name, value) -> header(name, value) }
         }.build()
-        val (status, text) = withContext(Dispatchers.IO) { client.newCall(request).await().use { response -> response.code to response.body.string() } }
-        if (status !in 200..299) {
-            val body = runCatching { json.decodeFromString(Envelope.serializer(), text).error }.getOrNull()
-            val error = ApiError(status, body?.message ?: "The request failed.", body?.code)
-            if (sent != null && (error.isSignedOut || error.isMobileOff)) refused(Refusal(error, sent))
-            throw error
-        }
-        return json.decodeFromString(output, text)
+        val status = withContext(Dispatchers.IO) { client.newCall(request).await().use { it.code } }
+        if (status !in 200..299) throw ApiError(0, "The file didn't upload.", null)
     }
 
     companion object {
@@ -136,6 +134,12 @@ class ApiTransport(
 
         /** Reads what the instance sends, and ignores fields a newer instance adds. */
         val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
+
+        /**
+         * Where an upload ticket's address leads: the address itself, or on this instance when it starts
+         * with "/". Null for anything that isn't http or https.
+         */
+        fun uploadUrl(address: String, root: String): HttpUrl? = if (address.startsWith("/")) root.toHttpUrlOrNull()?.resolve(address) else address.toHttpUrlOrNull()
 
         /** A value as one path segment. */
         fun escape(segment: String): String = URLEncoder.encode(segment, "UTF-8").replace("+", "%20")

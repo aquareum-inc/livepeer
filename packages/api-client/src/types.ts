@@ -233,19 +233,20 @@ export interface UploadRequest {
   aspect?: "16:9" | "9:16" | "1:1";
 }
 
-/** Leave to send one file: where to PUT its bytes, and until when. */
+/** Leave to send one file: where to send its bytes, how, and until when. */
 export interface UploadTicket {
   id: string;
-  /** Where to PUT the file, on this instance, with the same sign-in. The library item comes back. */
-  path: string;
+  /**
+   * Where to send the file. The address is its own permission: send no sign-in with it. It is on the
+   * instance's storage service, or starts with "/" when the instance itself takes the file.
+   */
+  url: string;
+  method: "PUT";
+  /** Headers to send with the file, exactly as given. */
+  headers: Record<string, string>;
   max_bytes: number;
+  /** Until when the address is good. Ask again after that. */
   expires_at: string;
-}
-
-/** A stored file, as it is served. */
-export interface MediaFile {
-  content_type: string;
-  bytes: Uint8Array;
 }
 
 export interface Character {

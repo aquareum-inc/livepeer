@@ -122,13 +122,15 @@ class ComposerSupport(private val api: Api, private val transport: ApiTransport)
                 return null
             }
             val ticket = api.requestUpload(kind = file.kind, name = file.name, contentType = file.contentType, sizeBytes = file.file.length().toDouble(), aspect = file.aspect)
-            val item = transport.put(MediaItem.serializer(), file.file, file.contentType, ticket.path)
+            // Straight to storage, then the instance is told it is there.
+            transport.upload(file.file, ticket.url, ticket.method, ticket.headers)
+            val item = api.completeUpload(ticket.id)
             (_library.value as? Load.Loaded)?.let { _library.value = Load.Loaded(listOf(item) + it.value) }
             return item
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            _uploadError.value = if (error is ApiError && (error.status == 413 || error.status == 415)) error.message else "That didn't upload. Check your connection and try again."
+            _uploadError.value = if (error is ApiError && error.status in setOf(409, 413, 415, 503)) error.message else "That didn't upload. Check your connection and try again."
             return null
         } finally {
             file?.file?.delete()

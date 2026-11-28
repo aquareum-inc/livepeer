@@ -164,8 +164,24 @@ function migrations(dir) {
   }
 }
 
-/** Why `up` failed, in one line. A failed migration is the one cause worth naming: the app won't start on it. */
+/**
+ * The bundle's own object storage (Garage) needs four secrets: the node's RPC secret and admin token, and the
+ * id and secret of the key the app signs with, in the shapes Garage takes. One already in .env is kept.
+ */
+const storageSecrets = () => ({
+  STORAGE_RPC_SECRET: randomBytes(32).toString("hex"),
+  STORAGE_ADMIN_TOKEN: randomBytes(32).toString("base64url"),
+  STORAGE_ACCESS_KEY_ID: `GK${randomBytes(12).toString("hex")}`,
+  STORAGE_SECRET_KEY: randomBytes(32).toString("hex"),
+});
+
+/** Why `up` failed, in one line. A failed migration or storage step is worth naming: the app won't start on either. */
 function startFailure(dir, up) {
+  const storage = compose(dir, ["ps", "--all", "--format", "json", "storage-init"], { capture: true });
+  if (/"ExitCode":\s*[1-9]/.test(storage.stdout ?? "")) {
+    const logs = compose(dir, ["logs", "--no-log-prefix", "--tail", "1", "storage-init"], { capture: true });
+    return `the bundle's file storage could not be prepared, so the app was not started${logs.stdout?.trim() ? ` (${logs.stdout.trim()})` : ""}`;
+  }
   const states = compose(dir, ["ps", "--all", "--format", "json", "migrate"], { capture: true });
   if (/"ExitCode":\s*[1-9]/.test(states.stdout ?? "")) {
     const logs = compose(dir, ["logs", "--no-log-prefix", "--tail", "1", "migrate"], { capture: true });
@@ -217,6 +233,7 @@ async function setup(options) {
     SESSION_SECRET: randomBytes(32).toString("base64url"),
     // For the bundle's own Postgres. It goes into a connection address, so it must be safe in a URL.
     POSTGRES_PASSWORD: randomBytes(24).toString("base64url"),
+    ...storageSecrets(),
     APP_PORT: String(options.port || current.APP_PORT || 3000),
     MOCK_ONLY: mockOnly ? "1" : "",
   };
@@ -399,6 +416,11 @@ async function doctor(options) {
     if (database === "ok" || database === "behind") {
       add("database schema", database === "ok", database === "ok" ? "has every migration this release expects" : "behind this release's migrations", "Run: livepeer upgrade (it applies the pending migrations before the app starts)");
     }
+    // Files people upload: object storage through the S3 API, or the app's own disk when none is set.
+    const storage = app.body.storage;
+    if (storage) {
+      add("file storage", storage.status === "ok", storage.status !== "ok" ? (storage.kind === "s3" ? "object storage can't be used: the bucket is missing, unreachable, or the key was refused" : "the app has no disk it can write files to") : storage.kind === "s3" ? "object storage, reachable" : "the app's own disk, in DATA_DIR (set S3_BUCKET to use object storage)", storage.kind === "s3" ? (env.S3_ENDPOINT ? "Check S3_BUCKET, S3_ENDPOINT, S3_REGION and the access key in .env. The System page in the console says which it is" : "Check the bundle's storage: docker compose -f deploy/compose.yaml ps storage storage-init") : "Set S3_BUCKET and the other S3_* values in .env, or give the app a writable DATA_DIR");
+    }
     // Operators' alerts are sent by a round of checks each minute. With nothing running it, they are told nothing.
     if (app.body.alerts === "overdue") {
       add("alert checks", false, "nothing has run them in the last five minutes", env.CRON_SECRET ? "CRON_SECRET is set, so a scheduler has to call /api/cron/alerts every minute with it as a bearer token. Unset it on a host whose server stays running, and the server runs them itself" : "Check the app container's logs: its own timer should run them each minute");
@@ -452,8 +474,8 @@ async function upgrade(options) {
   const envFile = path.join(dir, ".env");
   if (!existsSync(envFile)) fail(EXIT.usage, "no .env here. Run: livepeer setup", json);
   const pins = release();
-  // An instance set up before the bundle had its own Postgres has no password for it yet; one already set is kept.
-  const merged = mergeEnv(readFileSync(envFile, "utf8"), { ...pins, POSTGRES_PASSWORD: randomBytes(24).toString("base64url") }, { overwrite: Object.keys(pins) });
+  // An instance set up before the bundle had its own Postgres or storage has no secrets for them yet; one already set is kept.
+  const merged = mergeEnv(readFileSync(envFile, "utf8"), { ...pins, POSTGRES_PASSWORD: randomBytes(24).toString("base64url"), ...storageSecrets() }, { overwrite: Object.keys(pins) });
   writeFileSync(envFile, merged.text, { mode: 0o600 });
   if (!dockerAvailable()) fail(EXIT.docker, "Docker with the Compose plugin is required.", json);
   const up = compose(dir, ["up", "-d", "--build"], { network: options.network, capture: json });

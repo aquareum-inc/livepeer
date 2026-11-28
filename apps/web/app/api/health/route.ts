@@ -4,6 +4,7 @@ import { roundStatus } from "@/lib/alerts/round";
 import { databaseStatus } from "@/lib/data/database";
 import { env } from "@/lib/env";
 import { instance } from "@/lib/instance";
+import { storageStatus } from "@/lib/media/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +30,12 @@ export async function GET() {
   const ok = engine !== "unreachable" && database !== "unreachable" && database !== "behind";
   // Whether anything is running the checks behind operators' alerts. Said here for `doctor`; it doesn't make
   // the instance unhealthy, since everything else works without them.
+  // Where files are kept and whether that can be used. Said here for `doctor`; without it uploads are refused
+  // with a reason and everything else works, so it doesn't make the instance unhealthy.
+  const storage = await storageStatus().then(({ kind, status }) => ({ kind, status }), () => ({ kind: "unknown", status: "unavailable" }));
   const alerts = database === "unreachable" ? "unknown" : (await roundStatus().catch(() => ({ status: "unknown" as const }))).status;
   return NextResponse.json(
-    { status: ok ? "ok" : "degraded", instance: config.name, mode: mockOnly ? "mock-only" : "live", surfaces: config.surfaces, engine, database, alerts },
+    { status: ok ? "ok" : "degraded", instance: config.name, mode: mockOnly ? "mock-only" : "live", surfaces: config.surfaces, engine, database, alerts, storage },
     { status: ok ? 200 : 503 },
   );
 }
