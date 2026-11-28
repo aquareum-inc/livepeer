@@ -59,8 +59,11 @@ What does not, until the functions behind it go live (`docs/data-sources.md` say
 5. **Deploy.** The build runs `pnpm -w run db:migrate && pnpm run build`: it brings the database to this
    release's schema first, and a failed migration changes nothing and fails the build, so the previous
    deployment keeps serving. `https://<your-domain>/api/health` then answers `"database":"ok"`.
-6. **Make yourself the first operator.** From a checkout, with the project's `SESSION_SECRET` in `.env`:
-   `./livepeer invite-operator --url https://<your-domain>`. Open the link it prints and sign in.
+6. **Make yourself the owner.** Sign in and open `https://<your-domain>/operator`. While the instance has
+   no owner and no `ENGINE_ADMIN_TOKEN`, it offers to make you its owner, once. Do this before you add the
+   engine's tokens. If the admin token is already set, run `./livepeer invite-operator --url
+   https://<your-domain>` from a checkout with the project's `SESSION_SECRET` in the environment, and open
+   the link it prints.
 
 ## Environment variables
 

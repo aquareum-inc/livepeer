@@ -27,6 +27,9 @@ describe("surfaces", () => {
     expect(surfacePathServed("/join/operator/opi_abc", apiOnly)).toBe(false);
     // A workspace's invitation belongs to the user app.
     expect(surfacePathServed("/join/wsp_token", headless)).toBe(false);
+    // The page where the first owner claims the instance belongs to the console too.
+    expect(surfacePathServed("/setup", headless)).toBe(true);
+    expect(surfacePathServed("/setup", apiOnly)).toBe(false);
   });
 
   it("serves only the API and health check when that's all there is", () => {

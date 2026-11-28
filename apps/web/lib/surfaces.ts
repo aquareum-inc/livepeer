@@ -1,4 +1,4 @@
-import { JOIN_PATH } from "./operators/links";
+import { JOIN_PATH, SETUP_PATH } from "./operators/links";
 
 /** The surfaces an instance can serve, as the instance config sets them. */
 export interface Surfaces {
@@ -32,6 +32,8 @@ export function surfacePathServed(pathname: string, surfaces: Surfaces): boolean
   if (isAuthPath(pathname)) return surfaces.app || surfaces.console;
   // An invitation to the team that runs the instance opens wherever there is a console to join.
   if (pathname.startsWith(JOIN_PATH)) return surfaces.console;
+  // Where the first owner claims an instance nobody runs yet.
+  if (pathname === SETUP_PATH) return surfaces.console;
   return surfaces.app;
 }
 

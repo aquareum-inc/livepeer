@@ -57,6 +57,13 @@ export interface OperatorTeamStore {
    * becomes a grant with the role given.
    */
   grant(person: Person, grant: { role: OperatorRole; grantedBy: string | null; invitationId: string | null; at: string }): Promise<OperatorRecord>;
+  /** Whether anyone on the team is an owner, by grant or on the identity provider's word. */
+  hasOwner(): Promise<boolean>;
+  /**
+   * Makes someone the owner of a team that has none, or nothing. Decided and written with the team held, so
+   * of two people asking at once only one is answered. Null when the team already has an owner.
+   */
+  grantFirstOwner(person: Person, at: string): Promise<OperatorRecord | null>;
   setRole(userId: string, role: OperatorRole): Promise<TeamChange>;
   remove(userId: string): Promise<TeamChange>;
 

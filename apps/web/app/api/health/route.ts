@@ -5,6 +5,7 @@ import { databaseStatus } from "@/lib/data/database";
 import { env } from "@/lib/env";
 import { instance } from "@/lib/instance";
 import { storageStatus } from "@/lib/media/storage";
+import { operators } from "@/lib/operators";
 
 export const dynamic = "force-dynamic";
 
@@ -34,8 +35,11 @@ export async function GET() {
   // with a reason and everything else works, so it doesn't make the instance unhealthy.
   const storage = await storageStatus().then(({ kind, status }) => ({ kind, status }), () => ({ kind: "unknown", status: "unavailable" }));
   const alerts = database === "unreachable" ? "unknown" : (await roundStatus().catch(() => ({ status: "unknown" as const }))).status;
+  // Whether anyone owns the console. An instance without an owner is run by nobody, and while it holds no
+  // engine admin token whoever signs in first may claim it (`firstOwnerOpen`), so `doctor` says so.
+  const owner = !config.surfaces.console ? "off" : database === "unreachable" ? "unknown" : await operators().hasOwner().then((has) => (has ? "set" : "none"), () => "unknown" as const);
   return NextResponse.json(
-    { status: ok ? "ok" : "degraded", instance: config.name, mode: mockOnly ? "mock-only" : "live", surfaces: config.surfaces, engine, database, alerts, storage },
+    { status: ok ? "ok" : "degraded", instance: config.name, mode: mockOnly ? "mock-only" : "live", surfaces: config.surfaces, engine, database, alerts, storage, owner },
     { status: ok ? 200 : 503 },
   );
 }

@@ -421,6 +421,9 @@ async function doctor(options) {
     if (storage) {
       add("file storage", storage.status === "ok", storage.status !== "ok" ? (storage.kind === "s3" ? "object storage can't be used: the bucket is missing, unreachable, or the key was refused" : "the app has no disk it can write files to") : storage.kind === "s3" ? "object storage, reachable" : "the app's own disk, in DATA_DIR (set S3_BUCKET to use object storage)", storage.kind === "s3" ? (env.S3_ENDPOINT ? "Check S3_BUCKET, S3_ENDPOINT, S3_REGION and the access key in .env. The System page in the console says which it is" : "Check the bundle's storage: docker compose -f deploy/compose.yaml ps storage storage-init") : "Set S3_BUCKET and the other S3_* values in .env, or give the app a writable DATA_DIR");
     }
+    // Who owns the console. None is where every instance starts, so it is said and never fails the checks.
+    if (app.body.owner === "set") add("console owner", true, "set");
+    else if (app.body.owner === "none") add("console owner", true, env.ENGINE_ADMIN_TOKEN ? "none yet. Open the first-owner link setup printed, or run: livepeer invite-operator" : "none yet. Whoever signs in and opens /operator first becomes the owner, until the engine admin token is set; or run: livepeer invite-operator");
     // Operators' alerts are sent by a round of checks each minute. With nothing running it, they are told nothing.
     if (app.body.alerts === "overdue") {
       add("alert checks", false, "nothing has run them in the last five minutes", env.CRON_SECRET ? "CRON_SECRET is set, so a scheduler has to call /api/cron/alerts every minute with it as a bearer token. Unset it on a host whose server stays running, and the server runs them itself" : "Check the app container's logs: its own timer should run them each minute");

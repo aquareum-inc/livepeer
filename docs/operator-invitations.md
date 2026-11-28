@@ -4,6 +4,9 @@ Status: **approved on 25 November 2026 with every recommendation in section 0 as
 November 2026. Section 13 says where the build departs from the plan below, and what is not done.**
 Proposed on 24 November 2026, revised on 25 November after a review against the code (section 11 says what
 changed), with operator roles added the same day at the owner's request (D7, section 4).
+Section 14 (27 November 2026) changes how the first owner gets in: whoever signs in first sets up an
+instance that holds no engine admin token, which is built, and the identity provider naming the owner, which
+is proposed.
 
 An instance has no way to add a second operator today unless its identity provider manages roles. This
 plan adds a **Team** page to the console where an owner invites another person by link, with
@@ -337,3 +340,77 @@ Not done:
   John's answer on whether PymtHouse sends invitation emails (Q20 covers workspaces only), and otherwise
   to add an optional mail setting on the instance, with copy-link staying the default.
 
+
+## 14. Amendment of 27 November 2026: the first owner
+
+Status: **part 1 approved by the owner on 27 November 2026 and built the same day. Part 2 is proposed and
+waits on PymtHouse.** It changes how the first operator gets in (D3) and leaves the rest of this plan as
+built.
+
+### The problem
+
+Deploying the instance to Vercel on 27 November showed what D3 costs a self-hoster on any host other than
+the Compose bundle. To make themselves the first operator they need a checkout of this repository, the
+production `SESSION_SECRET` on their own machine, and a command line. On the bundle `./livepeer setup`
+prints the link, so it is no work there. Everywhere else it is the hardest step of the deployment.
+
+### Part 1, built: whoever signs in first sets the instance up
+
+Someone who signs in and opens `/operator` on an instance nobody runs yet is sent to `/setup`. The page
+says so, says what an owner can do and who they are signed in as, and has one button, "Become the owner".
+After that the page is a 404 for everyone, and the rest of the team joins by invitation.
+
+Being first is a race on a public address. A new domain appears in public certificate logs within minutes
+and bots watch those for fresh setup pages. So it is offered only while winning it gains a stranger
+nothing (`firstOwnerOpen`, `apps/web/lib/operators/first-owner.ts`):
+
+| Condition | Why |
+| --- | --- |
+| The team has no owner, by grant or on the identity provider's word | It works once. Two people asking together are taken one at a time, and the second is refused. |
+| The instance holds no `ENGINE_ADMIN_TOKEN` | The admin token is what the console creates keys and adds credits with. Without it there is nothing to spend. |
+| Sign-in is a real identity provider (`auth.provider: "oidc"`) | The development sign-in has a test operator of its own. |
+| The console surface is on | There is something to own. |
+
+The path this makes easy is the usual one. Deploy with `MOCK_ONLY=1` or with no engine keys, sign in,
+become the owner, then add the engine's tokens. An instance deployed with its admin token already set is
+claimed with the command-line link as before, which only someone holding its `SESSION_SECRET` can make.
+If a stranger does get there first on a keyless instance, the operator sees a 404 where the setup page
+should be, and takes the instance back with `./livepeer invite-operator` and removes them from Team.
+
+As built:
+
+- The owner is a `grant` row like any other, shown on Team as "First owner, from setup". The claim is
+  written to the audit log as `claim_instance`.
+- `/api/health` reports `owner` as `set`, `none` or `off` (no console), and `livepeer doctor` has a
+  "console owner" row. "None" is where every instance starts, so it never fails the checks.
+- The page asks for a sign-in and not a recent one. The link-based join asks for one from the last five
+  minutes because a link can be passed on; here there is no link.
+- Claiming is a server action beside the one that accepts an invitation, not an `/api/v1` operation, so
+  neither an API key nor a phone can do it.
+- The decision is made in the proxy and again in the console's layout, as the role guard is.
+
+Screenshots: `docs/screenshots/setup-claim-*.jpg`, dark and light at desktop and phone width.
+
+### Part 2, proposed: the identity provider names the owner
+
+The version with no step at all. The person who set up the instance signs in and is its owner because the
+identity provider says so, however many people signed in before them. The app already supports half of
+this. A `roles` or `groups` claim containing `operator` makes someone an operator (a `claim` row, shown on
+Team as "From your identity provider", counted as an owner). What is missing is a provider that says it.
+PymtHouse, the default provider, sends no role today, and the claim the app reads is fixed in a way most
+other providers can't meet.
+
+| # | Decision | Recommendation |
+| --- | --- | --- |
+| A1 | What we ask of PymtHouse. | **The owner of a PymtHouse app gets `"roles": ["operator"]` in the sign-in token and in userinfo for that app's clients, and nobody else does.** The claim belongs to the app, so owning one app makes you an operator of that app's instance and no other. If PymtHouse apps get collaborators, they get it too. It rests on PymtHouse treating the account that manages an app and that person signing in to the app's instance as one record, which John has to confirm. This replaces Q25 (a). |
+| A2 | Which claim the app reads. | **Configurable, with today's behaviour as the default.** A new `auth.oidc.operatorClaim` names where the role is (`roles`, `groups`, a nested path such as `realm_access.roles`, or a namespaced name such as `https://example.com/roles`) and which value means operator. Without this, Keycloak's realm roles and Auth0's namespaced claims can't be used. |
+| A3 | Whether the provider can say which role. | **Yes, optionally.** `operatorClaim.values` maps claim values to Owner, Member and Viewer. A value for Owner alone is the default, so a provider that only says "operator" makes owners, as today. |
+| A4 | Where the claim is read from. | **The ID token as well as userinfo.** Some providers put roles in the token and not in userinfo (Microsoft Entra's app roles are the known case, to be checked in the build). |
+| A5 | What happens when the provider stops saying it. | **Unchanged.** The `claim` row goes at the person's next sign-in and they lose the console then. |
+
+With part 2 in place part 1 still stands for providers that can't name an owner. Where a provider does,
+its owner arrives as a `claim` row, the team has an owner, and the setup page never appears.
+
+What part 2 would build: the config setting and its schema tests; reading the configured path from the ID
+token and userinfo in `oidc-provider.ts`, with a test per claim shape; the role written on the `claim` row;
+and a line per provider in `deploy/README.md`. No new operation and no change to the phone apps.

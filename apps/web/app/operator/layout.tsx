@@ -11,6 +11,8 @@ import { brandOf, instance } from "@/lib/instance";
 import { operatorDevices } from "@/lib/operator-devices";
 import { dismissNewPhonesAction } from "@/lib/operator/actions";
 import { operatorRoleOf } from "@/lib/operator/client";
+import { firstOwnerOpen } from "@/lib/operators/first-owner";
+import { SETUP_PATH } from "@/lib/operators/links";
 
 export const metadata: Metadata = { title: { default: "Operator console", template: "%s · Operator console" } };
 export const dynamic = "force-dynamic";
@@ -23,7 +25,11 @@ export default async function OperatorLayout({ children }: { children: ReactNode
   if (!session) redirect("/sign-in?next=/operator");
   // Hidden from users: to anyone who isn't an operator the console doesn't exist.
   const role = await operatorRoleOf(session);
-  if (!role) notFound();
+  if (!role) {
+    // Unless nobody runs the instance yet, and whoever is signed in may become its owner.
+    if (await firstOwnerOpen()) redirect(SETUP_PATH);
+    notFound();
+  }
   // New phones are announced to each operator until they close the notice. After that System carries a dot
   // until they open it, where the phone is listed and tagged as new.
   const { announced, marked } = await operatorDevices().newPhones(session.userId);

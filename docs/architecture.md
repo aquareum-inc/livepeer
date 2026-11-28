@@ -140,7 +140,9 @@ builder key. `BUILDER_API_KEY` is a dev shortcut. The mock provider and role swi
 
 **Who is an operator.** Either the sign-in token says so (an OIDC `roles` or `groups` claim; such a person
 is always an owner and the console can't change them), or the instance's own `operators` table has a row
-for them, put there by an invitation link (`docs/operator-invitations.md`). The table holds the provider's
+for them, put there by an invitation link or by setting the instance up (`docs/operator-invitations.md`).
+An instance with no owner and no engine admin token is set up by whoever signs in and opens the console
+first (`/setup`, section 14 there); with the token set, by a link from `livepeer invite-operator`. The table holds the provider's
 opaque user id, one of three roles and a sealed name and email. A session whose role comes from the table
 is checked against it on every request (`current()` in `apps/web/lib/auth/session.ts`), so removing someone
 ends their console at once, on the web and on their phone. The session also carries when the person signed

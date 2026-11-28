@@ -4,6 +4,8 @@ import { checkAccess, requiredRole } from "@/lib/auth/guard";
 import { SESSION_COOKIE, current, readSessionValue } from "@/lib/auth/session";
 import { developerPathServed } from "@/lib/developers";
 import { instance } from "@/lib/instance";
+import { firstOwnerOpen } from "@/lib/operators/first-owner";
+import { SETUP_PATH } from "@/lib/operators/links";
 import { homePath, surfacePathServed } from "@/lib/surfaces";
 
 /**
@@ -28,7 +30,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
   // Hidden from users: the console looks like it doesn't exist.
-  if (access === "forbidden") return new NextResponse("Not found", { status: 404 });
+  if (access === "forbidden") {
+    // Unless nobody runs the instance yet, and whoever is signed in may become its owner.
+    if (await firstOwnerOpen()) return NextResponse.redirect(new URL(SETUP_PATH, request.url));
+    return new NextResponse("Not found", { status: 404 });
+  }
   // Tell layouts which page this is, so they can apply the same guard themselves.
   const headers = new Headers(request.headers);
   headers.set("x-pathname", pathname);
