@@ -91,9 +91,9 @@ method and a few minutes.
 | Vercel | `DATABASE_URL` (Neon) | `S3_*` (R2, S3, B2). Required: there is no disk to keep files on. |
 
 On a host with no disk and no `S3_BUCKET`, `request_upload` answers 503 with the code `uploads_unavailable`
-and says so, `/api/health` reports `storage: "unavailable"` and `doctor` names the fix. Until slice 8 of
-`docs/database.md` merges with this, that is what Vercel without storage does; its temporary 4 MB cap
-(`UPLOAD_LIMIT_MB`) then applies only to the disk driver, where the file does pass through the app.
+and says so, `/api/health` reports `storage: "unavailable"` and `doctor` names the fix. That is what Vercel
+without storage does. Slice 8 of `docs/database.md` had a 4 MB cap for Vercel (`UPLOAD_LIMIT_MB`); with
+files going straight to storage it was dropped before it merged.
 
 ## 6. The flow
 
@@ -262,8 +262,9 @@ All five slices are built.
   (browser or phone) or a workspace's (its key). User API keys are still mocked and name no person, so such
   a key is answered 403 `account_required` rather than filling a shared default library. It follows once
   keys are real.
-- **A size cap for a host with a disk and a body limit** (`UPLOAD_LIMIT_MB`, slice 8 of
-  `docs/database.md`): where it plugs in is in this work's hand-over note.
+- **A size cap for a host with a disk and a body limit.** Slice 8 of `docs/database.md` had one
+  (`UPLOAD_LIMIT_MB`) and dropped it when this merged: Vercel has a body limit but no disk, so files there go
+  straight to storage, and no supported host has both.
 - **Sending files straight to the bundle's Garage** under a media domain (section 9): described, not set up.
 - **A backup recipe for the bundle's storage volume.** `deploy/README.md` says what to back up; a tested
   command, as the database has, is not written.

@@ -149,7 +149,8 @@ credentials the console on phones works as before and says alerts aren't set up.
 - Alerts are sent by a round of checks each minute. This bundle's server runs them itself, with a timer, and
   there is nothing more to set up. On a host with no server between requests (Vercel), set `CRON_SECRET` and
   have a scheduler call `/api/cron/alerts` each minute with it as a bearer token; that also stops the timer,
-  so don't set it here. `./livepeer doctor` and the System page say when nothing has run the checks for five
+  so don't set it here. `templates/vercel/` has the schedule for Vercel Cron, which runs each minute on the
+  Pro plan and at most daily on Hobby. `./livepeer doctor` and the System page say when nothing has run the checks for five
   minutes. An instance that is down sends nothing, so watch the instance itself from outside.
 - `./livepeer doctor` says, for each platform, whether alerts are set up and what is wrong if they are half
   set. The web console's System page says the same, and whether Apple or Google last refused the credentials.
@@ -158,3 +159,21 @@ credentials the console on phones works as before and says alerts aren't set up.
 
 - `templates/vps/` — a plain VPS: install script and a Caddy reverse proxy.
 - `templates/fly/` — Fly.io, app only, pointed at an engine you run elsewhere.
+- `templates/vercel/` — Vercel, app only, with a managed Postgres such as Neon. Read its README first.
+
+## Where each part can run
+
+The app can go wherever a Next.js server or the Docker image runs. The engine, the payment provider and the
+remote signer are long-running services with their own state and keys: they run in this bundle's `network`
+profile or on machines of your own, never on a serverless host. An app deployed apart from them reaches the
+engine through `ENGINE_URL`.
+
+A serverless host (Vercel) keeps no server between requests and no disk, and that costs these things today:
+
+| | Compose, a VPS, Fly | Vercel |
+|---|---|---|
+| The instance's own state (sessions, team, reports, settings, alerts state) | In Postgres | In Postgres, the same |
+| Features still on mock data (generations, library, conversations, characters, API keys, plans, credit, workspaces: `docs/data-sources.md`) | Work, and are lost on restart | Unreliable: the data is in one process's memory and requests land on several. Not fixed until each goes live |
+| Uploaded files | The bundle's own storage, a service of yours (`S3_*`), or the disk | A storage service of yours (`S3_*`): there is no disk. Without it, uploads are refused and say why |
+| Alerts to operators' phones | The server's own timer | A scheduler calling `/api/cron/alerts` each minute: Vercel Cron on the Pro plan, or one of your own on Hobby |
+| Engine, payment provider, signer | The `network` profile | Elsewhere, always |

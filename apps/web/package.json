@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.2.5",
     "@livepeer/api-client": "workspace:*",
     "@livepeer/config": "workspace:*",
     "@livepeer/db": "workspace:*",
@@ -17,7 +18,7 @@
     "@livepeer/storage": "workspace:*",
     "@livepeer/ui": "workspace:*",
     "@livepeer/user-app": "workspace:*",
-    "@fontsource-variable/inter": "^5.2.5",
+    "@vercel/functions": "^3.11.4",
     "geist": "^1.7.2",
     "lucide-react": "catalog:",
     "next": "16.4.6",
