@@ -61,8 +61,9 @@ It can take a few minutes.
 
 ### A3. Install what the bundle needs (Agent)
 
-On the server, as root. These are the installs `deploy/templates/vps/install.sh` makes. Don't run that
-script itself yet: it also publishes the instance, which must wait for A5.
+On the server, as root. These are the installs `deploy/templates/vps/install.sh` makes. The script also
+starts and publishes the instance in one go; doing it in steps lets the person see it privately first and
+connect sign-in before it is public.
 
 ```bash
 command -v docker >/dev/null || curl -fsSL https://get.docker.com | sh
@@ -187,9 +188,11 @@ The engine, payment provider and signer never run on Vercel. For the real networ
 
 - **A secret copied with a line break.** `openssl rand … | pbcopy` copies a trailing newline, and the app
   uses the value as stored. Generate secrets with `openssl rand -base64 32 | tr -d '\n' | pbcopy`.
-- **The test sign-in on a public address.** In mock-only mode with `auth.provider` left as `mock`, anyone
-  can sign in as the test operator. Never publish an instance before A5. This is also why
-  `deploy/templates/vps/install.sh` is not used as written above.
+- **The test sign-in on a public address.** The presets' test sign-in lets anyone in as the sample
+  operator, so a production build answers it only from the server and private networks, and not at all
+  once the config names a public `domain`. Visitors to a published instance that skipped A5 see "This
+  instance has only its test sign-in". Don't set `ALLOW_TEST_SIGN_IN=1` unless the person wants an open
+  demo.
 - **Preview deployments migrating production (Vercel).** Without a database branch for Preview, every
   preview build runs migrations against the production database.
 - **Variables changed, nothing happened (Vercel).** Variables are read when a deployment is built.
